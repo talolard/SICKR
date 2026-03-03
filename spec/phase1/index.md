@@ -6,7 +6,7 @@ This folder turns the dictated notes into an execution plan for Phase 1.
 Build a local web experience where a user asks natural-language furniture queries and receives relevant IKEA items using pre-indexed Gemini embeddings stored/queryable via DuckDB.
 
 ## Scope Decisions (Locked)
-- Geography: Germany-only dataset focus for Phase 1.
+- Geography: current phase-one scope uses a Germany-filtered market view over canonical data.
 - Web stack: latest Django release with server-rendered templates.
 - Eval target: 200 labeled queries.
 - Retrieval model: semantic search over precomputed embeddings.

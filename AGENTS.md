@@ -41,6 +41,7 @@ Repository-local collaboration and implementation rules.
 - Prefer DuckDB CLI + SQL scripts for schema/load/query tasks.
 - Avoid embedding complex SQL inside Python unless strongly justified.
 - Update `docs/data/` whenever schema or column semantics change.
+- Treat the IKEA source dataset as static for this project unless we explicitly decide to refresh it.
 
 ## Logging
 
