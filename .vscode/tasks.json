@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Quality: tidy",
+      "type": "shell",
+      "command": "make tidy",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Typecheck",
+      "type": "shell",
+      "command": "make typecheck",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test",
+      "type": "shell",
+      "command": "make test",
+      "problemMatcher": []
+    }
+  ]
+}

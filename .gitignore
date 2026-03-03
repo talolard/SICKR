@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyrefly/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# UV
+.venv/
+venv/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/*.code-workspace
+.DS_Store
+
+# Data artifacts
+*.duckdb
+*.wal
+*.tmp
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log

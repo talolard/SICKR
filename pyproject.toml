@@ -1,0 +1,120 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tal-maria-ikea"
+version = "0.1.0"
+description = "Scaffold for IKEA semantic search learning project."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "duckdb>=1.4.0",
+  "google-genai>=1.30.0",
+  "pydantic-settings>=2.10.1",
+  "python-dotenv>=1.1.1",
+  "structlog>=25.4.0",
+]
+
+[dependency-groups]
+dev = [
+  "pre-commit>=4.3.0",
+  "pyrefly>=0.37.0",
+  "pytest>=8.4.1",
+  "pytest-cov>=6.2.1",
+  "ruff>=0.12.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tal_maria_ikea"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "ANN",
+  "ARG",
+  "ASYNC",
+  "B",
+  "C4",
+  "C90",
+  "COM",
+  "D",
+  "DTZ",
+  "E",
+  "EM",
+  "ERA",
+  "F",
+  "FA",
+  "FLY",
+  "FURB",
+  "G",
+  "I",
+  "ICN",
+  "INP",
+  "ISC",
+  "LOG",
+  "N",
+  "PERF",
+  "PIE",
+  "PL",
+  "PT",
+  "PTH",
+  "PYI",
+  "Q",
+  "RET",
+  "RSE",
+  "RUF",
+  "S",
+  "SIM",
+  "SLOT",
+  "T10",
+  "TC",
+  "TID",
+  "TRY",
+  "UP",
+  "W",
+]
+ignore = [
+  "COM812",
+  "D202",
+  "D203",
+  "D213",
+  "EM101",
+  "EM102",
+  "D212",
+  "ISC001",
+  "PLR0913",
+  "TC003",
+  "TRY003",
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN201", "D100", "D101", "D102", "D103", "PLR2004", "S101"]
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+
+[tool.coverage.run]
+source = ["src/tal_maria_ikea"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

@@ -1,0 +1,563 @@
+version = 1
+revision = 3
+requires-python = "==3.12.*"
+
+[[package]]
+name = "annotated-types"
+version = "0.7.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/annotated-types/0.7/annotated_types-0.7.0-py3-none-any.whl", hash = "sha256:1f02e8b43a8fbbc3f3e0d4f0f4bfc8131bcb4eebe8849b8e5c773f3a1c582a53" },
+]
+
+[[package]]
+name = "anyio"
+version = "4.12.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "idna" },
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/anyio/4.12/anyio-4.12.0-py3-none-any.whl", hash = "sha256:dad2376a628f98eeca4881fc56cd06affd18f659b17a747d3ff0307ced94b1bb" },
+]
+
+[[package]]
+name = "certifi"
+version = "2026.2.25"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/certifi/2026.2.25/certifi-2026.2.25-py3-none-any.whl", hash = "sha256:027692e4402ad994f1c42e52a4997a9763c646b73e4096e4d5d6db8af1d6f0fa" },
+]
+
+[[package]]
+name = "cffi"
+version = "2.0.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cffi/2/cffi-2.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8eca2a813c1cb7ad4fb74d368c2ffbbb4789d377ee5bb8df98373c2cc0dee76c" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cffi/2/cffi-2.0.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b21e08af67b8a103c71a250401c78d5e0893beff75e28c53c98f4de42f774062" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cffi/2/cffi-2.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:3e17ed538242334bf70832644a32a7aae3d83b57567f9fd60a26257e992b79ba" },
+]
+
+[[package]]
+name = "cfgv"
+version = "3.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/b5/721b8799b04bf9afe054a3899c6cf4e880fcf8563cc71c15610242490a0c/cfgv-3.5.0.tar.gz", hash = "sha256:d5b1034354820651caa73ede66a6294d6e95c1b00acc5e9b098e917404669132", size = 7334, upload-time = "2025-11-19T20:55:51.612Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl", hash = "sha256:a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0", size = 7445, upload-time = "2025-11-19T20:55:50.744Z" },
+]
+
+[[package]]
+name = "charset-normalizer"
+version = "3.4.4"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/charset-normalizer/3.4.4/charset_normalizer-3.4.4-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:0a98e6759f854bd25a58a73fa88833fba3b7c491169f86ce1180c948ab3fd394" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/charset-normalizer/3.4.4/charset_normalizer-3.4.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b5b290ccc2a263e8d185130284f8501e3e36c5e02750fc6b6bdeb2e9e96f1e25" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/charset-normalizer/3.4.4/charset_normalizer-3.4.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:11d694519d7f29d6cd09f6ac70028dba10f92f6cdd059096db198c283794ac86" },
+]
+
+[[package]]
+name = "colorama"
+version = "0.4.6"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/colorama/0.4.6/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6" },
+]
+
+[[package]]
+name = "coverage"
+version = "7.13.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/coverage/7.13/coverage-7.13.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:581f086833d24a22c89ae0fe2142cfaa1c92c930adf637ddf122d55083fb5a0f" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/coverage/7.13/coverage-7.13.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:583221913fbc8f53b88c42e8dbb8fca1d0f2e597cb190ce45916662b8b9d9621" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/coverage/7.13/coverage-7.13.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5f5d9bd30756fff3e7216491a0d6d520c448d5124d3d8e8f56446d6412499e74" },
+]
+
+[[package]]
+name = "cryptography"
+version = "46.0.3"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp311-abi3-macosx_10_9_universal2.whl", hash = "sha256:109d4ddfadf17e8e7779c39f9b18111a09efb969a301a31e987416a0191ed93a" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:a2c0cd47381a3229c403062f764160d57d4d175e022c1df84e168c6251a22eec" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp311-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:549e234ff32571b1f4076ac269fcce7a808d3bf98b76c8dd560e42dbc66d7d91" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp311-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:10b01676fc208c3e6feeb25a8b83d81767e8059e1fe86e1dc62d10a3018fa926" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:cb3d760a6117f621261d662bccc8ef5bc32ca673e037c83fbe565324f5c46936" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp38-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:b02cf04496f6576afffef5ddd04a0cb7d49cf6be16a9059d793a30b035f6b6ac" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/cryptography/46.0.3/cryptography-46.0.3-cp38-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:402b58fc32614f00980b66d6e56a5b4118e6cb362ae8f3fda141ba4689bd4506" },
+]
+
+[[package]]
+name = "distlib"
+version = "0.4.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/distlib/0.4/distlib-0.4.0-py2.py3-none-any.whl", hash = "sha256:9659f7d87e46584a30b5780e43ac7a2143098441670ff0a49d5f9034c54a6c16" },
+]
+
+[[package]]
+name = "distro"
+version = "1.9.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/distro/1.9/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2" },
+]
+
+[[package]]
+name = "duckdb"
+version = "1.4.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/duckdb/1.4/duckdb-1.4.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:55064dd2e25711eeaa6a72c25405bdd7994c81a3221657e94309a2faf65d25a6" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/duckdb/1.4/duckdb-1.4.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0536d7c81bc506532daccf373ddbc8c6add46aeb70ef3cd5ee70ad5c2b3165ea" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/duckdb/1.4/duckdb-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:784554e3ddfcfc5c5c7b1aa1f9925fedb7938f6628729adba48f7ea37554598f" },
+]
+
+[[package]]
+name = "filelock"
+version = "3.25.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/filelock/3.25/filelock-3.25.0-py3-none-any.whl", hash = "sha256:5ccf8069f7948f494968fc0713c10e5c182a9c9d9eef3a636307a20c2490f047" },
+]
+
+[[package]]
+name = "google-auth"
+version = "2.48.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyasn1-modules" },
+    { name = "rsa" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/google-auth/2.48/google_auth-2.48.0-py3-none-any.whl", hash = "sha256:2e2a537873d449434252a9632c28bfc268b0adb1e53f9fb62afc5333a975903f" },
+]
+
+[package.optional-dependencies]
+requests = [
+    { name = "requests" },
+]
+
+[[package]]
+name = "google-genai"
+version = "1.65.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "google-auth", extra = ["requests"] },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "sniffio" },
+    { name = "tenacity" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/google-genai/1.65/google_genai-1.65.0-py3-none-any.whl", hash = "sha256:68c025205856919bc03edb0155c11b4b833810b7ce17ad4b7a9eeba5158f6c44" },
+]
+
+[[package]]
+name = "h11"
+version = "0.16.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/h11/0.16/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86" },
+]
+
+[[package]]
+name = "httpcore"
+version = "1.0.9"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "certifi" },
+    { name = "h11" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/httpcore/1.0.9/httpcore-1.0.9-py3-none-any.whl", hash = "sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55" },
+]
+
+[[package]]
+name = "httpx"
+version = "0.28.1"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "anyio" },
+    { name = "certifi" },
+    { name = "httpcore" },
+    { name = "idna" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/httpx/0.28.1/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad" },
+]
+
+[[package]]
+name = "identify"
+version = "2.6.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/84/376a3b96e5a8d33a7aa2c5b3b31a4b3c364117184bf0b17418055f6ace66/identify-2.6.17.tar.gz", hash = "sha256:f816b0b596b204c9fdf076ded172322f2723cf958d02f9c3587504834c8ff04d", size = 99579, upload-time = "2026-03-01T20:04:12.702Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/66/71c1227dff78aaeb942fed29dd5651f2aec166cc7c9aeea3e8b26a539b7d/identify-2.6.17-py2.py3-none-any.whl", hash = "sha256:be5f8412d5ed4b20f2bd41a65f920990bdccaa6a4a18a08f1eefdcd0bdd885f0", size = 99382, upload-time = "2026-03-01T20:04:11.439Z" },
+]
+
+[[package]]
+name = "idna"
+version = "3.11"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/idna/3.11/idna-3.11-py3-none-any.whl", hash = "sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/iniconfig/2.3/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12" },
+]
+
+[[package]]
+name = "nodeenv"
+version = "1.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611, upload-time = "2025-12-20T14:08:54.006Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438, upload-time = "2025-12-20T14:08:52.782Z" },
+]
+
+[[package]]
+name = "packaging"
+version = "25.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/packaging/25/packaging-25.0-py3-none-any.whl", hash = "sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484" },
+]
+
+[[package]]
+name = "platformdirs"
+version = "4.9.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/platformdirs/4.9.2/platformdirs-4.9.2-py3-none-any.whl", hash = "sha256:9170634f126f8efdae22fb58ae8a0eaa86f38365bc57897a6c4f781d1f5875bd" },
+]
+
+[[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pluggy/1.6/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746" },
+]
+
+[[package]]
+name = "pre-commit"
+version = "4.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cfgv" },
+    { name = "identify" },
+    { name = "nodeenv" },
+    { name = "pyyaml" },
+    { name = "virtualenv" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/40/f1/6d86a29246dfd2e9b6237f0b5823717f60cad94d47ddc26afa916d21f525/pre_commit-4.5.1.tar.gz", hash = "sha256:eb545fcff725875197837263e977ea257a402056661f09dae08e4b149b030a61", size = 198232, upload-time = "2025-12-16T21:14:33.552Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/19/fd3ef348460c80af7bb4669ea7926651d1f95c23ff2df18b9d24bab4f3fa/pre_commit-4.5.1-py2.py3-none-any.whl", hash = "sha256:3b3afd891e97337708c1674210f8eba659b52a38ea5f822ff142d10786221f77", size = 226437, upload-time = "2025-12-16T21:14:32.409Z" },
+]
+
+[[package]]
+name = "pyasn1"
+version = "0.6.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pyasn1/0.6.2/pyasn1-0.6.2-py3-none-any.whl", hash = "sha256:1eb26d860996a18e9b6ed05e7aae0e9fc21619fcee6af91cca9bad4fbea224bf" },
+]
+
+[[package]]
+name = "pyasn1-modules"
+version = "0.4.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "pyasn1" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pyasn1-modules/0.4.2/pyasn1_modules-0.4.2-py3-none-any.whl", hash = "sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a" },
+]
+
+[[package]]
+name = "pycparser"
+version = "3.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pycparser/3/pycparser-3.0-py3-none-any.whl", hash = "sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992" },
+]
+
+[[package]]
+name = "pydantic"
+version = "2.12.5"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "annotated-types" },
+    { name = "pydantic-core" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pydantic/2.12.5/pydantic-2.12.5-py3-none-any.whl", hash = "sha256:e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d" },
+]
+
+[[package]]
+name = "pydantic-core"
+version = "2.41.5"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pydantic-core/2.41.5/pydantic_core-2.41.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:070259a8818988b9a84a449a2a7337c7f430a22acc0859c6b110aa7212a6d9c0" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pydantic-core/2.41.5/pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e96cea19e34778f8d59fe40775a7a574d95816eb150850a85a7a4c8f4b94ac69" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pydantic-core/2.41.5/pydantic_core-2.41.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eceb81a8d74f9267ef4081e246ffd6d129da5d87e37a77c9bde550cb04870c1c" },
+]
+
+[[package]]
+name = "pydantic-settings"
+version = "2.12.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "typing-inspection" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pydantic-settings/2.12/pydantic_settings-2.12.0-py3-none-any.whl", hash = "sha256:fddb9fd99a5b18da837b29710391e945b1e30c135477f484084ee513adb93809" },
+]
+
+[[package]]
+name = "pygments"
+version = "2.19.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pygments/2.19.2/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b" },
+]
+
+[[package]]
+name = "pyrefly"
+version = "0.55.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/c4/76e0797215e62d007f81f86c9c4fb5d6202685a3f5e70810f3fd94294f92/pyrefly-0.55.0.tar.gz", hash = "sha256:434c3282532dd4525c4840f2040ed0eb79b0ec8224fe18d957956b15471f2441", size = 5135682, upload-time = "2026-03-03T00:46:38.122Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/b0/16e50cf716784513648e23e726a24f71f9544aa4f86103032dcaa5ff71a2/pyrefly-0.55.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:49aafcefe5e2dd4256147db93e5b0ada42bff7d9a60db70e03d1f7055338eec9", size = 12210073, upload-time = "2026-03-03T00:46:15.51Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/ad/89500c01bac3083383011600370289fbc67700c5be46e781787392628a3a/pyrefly-0.55.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:2827426e6b28397c13badb93c0ede0fb0f48046a7a89e3d774cda04e8e2067cd", size = 11767474, upload-time = "2026-03-03T00:46:18.003Z" },
+    { url = "https://files.pythonhosted.org/packages/78/68/4c66b260f817f304ead11176ff13985625f7c269e653304b4bdb546551af/pyrefly-0.55.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7346b2d64dc575bd61aa3bca854fbf8b5a19a471cbdb45e0ca1e09861b63488c", size = 33260395, upload-time = "2026-03-03T00:46:20.509Z" },
+    { url = "https://files.pythonhosted.org/packages/47/09/10bd48c9f860064f29f412954126a827d60f6451512224912c265e26bbe6/pyrefly-0.55.0-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:233b861b4cff008b1aff62f4f941577ed752e4d0060834229eb9b6826e6973c9", size = 35848269, upload-time = "2026-03-03T00:46:23.418Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/39/bc65cdd5243eb2dfea25dd1321f9a5a93e8d9c3a308501c4c6c05d011585/pyrefly-0.55.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f5aa85657d76da1d25d081a49f0e33c8fc3ec91c1a0f185a8ed393a5a3d9e178", size = 38449820, upload-time = "2026-03-03T00:46:26.309Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/64/58b38963b011af91209e87f868cc85cfc762ec49a4568ce610c45e7a5f40/pyrefly-0.55.0-py3-none-win32.whl", hash = "sha256:23f786a78536a56fed331b245b7d10ec8945bebee7b723491c8d66fdbc155fe6", size = 11259415, upload-time = "2026-03-03T00:46:30.875Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/0b/a4aa519ff632a1ea69eec942566951670b870b99b5c08407e1387b85b6a4/pyrefly-0.55.0-py3-none-win_amd64.whl", hash = "sha256:d465b49e999b50eeb069ad23f0f5710651cad2576f9452a82991bef557df91ee", size = 12043581, upload-time = "2026-03-03T00:46:33.674Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/51/89017636fbe1ffd166ad478990c6052df615b926182fa6d3c0842b407e89/pyrefly-0.55.0-py3-none-win_arm64.whl", hash = "sha256:732ff490e0e863b296e7c0b2471e08f8ba7952f9fa6e9de09d8347fd67dde77f", size = 11548076, upload-time = "2026-03-03T00:46:36.193Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.0.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pytest/9.0.2/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b" },
+]
+
+[[package]]
+name = "pytest-cov"
+version = "7.0.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "coverage" },
+    { name = "pluggy" },
+    { name = "pytest" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pytest-cov/7/pytest_cov-7.0.0-py3-none-any.whl", hash = "sha256:3b8e9558b16cc1479da72058bdecf8073661c7f57f7d3c5f22a1c23507f2d861" },
+]
+
+[[package]]
+name = "python-dotenv"
+version = "1.2.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/python-dotenv/1.2.2/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a" },
+]
+
+[[package]]
+name = "pyyaml"
+version = "6.0.3"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pyyaml/6.0.3/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pyyaml/6.0.3/pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/pyyaml/6.0.3/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc" },
+]
+
+[[package]]
+name = "requests"
+version = "2.32.5"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "certifi" },
+    { name = "charset-normalizer" },
+    { name = "idna" },
+    { name = "urllib3" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/requests/2.32.5/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6" },
+]
+
+[[package]]
+name = "rsa"
+version = "4.9.1"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "pyasn1" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/rsa/4.9.1/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762" },
+]
+
+[[package]]
+name = "ruff"
+version = "0.14.10"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/ruff/0.14.10/ruff-0.14.10-py3-none-macosx_11_0_arm64.whl", hash = "sha256:d85713d522348837ef9df8efca33ccb8bd6fcfc86a2cde3ccb4bc9d28a18003d" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/ruff/0.14.10/ruff-0.14.10-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6987ebe0501ae4f4308d7d24e2d0fe3d7a98430f5adfd0f1fead050a740a3a77" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/ruff/0.14.10/ruff-0.14.10-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:59aabd2e2c4fd614d2862e7939c34a532c04f1084476d6833dddef4afab87e9f" },
+]
+
+[[package]]
+name = "sniffio"
+version = "1.3.1"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/sniffio/1.3.1/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" },
+]
+
+[[package]]
+name = "structlog"
+version = "25.5.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/structlog/25.5/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f" },
+]
+
+[[package]]
+name = "tal-maria-ikea"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "duckdb" },
+    { name = "google-genai" },
+    { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pre-commit" },
+    { name = "pyrefly" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.4.0" },
+    { name = "google-genai", specifier = ">=1.30.0" },
+    { name = "pydantic-settings", specifier = ">=2.10.1" },
+    { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "structlog", specifier = ">=25.4.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=4.3.0" },
+    { name = "pyrefly", specifier = ">=0.37.0" },
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "ruff", specifier = ">=0.12.12" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.1.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/tenacity/9.1.2/tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138" },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.15.0"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/typing-extensions/4.15/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548" },
+]
+
+[[package]]
+name = "typing-inspection"
+version = "0.4.2"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/typing-inspection/0.4.2/typing_inspection-0.4.2-py3-none-any.whl", hash = "sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7" },
+]
+
+[[package]]
+name = "urllib3"
+version = "2.6.3"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/urllib3/2.6.3/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4" },
+]
+
+[[package]]
+name = "virtualenv"
+version = "20.36.1"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+dependencies = [
+    { name = "distlib" },
+    { name = "filelock" },
+    { name = "platformdirs" },
+]
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/virtualenv/20.36.1/virtualenv-20.36.1-py3-none-any.whl", hash = "sha256:575a8d6b124ef88f6f51d56d656132389f961062a9177016a50e4f507bbcc19f" },
+]
+
+[[package]]
+name = "websockets"
+version = "15.0.1"
+source = { registry = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/" }
+wheels = [
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/websockets/15.0.1/websockets-15.0.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:0701bc3cfcb9164d04a14b149fd74be7347a530ad3bbf15ab2c678a2cd3dd9a2" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/websockets/15.0.1/websockets-15.0.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e8b56bdcdb4505c8078cb6c7157d9811a85790f2f2b3632c7d1462ab5783d215" },
+    { url = "https://pkgs.dev.azure.com/primer-ai/_packaging/ebbcebb3-fae7-4510-85ab-13932c893edc/pypi/download/websockets/15.0.1/websockets-15.0.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:64dee438fed052b52e4f98f76c5790513235efaa1ef7f3f2192c392cd7c91b65" },
+]
