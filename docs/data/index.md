@@ -2,42 +2,41 @@
 
 ## Sources
 - Initial source: IKEA CSV (`data/IKEA_product_catalog.csv`)
-- Raw payload is staged in `app.products_raw`
+- Raw source rows are staged in `app.products_raw`
 
-## DuckDB Tables
-Defined in `sql/10_schema.sql`:
+## Canonical Tables
+Defined in `sql/10_schema.sql` and modeling SQL:
+
 - `app.products_raw`
-  - `source_row_id` (BIGINT)
-  - `payload` (JSON)
-  - `ingested_at` (TIMESTAMP)
-- `app.products`
-  - `product_id` (VARCHAR, PK)
-  - `product_name` (VARCHAR)
-  - `category` (VARCHAR)
-  - `description` (VARCHAR)
-  - `dimensions_text` (VARCHAR)
-  - `price_text` (VARCHAR)
-  - `currency` (VARCHAR)
-  - `created_at`, `updated_at` (TIMESTAMP)
+  - Flat source columns from CSV, including `unique_id`, `product_id`, categories, dimensions, price, currency, and `country`
+- `app.products_canonical`
+  - Germany-scoped canonical rows keyed by `canonical_product_key`
+  - Parsed numeric fields: `width_cm`, `depth_cm`, `height_cm`, `price_eur`
+- `app.product_alias_map`
+  - Alias links from raw identifiers to canonical keys
+- `app.product_family_map`
+  - Family grouping by normalized product name + type
+
+## Embedding and Retrieval Tables
+- `app.embedding_runs`
+  - Run metadata for indexing job status and throughput
 - `app.product_embeddings`
-  - `product_id` (VARCHAR, PK)
-  - `embedding_model` (VARCHAR)
-  - `embedding_json` (JSON)
-  - `embedded_at` (TIMESTAMP)
+  - Embedding vectors per canonical key, model, and strategy version
 - `app.query_log`
-  - `query_id` (VARCHAR, PK)
-  - `query_text` (VARCHAR)
-  - `query_limit` (INTEGER)
-  - `request_source` (VARCHAR)
-  - `created_at` (TIMESTAMP)
+  - Retrieval request logs with filter values, latency, and low-confidence flag
+- `app.shortlist_global`
+  - Global persisted shortlist entries
+
+## Evaluation Tables
+- `app.eval_prompt_registry`
+- `app.eval_subset_registry`
+- `app.eval_queries_generated`
+- `app.eval_labels`
+- `app.eval_runs`
 
 ## SQL-First Policy
-- All schema/load/query logic is stored under `sql/`.
-- Python should call SQL files, not construct long inline SQL, unless strongly justified.
+- All schema/load/query logic is under `sql/`.
+- Python orchestration calls SQL files and avoids inline complex SQL.
 
-## Raw CSV Retention
-After successful load, the raw CSV may be removed (`DELETE_RAW=1 ./scripts/load_ikea_data.sh`).
-A spare copy should be kept outside this repository.
-
-## Documentation Change Rule
-Any schema or semantic change requires updating this page in the same change.
+## Documentation Rule
+Any schema or semantic change must update this page in the same change.

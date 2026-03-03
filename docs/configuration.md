@@ -8,7 +8,9 @@ The current required/expected keys are:
 
 - `GCP_PROJECT_ID` (required)
 - `GCP_REGION` (default `us-central1`)
-- `GEMINI_MODEL` (default `text-embedding-004`)
+- `GEMINI_MODEL` (default `gemini-embedding-001`)
+- `GEMINI_GENERATION_MODEL` (default `gemini-2.5-flash`)
+- `EMBEDDING_PROVIDER` (default `vertex_gemini`)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required for local credentialed runs)
 - `IKEA_RAW_CSV_PATH` (default `data/IKEA_product_catalog.csv`)
 - `DUCKDB_PATH` (default `data/ikea.duckdb`)
@@ -16,6 +18,13 @@ The current required/expected keys are:
 - `LOG_JSON` (default `true`)
 - `APP_ENV` (default `dev`)
 - `DEFAULT_QUERY_LIMIT` (default `25`)
+- `DEFAULT_MARKET` (default `Germany`)
+- `EMBEDDING_PARALLELISM` (default `8`)
+- `EMBEDDING_BATCH_SIZE` (default `16`)
+- `RETRIEVAL_LOW_CONFIDENCE_THRESHOLD` (default `0.15`)
+- `DJANGO_SECRET_KEY` (default `dev-only-secret`)
+- `DJANGO_DEBUG` (default `true`)
+- `DJANGO_ALLOWED_HOSTS` (default `127.0.0.1,localhost`)
 
 ## Layering Order
 Configuration precedence (lowest to highest):
