@@ -9,8 +9,7 @@ WITH nearest AS (
         ) AS cosine_distance
     FROM app.product_embeddings_latest AS e
     WHERE e.embedding_model = ?
-      AND e.strategy_version = ?
-ORDER BY cosine_distance ASC
+    ORDER BY cosine_distance ASC
     LIMIT ?
 ), scored AS (
     SELECT

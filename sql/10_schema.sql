@@ -70,7 +70,6 @@ CREATE TABLE IF NOT EXISTS app.product_family_map (
 CREATE TABLE IF NOT EXISTS app.embedding_runs (
     run_id VARCHAR PRIMARY KEY,
     scope VARCHAR NOT NULL,
-    strategy_version VARCHAR NOT NULL,
     embedding_model VARCHAR NOT NULL,
     provider VARCHAR NOT NULL,
     use_batch BOOLEAN NOT NULL,
@@ -87,12 +86,22 @@ CREATE TABLE IF NOT EXISTS app.embedding_runs (
 CREATE TABLE IF NOT EXISTS app.product_embeddings (
     canonical_product_key VARCHAR NOT NULL,
     embedding_model VARCHAR NOT NULL,
-    strategy_version VARCHAR NOT NULL,
     run_id VARCHAR NOT NULL,
     embedding_vector FLOAT[256],
     embedded_text VARCHAR NOT NULL,
     embedded_at TIMESTAMP DEFAULT now(),
-    PRIMARY KEY (canonical_product_key, embedding_model, strategy_version)
+    PRIMARY KEY (canonical_product_key, embedding_model)
+);
+
+CREATE TABLE IF NOT EXISTS app.product_description_country_rollup (
+    product_id BIGINT NOT NULL,
+    description_text VARCHAR NOT NULL,
+    countries VARCHAR[] NOT NULL,
+    country_count INTEGER NOT NULL,
+    source_row_count INTEGER NOT NULL,
+    description_hash VARCHAR NOT NULL,
+    created_at TIMESTAMP DEFAULT now(),
+    PRIMARY KEY (product_id, description_hash)
 );
 
 CREATE TABLE IF NOT EXISTS app.query_log (
@@ -162,7 +171,6 @@ CREATE TABLE IF NOT EXISTS app.eval_labels (
 CREATE TABLE IF NOT EXISTS app.eval_runs (
     eval_run_id VARCHAR PRIMARY KEY,
     index_run_id VARCHAR,
-    strategy_version VARCHAR NOT NULL,
     embedding_model VARCHAR NOT NULL,
     k INTEGER NOT NULL,
     hit_at_k DOUBLE NOT NULL,

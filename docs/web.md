@@ -5,7 +5,7 @@
    - `./scripts/init_duckdb.sh`
    - `./scripts/load_ikea_data.sh`
 2. Build embeddings:
-   - `uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first`
+   - `uv run python -m tal_maria_ikea.ingest.index`
 3. Run Django app:
    - `uv run python -m tal_maria_ikea.web.runserver --host 127.0.0.1 --port 8000`
 
@@ -16,8 +16,10 @@
 
 ## Search Filters
 - Category
+- Sort (`relevance`, `price_asc`, `price_desc`, `size`)
 - EUR price range (`min_price_eur`, `max_price_eur`)
-- Dimensions (exact/min/max per width/depth/height in cm)
+- Dimensions in collapsed advanced controls (exact/min/max per width/depth/height in cm)
+- Active filter chips and reset action
 
 ## Shortlist Behavior
 - Persistence table: `app.shortlist_global`
@@ -26,4 +28,5 @@
 
 ## Debugging
 - Query logs: `app.query_log`
+- Query logs include `sort_mode` for behavior analysis.
 - Low-confidence banner is based on top semantic score threshold from settings.

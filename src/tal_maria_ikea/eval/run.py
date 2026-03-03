@@ -79,7 +79,6 @@ def run_eval(options: EvalRunOptions) -> dict[str, float | int | str]:
     repository.insert_eval_run(
         eval_run_id=eval_run_id,
         index_run_id=options.index_run_id,
-        strategy_version="v2_metadata_first",
         embedding_model=settings.gemini_model,
         k=options.k,
         hit_at_k=metrics.hit_at_k,

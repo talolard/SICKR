@@ -5,7 +5,6 @@ DB_PATH ?= data/ikea.duckdb
 CSV_PATH ?= data/IKEA_product_catalog.csv
 HOST ?= 127.0.0.1
 PORT ?= 8000
-INDEX_STRATEGY ?= v2_metadata_first
 INDEX_LIMIT ?=
 INIT_INDEX_LIMIT ?= 100
 INDEX_FLAGS ?=
@@ -62,7 +61,7 @@ preflight:
 	./scripts/preflight.sh
 
 index:
-	uv run python -m tal_maria_ikea.ingest.index --strategy $(INDEX_STRATEGY) $(if $(INDEX_LIMIT),--subset-limit $(INDEX_LIMIT),) $(INDEX_FLAGS)
+	uv run python -m tal_maria_ikea.ingest.index $(if $(INDEX_LIMIT),--subset-limit $(INDEX_LIMIT),) $(INDEX_FLAGS)
 
 web:
 	uv run python -m tal_maria_ikea.web.runserver --host $(HOST) --port $(PORT)

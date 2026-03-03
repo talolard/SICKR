@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 MarketCode = Literal["DE"]
-EmbeddingStrategyVersion = Literal["v1_baseline", "v2_metadata_first"]
 EmbeddingProvider = Literal["vertex_gemini"]
 SortMode = Literal["relevance", "price_asc", "price_desc", "size"]
 
@@ -91,7 +90,6 @@ class EmbeddingInputRow:
 
     canonical_product_key: str
     embedding_text: str
-    strategy_version: EmbeddingStrategyVersion
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +99,6 @@ class EmbeddedVectorRow:
     canonical_product_key: str
     embedding_text: str
     embedding_vector: tuple[float, ...]
-    strategy_version: EmbeddingStrategyVersion
 
 
 @dataclass(frozen=True, slots=True)

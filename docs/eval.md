@@ -25,6 +25,15 @@ make eval-labels
 uv run python -m tal_maria_ikea.eval.run --index-run-id latest --k 10
 ```
 
+## Reset Eval Data (Phase 2 schema refresh)
+```sql
+DELETE FROM app.eval_runs;
+DELETE FROM app.eval_labels;
+DELETE FROM app.eval_queries_generated;
+DELETE FROM app.eval_subset_registry;
+DELETE FROM app.eval_prompt_registry;
+```
+
 ## Stored Artifacts
 - Prompts: `app.eval_prompt_registry`
 - Data slices: `app.eval_subset_registry`

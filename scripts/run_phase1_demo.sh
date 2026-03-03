@@ -7,7 +7,7 @@ CSV_PATH="${2:-data/IKEA_product_catalog.csv}"
 ./scripts/init_duckdb.sh "${DB_PATH}"
 ./scripts/load_ikea_data.sh "${DB_PATH}" "${CSV_PATH}"
 
-uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first
+uv run python -m tal_maria_ikea.ingest.index
 # Optional: append --build-vss-index to create HNSW index via DuckDB vss extension.
 
 echo "Phase 1 data/index pipeline complete. Start web app with:"

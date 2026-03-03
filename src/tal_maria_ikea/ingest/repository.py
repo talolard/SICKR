@@ -15,30 +15,14 @@ class IndexRepository:
     def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
         self._connection = connection
 
-    def read_embedding_inputs(
-        self, view_name: str, subset_limit: int | None
-    ) -> list[tuple[str, str]]:
-        """Load canonical key and text payload rows from a strategy view."""
+    def read_embedding_inputs(self, subset_limit: int | None) -> list[tuple[str, str]]:
+        """Load canonical key and text payload rows from app.embedding_input."""
 
-        if view_name not in {
-            "app.embedding_input_v1_baseline",
-            "app.embedding_input_v2_metadata_first",
-        }:
-            message = f"Unsupported embedding input view: {view_name}"
-            raise ValueError(message)
-
-        if view_name == "app.embedding_input_v1_baseline":
-            query = (
-                "SELECT canonical_product_key, embedding_text "
-                "FROM app.embedding_input_v1_baseline "
-                "ORDER BY canonical_product_key"
-            )
-        else:
-            query = (
-                "SELECT canonical_product_key, embedding_text "
-                "FROM app.embedding_input_v2_metadata_first "
-                "ORDER BY canonical_product_key"
-            )
+        query = (
+            "SELECT canonical_product_key, embedding_text "
+            "FROM app.embedding_input "
+            "ORDER BY canonical_product_key"
+        )
         if subset_limit is not None:
             query += " LIMIT ?"
             rows = self._connection.execute(query, [subset_limit]).fetchall()
@@ -74,7 +58,6 @@ class IndexRepository:
         self,
         run_id: str,
         scope: str,
-        strategy_version: str,
         embedding_model: str,
         provider: str,
         use_batch: bool,
@@ -89,7 +72,6 @@ class IndexRepository:
             INSERT OR REPLACE INTO app.embedding_runs (
                 run_id,
                 scope,
-                strategy_version,
                 embedding_model,
                 provider,
                 use_batch,
@@ -101,12 +83,11 @@ class IndexRepository:
                 failed_records,
                 started_at,
                 completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, 0, 0, now(), NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, 0, 0, now(), NULL)
             """,
             [
                 run_id,
                 scope,
-                strategy_version,
                 embedding_model,
                 provider,
                 use_batch,
@@ -124,13 +105,12 @@ class IndexRepository:
         vector_dimensions: int,
         chunk_size: int = 25,
     ) -> None:
-        """Write embedding vectors in upsert mode keyed by product/model/strategy."""
+        """Write embedding vectors in upsert mode keyed by product/model."""
 
         payload = [
             (
                 row.canonical_product_key,
                 embedding_model,
-                row.strategy_version,
                 run_id,
                 _to_fixed_vector(row.embedding_vector, dimensions=vector_dimensions),
                 row.embedding_text,
@@ -191,9 +171,9 @@ class IndexRepository:
 
         upsert_sql = (
             "INSERT OR REPLACE INTO app.product_embeddings ("
-            "canonical_product_key, embedding_model, strategy_version, run_id, "
+            "canonical_product_key, embedding_model, run_id, "
             "embedding_vector, embedded_text, embedded_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, now())"
+            ") VALUES (?, ?, ?, ?, ?, now())"
         )
         try:
             self._connection.executemany(upsert_sql, payload)

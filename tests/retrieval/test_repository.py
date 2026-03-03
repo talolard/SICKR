@@ -64,18 +64,17 @@ def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
         INSERT INTO app.product_embeddings (
             canonical_product_key,
             embedding_model,
-            strategy_version,
             run_id,
             embedding_vector,
             embedded_text,
             embedded_at
         ) VALUES
             (
-                '1-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
+                '1-DE', 'gemini-embedding-001', 'run-1',
                 list_resize([1.0, 0.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk one', now()
             ),
             (
-                '2-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
+                '2-DE', 'gemini-embedding-001', 'run-1',
                 list_resize([0.0, 1.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk two', now()
             )
         """
@@ -97,7 +96,6 @@ def test_retrieval_repository_search_filters_by_price_and_dimensions() -> None:
     results = repository.search(
         query_vector=[1.0, 0.0],
         embedding_model="gemini-embedding-001",
-        strategy_version="v2_metadata_first",
         filters=filters,
         result_limit=10,
     )

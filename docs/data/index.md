@@ -22,10 +22,12 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 - `app.embedding_runs`
   - Run metadata for indexing job status and throughput
 - `app.product_embeddings`
-  - Embedding vectors per canonical key, model, and strategy version
+  - Embedding vectors per canonical key and model
     (`FLOAT[EMBEDDING_DIMENSIONS]`, default `256`)
+- `app.product_description_country_rollup`
+  - Pre-Germany-filter rollup keyed by `(product_id, description_text)` with distinct country lists
 - `app.query_log`
-  - Retrieval request logs with filter values, latency, and low-confidence flag
+  - Retrieval request logs with filter values, `sort_mode`, latency, and low-confidence flag
 - `app.shortlist_global`
   - Global persisted shortlist entries
 
@@ -42,3 +44,7 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 
 ## Documentation Rule
 Any schema or semantic change must update this page in the same change.
+
+## Phase 2 References
+- `spec/phase2/source_notes.md`
+- `spec/phase2/ui_critique.md`

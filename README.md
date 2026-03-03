@@ -1,6 +1,6 @@
 # tal_maria_ikea
 
-Phase 1 semantic-search implementation for IKEA catalog exploration.
+Phase 2 semantic-search implementation for IKEA catalog exploration.
 
 ## Quickstart
 
@@ -29,6 +29,12 @@ Phase 1 semantic-search implementation for IKEA catalog exploration.
 - `make eval-generate` generate eval queries (`EVAL_SUBSET_ID`, `EVAL_PROMPT_VERSION`, `EVAL_TARGET_COUNT`, batching + concurrency knobs)
 - `make eval-labels` bootstrap labels from current retrieval results
 - `make demo` run init then web server
+
+## Phase 2 Highlights
+- Single strategy-free embedding pipeline (`app.embedding_input`).
+- Multi-country description rollup table: `app.product_description_country_rollup`.
+- Local parquet artifacts exported under `data/parquet/`.
+- Search UX includes sort modes, advanced filters, reset, and active-filter chips.
 
 ## Recovery / Error Handling
 

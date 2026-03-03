@@ -1,14 +1,14 @@
-# Phase 1 Pipeline Runbook
+# Phase 2 Pipeline Runbook
 
 ## End-to-End Steps
 1. Initialize DB schema and baseline views:
    - `./scripts/init_duckdb.sh`
 2. Load and model catalog data:
    - `./scripts/load_ikea_data.sh`
-3. Build embeddings (sync-first, parallel):
-   - `uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first`
+3. Build embeddings (sync-first, parallel, single strategy-free path):
+   - `uv run python -m tal_maria_ikea.ingest.index`
    - Optional VSS index build:
-     `uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first --build-vss-index`
+     `uv run python -m tal_maria_ikea.ingest.index --build-vss-index`
    - Or explicit index script:
      `./scripts/build_vss_index.sh data/ikea.duckdb cosine`
 4. Run local Django search UI:
@@ -20,7 +20,7 @@ For local greenfield setup, `make init` is the canonical bootstrap and resets th
 
 ## Module Layout
 - `src/tal_maria_ikea/shared/` typed contracts + DB/parsing helpers
-- `src/tal_maria_ikea/ingest/` embedding strategies, repository, indexing CLI
+- `src/tal_maria_ikea/ingest/` embedding repository and indexing CLI
 - `src/tal_maria_ikea/retrieval/` retrieval and shortlist services
 - `src/tal_maria_ikea/web/` Django forms/views/routes/templates
 - `src/tal_maria_ikea/eval/` query generation and metrics runner
@@ -31,8 +31,10 @@ For local greenfield setup, `make init` is the canonical bootstrap and resets th
 - `sql/12_model_canonical.sql` Germany canonical modeling
 - `sql/13_mapping_tables.sql` quality/mapping analytics
 - `sql/14_market_views.sql` phase market view
-- `sql/21_embedding_inputs.sql` text strategy views
+- `sql/15_description_rollup.sql` product description by country rollup
+- `sql/21_embedding_inputs.sql` single embedding input view
 - `sql/22_embedding_store.sql` embedding storage view
+- `sql/23_parquet_exports.sql` parquet artifact exports
 - `sql/31_retrieval_candidates.sql` retrieval query
 - `sql/32_shortlist.sql` shortlist hydration query
 - `sql/41_eval_registry.sql` eval registry view
@@ -59,3 +61,12 @@ Key contracts are defined in `src/tal_maria_ikea/shared/types.py`, including:
 - embedding input/vector rows
 - shortlist state
 - evaluation metric/result objects
+
+## Parquet Artifacts
+- Default artifact root: `data/parquet/`
+- Exported datasets:
+  - `products_raw` partitioned by `country`
+  - `products_canonical` partitioned by `country`
+  - `product_embeddings`
+  - `product_description_country_rollup`
+- Git policy note: parquet files are local artifacts for iteration; do not commit them until Git LFS policy is set.

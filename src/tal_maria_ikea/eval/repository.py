@@ -153,7 +153,6 @@ class EvalRepository:
         self,
         eval_run_id: str,
         index_run_id: str,
-        strategy_version: str,
         embedding_model: str,
         k: int,
         hit_at_k: float,
@@ -167,19 +166,17 @@ class EvalRepository:
             INSERT OR REPLACE INTO app.eval_runs (
                 eval_run_id,
                 index_run_id,
-                strategy_version,
                 embedding_model,
                 k,
                 hit_at_k,
                 recall_at_k,
                 mrr,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, now())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, now())
             """,
             [
                 eval_run_id,
                 index_run_id,
-                strategy_version,
                 embedding_model,
                 k,
                 hit_at_k,

@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.ingest.embedding_client import (
@@ -18,17 +19,15 @@ from tal_maria_ikea.ingest.embedding_client import (
     VertexGeminiEmbeddingClient,
 )
 from tal_maria_ikea.ingest.repository import IndexRepository
-from tal_maria_ikea.ingest.text_strategy import select_embedding_input_view
 from tal_maria_ikea.logging_config import configure_logging, get_logger
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
-from tal_maria_ikea.shared.types import EmbeddedVectorRow, EmbeddingStrategyVersion
+from tal_maria_ikea.shared.types import EmbeddedVectorRow
 
 
 @dataclass(frozen=True, slots=True)
 class IndexRunOptions:
     """Runtime options parsed from CLI arguments."""
 
-    strategy: EmbeddingStrategyVersion
     subset_limit: int | None
     parallelism: int
     batch_size: int
@@ -72,6 +71,7 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
 
     connection = connect_db(settings.duckdb_path)
     run_sql_file(connection, "sql/10_schema.sql")
+    run_sql_file(connection, "sql/15_description_rollup.sql")
     run_sql_file(connection, "sql/14_market_views.sql")
     run_sql_file(connection, "sql/21_embedding_inputs.sql")
 
@@ -87,14 +87,12 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
         )
         raise RuntimeError(message)
 
-    source_view = select_embedding_input_view(options.strategy)
-    rows = repository.read_embedding_inputs(source_view, options.subset_limit)
+    rows = repository.read_embedding_inputs(options.subset_limit)
 
     run_id = f"run-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     repository.insert_run(
         run_id=run_id,
         scope="Germany",
-        strategy_version=options.strategy,
         embedding_model=settings.gemini_model,
         provider=settings.embedding_provider,
         use_batch=options.use_batch,
@@ -107,7 +105,6 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
         "Embedding input rows loaded",
         run_id=run_id,
         row_count=len(rows),
-        strategy=options.strategy,
         batch_size=options.batch_size,
         parallelism=options.parallelism,
         use_batch_flag=options.use_batch,
@@ -155,7 +152,6 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
                 _embed_chunk_with_retry,
                 client,
                 chunk,
-                options.strategy,
                 logger,
                 run_id,
                 chunk_index,
@@ -228,6 +224,9 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
         embedded_records=len(embedded_rows),
         failed_records=failed_records,
     )
+    Path("data/parquet").mkdir(parents=True, exist_ok=True)
+    run_sql_file(connection, "sql/23_parquet_exports.sql")
+    logger.info("parquet_export_complete", run_id=run_id, parquet_root="data/parquet")
 
     if options.build_vss_index:
         logger.info("Building HNSW index", run_id=run_id, metric=settings.vss_metric)
@@ -247,7 +246,6 @@ def run_indexing(options: IndexRunOptions) -> str:  # noqa: PLR0915
 def _embed_chunk_with_retry(
     client: VertexGeminiEmbeddingClient,
     chunk: list[tuple[str, str]],
-    strategy: EmbeddingStrategyVersion,
     logger: object,
     run_id: str,
     chunk_index: int,
@@ -274,7 +272,6 @@ def _embed_chunk_with_retry(
                     canonical_product_key=key,
                     embedding_text=text,
                     embedding_vector=vector,
-                    strategy_version=strategy,
                 )
                 for (key, text), vector in zip(chunk, vectors, strict=True)
             ]
@@ -375,11 +372,6 @@ def _parse_args() -> IndexRunOptions:
 
     settings = get_settings()
     parser = argparse.ArgumentParser(description="Run embedding index build for catalog rows.")
-    parser.add_argument(
-        "--strategy",
-        default="v2_metadata_first",
-        choices=["v1_baseline", "v2_metadata_first"],
-    )
     parser.add_argument("--subset-limit", type=int, default=None)
     parser.add_argument("--parallelism", type=int, default=settings.embedding_parallelism)
     parser.add_argument("--batch-size", type=int, default=settings.embedding_batch_size)
@@ -388,7 +380,6 @@ def _parse_args() -> IndexRunOptions:
     args = parser.parse_args()
 
     return IndexRunOptions(
-        strategy=args.strategy,
         subset_limit=args.subset_limit,
         parallelism=args.parallelism,
         batch_size=args.batch_size,

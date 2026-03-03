@@ -52,7 +52,6 @@ class RetrievalService:
         results = self._repository.search(
             query_vector=query_vector,
             embedding_model=self._settings.gemini_model,
-            strategy_version="v2_metadata_first",
             filters=request.filters,
             result_limit=request.result_limit,
         )

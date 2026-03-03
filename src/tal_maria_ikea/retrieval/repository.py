@@ -23,7 +23,6 @@ class RetrievalRepository:
         self,
         query_vector: Sequence[float],
         embedding_model: str,
-        strategy_version: str,
         filters: RetrievalFilters,
         result_limit: int,
     ) -> list[RetrievalResult]:
@@ -34,7 +33,6 @@ class RetrievalRepository:
         params = [
             fixed_query_vector,
             embedding_model,
-            strategy_version,
             candidate_limit,
             filters.category,
             filters.category,
