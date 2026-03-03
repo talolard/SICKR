@@ -10,9 +10,21 @@ class SearchForm(forms.Form):
 
     query_text = forms.CharField(max_length=300, required=True)
     category = forms.CharField(max_length=120, required=False)
+    sort = forms.ChoiceField(
+        choices=(
+            ("relevance", "Relevance"),
+            ("price_asc", "Price low-high"),
+            ("price_desc", "Price high-low"),
+            ("size", "Size"),
+        ),
+        required=False,
+        initial="relevance",
+    )
 
     min_price_eur = forms.FloatField(required=False, min_value=0)
     max_price_eur = forms.FloatField(required=False, min_value=0)
+
+    exact_dimensions = forms.BooleanField(required=False)
 
     width_exact_cm = forms.FloatField(required=False, min_value=0)
     width_min_cm = forms.FloatField(required=False, min_value=0)

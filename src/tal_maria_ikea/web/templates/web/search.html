@@ -4,27 +4,77 @@
 
 {% block content %}
   <h1>IKEA Semantic Search (Germany)</h1>
-  <p class="muted">Natural language + category/price/dimension filters.</p>
+  <p class="muted">Natural language search with compact controls and advanced filters on demand.</p>
 
   <section class="card">
     <form method="get">
-      <div class="grid">
-        {{ form.query_text.label_tag }} {{ form.query_text }}
-        {{ form.category.label_tag }} {{ form.category }}
-        {{ form.min_price_eur.label_tag }} {{ form.min_price_eur }}
-        {{ form.max_price_eur.label_tag }} {{ form.max_price_eur }}
-        {{ form.width_exact_cm.label_tag }} {{ form.width_exact_cm }}
-        {{ form.width_min_cm.label_tag }} {{ form.width_min_cm }}
-        {{ form.width_max_cm.label_tag }} {{ form.width_max_cm }}
-        {{ form.depth_exact_cm.label_tag }} {{ form.depth_exact_cm }}
-        {{ form.depth_min_cm.label_tag }} {{ form.depth_min_cm }}
-        {{ form.depth_max_cm.label_tag }} {{ form.depth_max_cm }}
-        {{ form.height_exact_cm.label_tag }} {{ form.height_exact_cm }}
-        {{ form.height_min_cm.label_tag }} {{ form.height_min_cm }}
-        {{ form.height_max_cm.label_tag }} {{ form.height_max_cm }}
+      <div class="hero-field">
+        {{ form.query_text.label_tag }}
+        {{ form.query_text }}
       </div>
-      <p><button class="btn" type="submit">Search</button></p>
+      <div class="grid top-controls">
+        <div class="field">
+          {{ form.category.label_tag }}
+          {{ form.category }}
+        </div>
+        <div class="field">
+          <label>Price: € min / € max</label>
+          <div class="grid inline-grid">
+            {{ form.min_price_eur }}
+            {{ form.max_price_eur }}
+          </div>
+        </div>
+        <div class="field">
+          {{ form.sort.label_tag }}
+          {{ form.sort }}
+        </div>
+      </div>
+
+      <details class="more-filters">
+        <summary>More filters</summary>
+        <div class="field checkbox-row">{{ form.exact_dimensions }} {{ form.exact_dimensions.label_tag }}</div>
+
+        <div class="grid">
+          <div class="field">
+            <label>Width (cm)</label>
+            <div class="grid inline-grid">
+              {{ form.width_min_cm }}
+              {{ form.width_max_cm }}
+              {{ form.width_exact_cm }}
+            </div>
+          </div>
+          <div class="field">
+            <label>Depth (cm)</label>
+            <div class="grid inline-grid">
+              {{ form.depth_min_cm }}
+              {{ form.depth_max_cm }}
+              {{ form.depth_exact_cm }}
+            </div>
+          </div>
+          <div class="field">
+            <label>Height (cm)</label>
+            <div class="grid inline-grid">
+              {{ form.height_min_cm }}
+              {{ form.height_max_cm }}
+              {{ form.height_exact_cm }}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="actions">
+        <button class="btn" type="submit">Search</button>
+        <a class="btn btn-secondary" href="{% url 'web:search' %}">Reset</a>
+      </div>
     </form>
+
+    {% if active_filter_chips %}
+      <div class="chips">
+        {% for chip in active_filter_chips %}
+          <span class="chip">{{ chip }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
   </section>
 
   {% if low_confidence %}
@@ -34,23 +84,27 @@
   <section class="card">
     <h2>Results</h2>
     {% if results %}
+      {% if page_obj %}
+        <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
+      {% endif %}
       {% for item in results %}
         <article class="result">
           <h3>{{ item.product_name }}</h3>
-          <p>{{ item.product_type }} | {{ item.main_category }} / {{ item.sub_category }}</p>
-          <p>{{ item.dimensions_text }} | EUR {{ item.price_eur }}</p>
-          <p>{{ item.rank_explanation }}</p>
+          <p class="muted">{{ item.product_type }} · {{ item.main_category }} / {{ item.sub_category }}</p>
+          <p><strong>EUR {{ item.price_eur }}</strong></p>
+          <p>{{ item.dimensions_text }}</p>
+          <p class="muted">{{ item.rank_explanation }}</p>
           <form method="post" action="{% url 'web:shortlist-add' %}">
             {% csrf_token %}
             <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
-            <input type="text" name="note" placeholder="optional note" />
+            <details>
+              <summary>Add note (optional)</summary>
+              <input type="text" name="note" placeholder="optional note" />
+            </details>
             <button class="btn btn-secondary" type="submit">Add to shortlist</button>
           </form>
         </article>
       {% endfor %}
-      {% if page_obj %}
-        <p class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
-      {% endif %}
     {% else %}
       <p>No results yet.</p>
     {% endif %}

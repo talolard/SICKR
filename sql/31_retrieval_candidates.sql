@@ -10,7 +10,7 @@ WITH nearest AS (
     FROM app.product_embeddings_latest AS e
     WHERE e.embedding_model = ?
       AND e.strategy_version = ?
-    ORDER BY cosine_distance ASC
+ORDER BY cosine_distance ASC
     LIMIT ?
 ), scored AS (
     SELECT
@@ -59,5 +59,10 @@ WHERE
     AND (? IS NULL OR depth_cm IS NOT NULL AND depth_cm <= ?)
     AND (? IS NULL OR height_cm IS NOT NULL AND height_cm >= ?)
     AND (? IS NULL OR height_cm IS NOT NULL AND height_cm <= ?)
-ORDER BY cosine_distance ASC
+ORDER BY
+    CASE WHEN ? = 'price_asc' THEN price_eur END ASC NULLS LAST,
+    CASE WHEN ? = 'price_desc' THEN price_eur END DESC NULLS LAST,
+    CASE WHEN ? = 'size' THEN (coalesce(width_cm, 0) * coalesce(depth_cm, 0) * coalesce(height_cm, 0)) END DESC NULLS LAST,
+    cosine_distance ASC,
+    canonical_product_key ASC
 LIMIT ?;

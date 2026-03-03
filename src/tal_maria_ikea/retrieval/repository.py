@@ -60,6 +60,9 @@ class RetrievalRepository:
             filters.dimensions.height.min_cm,
             filters.dimensions.height.max_cm,
             filters.dimensions.height.max_cm,
+            filters.sort,
+            filters.sort,
+            filters.sort,
             result_limit,
         ]
 
@@ -110,6 +113,7 @@ class RetrievalRepository:
             INSERT OR REPLACE INTO app.query_log (
                 query_id,
                 query_text,
+                sort_mode,
                 result_limit,
                 category_filter,
                 min_price_eur,
@@ -127,11 +131,12 @@ class RetrievalRepository:
                 request_source,
                 latency_ms,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             """,
             [
                 query_id,
                 query_text,
+                filters.sort,
                 result_limit,
                 filters.category,
                 filters.price.min_eur,

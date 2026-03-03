@@ -12,6 +12,7 @@ from typing import Literal
 MarketCode = Literal["DE"]
 EmbeddingStrategyVersion = Literal["v1_baseline", "v2_metadata_first"]
 EmbeddingProvider = Literal["vertex_gemini"]
+SortMode = Literal["relevance", "price_asc", "price_desc", "size"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,7 @@ class RetrievalFilters:
     """Structured filters layered on top of semantic search."""
 
     category: str | None = None
+    sort: SortMode = "relevance"
     price: PriceFilterEUR = PriceFilterEUR()
     dimensions: DimensionFilter = DimensionFilter()
 

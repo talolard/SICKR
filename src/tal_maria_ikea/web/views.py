@@ -18,6 +18,7 @@ from tal_maria_ikea.shared.types import (
     RetrievalFilters,
     RetrievalRequest,
     RetrievalResult,
+    SortMode,
 )
 from tal_maria_ikea.web.forms import SearchForm, ShortlistNoteForm
 
@@ -40,6 +41,7 @@ class SearchView(TemplateView):
                 "page_obj": None,
                 "low_confidence": False,
                 "shortlist": shortlist_service.get_state().items,
+                "active_filter_chips": (),
             }
         )
 
@@ -57,6 +59,7 @@ class SearchView(TemplateView):
             page_obj = paginator.get_page(page)
             context["results"] = list(page_obj.object_list)
             context["page_obj"] = page_obj
+            context["active_filter_chips"] = _build_active_filter_chips(form.cleaned_data)
             context["low_confidence"] = _is_low_confidence(
                 results,
                 threshold=settings.retrieval_low_confidence_threshold,
@@ -96,23 +99,24 @@ def _build_filters(cleaned_data: dict[str, object]) -> RetrievalFilters:
 
     return RetrievalFilters(
         category=_to_optional_str(cleaned_data.get("category")),
+        sort=_to_sort_mode(cleaned_data.get("sort")),
         price=PriceFilterEUR(
             min_eur=_to_optional_float(cleaned_data.get("min_price_eur")),
             max_eur=_to_optional_float(cleaned_data.get("max_price_eur")),
         ),
         dimensions=DimensionFilter(
             width=DimensionAxisFilter(
-                exact_cm=_to_optional_float(cleaned_data.get("width_exact_cm")),
+                exact_cm=_axis_exact(cleaned_data, "width_exact_cm"),
                 min_cm=_to_optional_float(cleaned_data.get("width_min_cm")),
                 max_cm=_to_optional_float(cleaned_data.get("width_max_cm")),
             ),
             depth=DimensionAxisFilter(
-                exact_cm=_to_optional_float(cleaned_data.get("depth_exact_cm")),
+                exact_cm=_axis_exact(cleaned_data, "depth_exact_cm"),
                 min_cm=_to_optional_float(cleaned_data.get("depth_min_cm")),
                 max_cm=_to_optional_float(cleaned_data.get("depth_max_cm")),
             ),
             height=DimensionAxisFilter(
-                exact_cm=_to_optional_float(cleaned_data.get("height_exact_cm")),
+                exact_cm=_axis_exact(cleaned_data, "height_exact_cm"),
                 min_cm=_to_optional_float(cleaned_data.get("height_min_cm")),
                 max_cm=_to_optional_float(cleaned_data.get("height_max_cm")),
             ),
@@ -135,6 +139,64 @@ def _to_optional_float(value: object) -> float | None:
     if isinstance(value, str):
         return float(value)
     return None
+
+
+def _axis_exact(cleaned_data: dict[str, object], key: str) -> float | None:
+    if not bool(cleaned_data.get("exact_dimensions")):
+        return None
+    return _to_optional_float(cleaned_data.get(key))
+
+
+def _to_sort_mode(value: object) -> SortMode:
+    if value == "price_asc":
+        return "price_asc"
+    if value == "price_desc":
+        return "price_desc"
+    if value == "size":
+        return "size"
+    return "relevance"
+
+
+def _build_active_filter_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
+    chips: list[str] = []
+    category = _to_optional_str(cleaned_data.get("category"))
+    if category is not None:
+        chips.append(f"Category: {_humanize_category(category)}")
+
+    sort = _to_sort_mode(cleaned_data.get("sort"))
+    if sort != "relevance":
+        chips.append(f"Sort: {sort.replace('_', ' ')}")
+
+    min_price = _to_optional_float(cleaned_data.get("min_price_eur"))
+    max_price = _to_optional_float(cleaned_data.get("max_price_eur"))
+    if min_price is not None or max_price is not None:
+        chips.append(f"Price: €{_display_price(min_price)} - €{_display_price(max_price)}")
+
+    exact_dimensions = bool(cleaned_data.get("exact_dimensions"))
+    if exact_dimensions:
+        chips.append("Dimensions: exact mode")
+
+    for axis in ("width", "depth", "height"):
+        exact = _axis_exact(cleaned_data, f"{axis}_exact_cm")
+        min_value = _to_optional_float(cleaned_data.get(f"{axis}_min_cm"))
+        max_value = _to_optional_float(cleaned_data.get(f"{axis}_max_cm"))
+        label = axis.capitalize()
+        if exact is not None:
+            chips.append(f"{label}: {exact:g} cm")
+        elif min_value is not None or max_value is not None:
+            chips.append(f"{label}: {_display_price(min_value)}-{_display_price(max_value)} cm")
+
+    return tuple(chips)
+
+
+def _humanize_category(value: str) -> str:
+    return value.replace("-", " ").replace("_", " ").strip().title()
+
+
+def _display_price(value: float | None) -> str:
+    if value is None:
+        return "any"
+    return f"{value:g}"
 
 
 def _is_low_confidence(results: list[RetrievalResult], threshold: float | None = None) -> bool:
