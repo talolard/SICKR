@@ -109,7 +109,10 @@
       <div class="results-grid">
         {% for item in results %}
           <article class="result card">
-            <h3>{{ item.product_name }}</h3>
+            <div class="result-head">
+              <h3>{{ item.product_name }}</h3>
+              <span class="product-id-badge">ID {{ item.canonical_product_key }}</span>
+            </div>
             <p class="muted">{{ item.product_type }} · {{ item.main_category }} / {{ item.sub_category }}</p>
             <p><strong>EUR {{ item.price_eur }}</strong></p>
             <p>{{ item.dimensions_text }}</p>
