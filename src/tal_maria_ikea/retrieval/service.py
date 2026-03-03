@@ -34,6 +34,7 @@ class RetrievalService:
                 project_id=settings.gcp_project_id,
                 location=settings.gcp_region,
                 model_name=settings.gemini_model,
+                api_key=settings.gemini_api_key,
             )
         )
         self._logger = get_logger("retrieval.service")

@@ -27,10 +27,13 @@ class RetrievalRepository:
     ) -> list[RetrievalResult]:
         """Search catalog vectors and apply structured filters."""
 
+        fixed_query_vector = _to_fixed_vector(query_vector, dimensions=3072)
+        candidate_limit = max(result_limit * 10, 200)
         params = [
-            list(query_vector),
+            fixed_query_vector,
             embedding_model,
             strategy_version,
+            candidate_limit,
             filters.category,
             filters.category,
             filters.price.min_eur,
@@ -210,3 +213,12 @@ def _float_or_none(value: object) -> float | None:
     if isinstance(value, str):
         return float(value)
     return None
+
+
+def _to_fixed_vector(query_vector: Sequence[float], dimensions: int) -> list[float]:
+    """Normalize query vector length for fixed-size array casts in SQL."""
+
+    values = [float(value) for value in query_vector[:dimensions]]
+    if len(values) < dimensions:
+        values.extend([0.0] * (dimensions - len(values)))
+    return values

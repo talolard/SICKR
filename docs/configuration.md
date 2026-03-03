@@ -6,12 +6,13 @@ Keep configuration explicit, typed, and environment-driven while preventing secr
 ## Canonical Key Registry
 The current required/expected keys are:
 
-- `GCP_PROJECT_ID` (required)
+- `GCP_PROJECT_ID` (default `gen-lang-client-0545732168`)
 - `GCP_REGION` (default `us-central1`)
 - `GEMINI_MODEL` (default `gemini-embedding-001`)
 - `GEMINI_GENERATION_MODEL` (default `gemini-2.5-flash`)
 - `EMBEDDING_PROVIDER` (default `vertex_gemini`)
-- `GOOGLE_APPLICATION_CREDENTIALS` (required for local credentialed runs)
+- `GOOGLE_APPLICATION_CREDENTIALS` (required when not using API key mode)
+- `GEMINI_API_KEY` (optional, enables direct Gemini Developer API mode)
 - `IKEA_RAW_CSV_PATH` (default `data/IKEA_product_catalog.csv`)
 - `DUCKDB_PATH` (default `data/ikea.duckdb`)
 - `LOG_LEVEL` (default `INFO`)
@@ -21,6 +22,8 @@ The current required/expected keys are:
 - `DEFAULT_MARKET` (default `Germany`)
 - `EMBEDDING_PARALLELISM` (default `8`)
 - `EMBEDDING_BATCH_SIZE` (default `16`)
+- `VSS_BUILD_INDEX` (default `false`)
+- `VSS_METRIC` (default `cosine`)
 - `RETRIEVAL_LOW_CONFIDENCE_THRESHOLD` (default `0.15`)
 - `DJANGO_SECRET_KEY` (default `dev-only-secret`)
 - `DJANGO_DEBUG` (default `true`)

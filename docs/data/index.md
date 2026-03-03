@@ -11,6 +11,7 @@ Defined in `sql/10_schema.sql` and modeling SQL:
   - Flat source columns from CSV, including `unique_id`, `product_id`, categories, dimensions, price, currency, and `country`
 - `app.products_canonical`
   - Germany-scoped canonical rows keyed by `canonical_product_key`
+  - Dimension format classification: `dimensions_type`
   - Parsed numeric fields: `width_cm`, `depth_cm`, `height_cm`, `price_eur`
 - `app.product_alias_map`
   - Alias links from raw identifiers to canonical keys
@@ -21,7 +22,7 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 - `app.embedding_runs`
   - Run metadata for indexing job status and throughput
 - `app.product_embeddings`
-  - Embedding vectors per canonical key, model, and strategy version
+  - Embedding vectors per canonical key, model, and strategy version (`FLOAT[3072]`)
 - `app.query_log`
   - Retrieval request logs with filter values, latency, and low-confidence flag
 - `app.shortlist_global`

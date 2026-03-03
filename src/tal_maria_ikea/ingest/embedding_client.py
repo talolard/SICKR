@@ -14,6 +14,7 @@ class EmbeddingClientConfig:
     project_id: str
     location: str
     model_name: str
+    api_key: str | None = None
 
 
 class VertexGeminiEmbeddingClient:
@@ -21,11 +22,14 @@ class VertexGeminiEmbeddingClient:
 
     def __init__(self, config: EmbeddingClientConfig) -> None:
         self._model_name = config.model_name
-        self._client = genai.Client(
-            vertexai=True,
-            project=config.project_id,
-            location=config.location,
-        )
+        if config.api_key:
+            self._client = genai.Client(api_key=config.api_key)
+        else:
+            self._client = genai.Client(
+                vertexai=True,
+                project=config.project_id,
+                location=config.location,
+            )
 
     def embed_many(self, texts: list[str]) -> list[tuple[float, ...]]:
         """Embed a list of texts and return vectors in source order."""
@@ -65,3 +69,16 @@ class VertexGeminiEmbeddingClient:
             return ()
 
         return tuple(float(value) for value in values)
+
+
+def build_generation_client(config: EmbeddingClientConfig) -> genai.Client:
+    """Build a Gemini client for structured generation calls."""
+
+    if config.api_key:
+        return genai.Client(api_key=config.api_key)
+
+    return genai.Client(
+        vertexai=True,
+        project=config.project_id,
+        location=config.location,
+    )

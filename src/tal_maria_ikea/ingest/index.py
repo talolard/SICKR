@@ -29,6 +29,7 @@ class IndexRunOptions:
     parallelism: int
     batch_size: int
     use_batch: bool
+    build_vss_index: bool
 
 
 def _chunk_rows(rows: list[tuple[str, str]], chunk_size: int) -> Iterable[list[tuple[str, str]]]:
@@ -78,6 +79,7 @@ def run_indexing(options: IndexRunOptions) -> str:
             project_id=settings.gcp_project_id,
             location=settings.gcp_region,
             model_name=settings.gemini_model,
+            api_key=settings.gemini_api_key,
         )
     )
 
@@ -107,6 +109,10 @@ def run_indexing(options: IndexRunOptions) -> str:
         embedded_records=len(embedded_rows),
         failed_records=failed_records,
     )
+
+    if options.build_vss_index:
+        repository.create_vss_hnsw_index(metric=settings.vss_metric)
+        logger.info("vss_hnsw_index_ready", run_id=run_id, metric=settings.vss_metric)
 
     logger.info(
         "Embedding run complete",
@@ -153,6 +159,7 @@ def _parse_args() -> IndexRunOptions:
     parser.add_argument("--parallelism", type=int, default=settings.embedding_parallelism)
     parser.add_argument("--batch-size", type=int, default=settings.embedding_batch_size)
     parser.add_argument("--use-batch", action="store_true")
+    parser.add_argument("--build-vss-index", action="store_true", default=settings.vss_build_index)
     args = parser.parse_args()
 
     return IndexRunOptions(
@@ -161,6 +168,7 @@ def _parse_args() -> IndexRunOptions:
         parallelism=args.parallelism,
         batch_size=args.batch_size,
         use_batch=args.use_batch,
+        build_vss_index=args.build_vss_index,
     )
 
 

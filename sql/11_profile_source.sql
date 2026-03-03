@@ -31,3 +31,30 @@ SELECT
     AVG(CASE WHEN price IS NULL THEN 1 ELSE 0 END) AS null_price_rate
 FROM app.products_raw
 WHERE country = 'Germany';
+
+-- Germany dimensions format distribution.
+SELECT
+    CASE
+        WHEN product_measurements IS NULL OR trim(lower(product_measurements)) IN ('', 'none')
+            THEN 'missing'
+        WHEN regexp_matches(trim(lower(product_measurements)), '^\\d+(?:[.,]\\d+)?\\s*cm$')
+            THEN 'cm_single'
+        WHEN regexp_matches(trim(lower(product_measurements)), '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+            THEN 'cm_double'
+        WHEN regexp_matches(trim(lower(product_measurements)), '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+            THEN 'cm_triple'
+        WHEN strpos(trim(lower(product_measurements)), '(') > 0 AND regexp_matches(trim(lower(product_measurements)), 'cm')
+            THEN 'cm_with_parenthetical'
+        WHEN regexp_matches(trim(lower(product_measurements)), '/') AND regexp_matches(trim(lower(product_measurements)), 'cm')
+            THEN 'cm_with_alternatives'
+        WHEN regexp_matches(trim(lower(product_measurements)), 'm²') AND regexp_matches(trim(lower(product_measurements)), 'cm')
+            THEN 'area_with_height'
+        WHEN regexp_matches(trim(lower(product_measurements)), 'cm')
+            THEN 'cm_other'
+        ELSE 'non_cm_or_unknown'
+    END AS dimensions_type,
+    COUNT(*) AS row_count
+FROM app.products_raw
+WHERE country = 'Germany'
+GROUP BY dimensions_type
+ORDER BY row_count DESC;

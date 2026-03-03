@@ -8,11 +8,11 @@ import json
 from dataclasses import dataclass
 from uuid import uuid4
 
-from google import genai
 from pydantic import BaseModel, Field
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.eval.repository import EvalRepository
+from tal_maria_ikea.ingest.embedding_client import EmbeddingClientConfig, build_generation_client
 from tal_maria_ikea.logging_config import configure_logging, get_logger
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
 
@@ -65,10 +65,13 @@ def run_generate(options: GenerateOptions) -> int:
     prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
     repository.upsert_prompt(options.prompt_version, prompt_text, prompt_hash)
 
-    client = genai.Client(
-        vertexai=True,
-        project=settings.gcp_project_id,
-        location=settings.gcp_region,
+    client = build_generation_client(
+        EmbeddingClientConfig(
+            project_id=settings.gcp_project_id,
+            location=settings.gcp_region,
+            model_name=settings.gemini_model,
+            api_key=settings.gemini_api_key,
+        )
     )
 
     response = client.models.generate_content(

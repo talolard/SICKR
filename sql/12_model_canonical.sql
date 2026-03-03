@@ -7,7 +7,7 @@ DELETE FROM app.product_family_map;
 WITH germany_source AS (
     SELECT
         r.*,
-        regexp_extract_all(coalesce(r.product_measurements, ''), '(\\d+(?:[.,]\\d+)?)') AS dimension_tokens,
+        lower(trim(coalesce(r.product_measurements, ''))) AS measurements_normalized,
         TRY_CAST(NULLIF(r.product_rating, 'none') AS DOUBLE) AS rating_num,
         TRY_CAST(NULLIF(r.product_rating_count, 'none') AS BIGINT) AS rating_count_num,
         ROW_NUMBER() OVER (
@@ -19,6 +19,39 @@ WITH germany_source AS (
         ) AS dedup_rank
     FROM app.products_raw AS r
     WHERE r.country = 'Germany'
+), typed_source AS (
+    SELECT
+        gs.*,
+        CASE
+            WHEN gs.measurements_normalized = '' OR gs.measurements_normalized = 'none'
+                THEN 'missing'
+            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*cm$')
+                THEN 'cm_single'
+            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+                THEN 'cm_double'
+            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+                THEN 'cm_triple'
+            WHEN strpos(gs.measurements_normalized, '(') > 0 AND regexp_matches(gs.measurements_normalized, 'cm')
+                THEN 'cm_with_parenthetical'
+            WHEN regexp_matches(gs.measurements_normalized, '/') AND regexp_matches(gs.measurements_normalized, 'cm')
+                THEN 'cm_with_alternatives'
+            WHEN regexp_matches(gs.measurements_normalized, 'm²') AND regexp_matches(gs.measurements_normalized, 'cm')
+                THEN 'area_with_height'
+            WHEN regexp_matches(gs.measurements_normalized, 'cm')
+                THEN 'cm_other'
+            ELSE 'non_cm_or_unknown'
+        END AS dimensions_type,
+        CASE
+            WHEN strpos(gs.measurements_normalized, '(') > 0
+                THEN trim(split_part(gs.measurements_normalized, '(', 1))
+            ELSE gs.measurements_normalized
+        END AS parse_source_text
+    FROM germany_source AS gs
+), parsed_source AS (
+    SELECT
+        ts.*,
+        regexp_extract_all(ts.parse_source_text, '(\\d+(?:[.,]\\d+)?)') AS dimension_tokens
+    FROM typed_source AS ts
 ), canonical AS (
     SELECT
         CASE
@@ -34,6 +67,7 @@ WITH germany_source AS (
         main_category,
         sub_category,
         product_measurements AS dimensions_text,
+        dimensions_type,
         TRY_CAST(replace(list_extract(dimension_tokens, 1), ',', '.') AS DOUBLE) AS width_cm,
         TRY_CAST(replace(list_extract(dimension_tokens, 2), ',', '.') AS DOUBLE) AS depth_cm,
         TRY_CAST(replace(list_extract(dimension_tokens, 3), ',', '.') AS DOUBLE) AS height_cm,
@@ -44,7 +78,7 @@ WITH germany_source AS (
         badge,
         online_sellable,
         url
-    FROM germany_source
+    FROM parsed_source
     WHERE dedup_rank = 1
 )
 INSERT INTO app.products_canonical (
@@ -58,6 +92,7 @@ INSERT INTO app.products_canonical (
     main_category,
     sub_category,
     dimensions_text,
+    dimensions_type,
     width_cm,
     depth_cm,
     height_cm,
@@ -81,6 +116,7 @@ SELECT
     main_category,
     sub_category,
     dimensions_text,
+    dimensions_type,
     width_cm,
     depth_cm,
     height_cm,

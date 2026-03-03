@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS app.products_canonical (
     main_category VARCHAR,
     sub_category VARCHAR,
     dimensions_text VARCHAR,
+    dimensions_type VARCHAR,
     width_cm DOUBLE,
     depth_cm DOUBLE,
     height_cm DOUBLE,
@@ -88,7 +89,7 @@ CREATE TABLE IF NOT EXISTS app.product_embeddings (
     embedding_model VARCHAR NOT NULL,
     strategy_version VARCHAR NOT NULL,
     run_id VARCHAR NOT NULL,
-    embedding_vector DOUBLE[],
+    embedding_vector FLOAT[3072],
     embedded_text VARCHAR NOT NULL,
     embedded_at TIMESTAMP DEFAULT now(),
     PRIMARY KEY (canonical_product_key, embedding_model, strategy_version)

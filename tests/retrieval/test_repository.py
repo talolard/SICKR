@@ -70,11 +70,11 @@ def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
         ) VALUES
             (
                 '1-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
-                [1.0, 0.0], 'desk one', now()
+                list_resize([1.0, 0.0]::FLOAT[], 3072, 0.0)::FLOAT[3072], 'desk one', now()
             ),
             (
                 '2-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
-                [0.0, 1.0], 'desk two', now()
+                list_resize([0.0, 1.0]::FLOAT[], 3072, 0.0)::FLOAT[3072], 'desk two', now()
             )
         """
     )

@@ -18,6 +18,38 @@ class ParsedDimensions:
     height_cm: float | None
 
 
+def classify_dimensions_type(dimensions_text: str | None) -> str:
+    """Classify raw dimensions string into a known parsing strategy type."""
+
+    if not dimensions_text:
+        return "missing"
+
+    normalized = dimensions_text.strip().lower()
+    if normalized in {"", "none"}:
+        return "missing"
+
+    checks: tuple[tuple[bool, str], ...] = (
+        (_matches(normalized, r"^\d+(?:[.,]\d+)?\s*cm$"), "cm_single"),
+        (_matches(normalized, r"^\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\s*cm$"), "cm_double"),
+        (
+            _matches(
+                normalized,
+                r"^\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\s*cm$",
+            ),
+            "cm_triple",
+        ),
+        ("(" in normalized and "cm" in normalized, "cm_with_parenthetical"),
+        ("/" in normalized and "cm" in normalized, "cm_with_alternatives"),
+        ("m²" in normalized and "cm" in normalized, "area_with_height"),
+        ("cm" in normalized, "cm_other"),
+    )
+    for is_match, dimensions_type in checks:
+        if is_match:
+            return dimensions_type
+
+    return "non_cm_or_unknown"
+
+
 def parse_dimensions_text(dimensions_text: str | None) -> ParsedDimensions:
     """Extract the first three numeric tokens from a dimensions string.
 
@@ -28,7 +60,9 @@ def parse_dimensions_text(dimensions_text: str | None) -> ParsedDimensions:
     if not dimensions_text:
         return ParsedDimensions(width_cm=None, depth_cm=None, height_cm=None)
 
-    tokens = _DIMENSION_TOKEN_RE.findall(dimensions_text)
+    normalized = dimensions_text.lower()
+    parse_source = normalized.split("(", maxsplit=1)[0].strip()
+    tokens = _DIMENSION_TOKEN_RE.findall(parse_source)
     values = [_to_float(token) for token in tokens[:_DIMENSION_AXIS_COUNT]]
     while len(values) < _DIMENSION_AXIS_COUNT:
         values.append(None)
@@ -44,3 +78,7 @@ def _to_float(value: str) -> float | None:
         return float(normalized)
     except ValueError:
         return None
+
+
+def _matches(text: str, pattern: str) -> bool:
+    return re.fullmatch(pattern, text) is not None

@@ -107,7 +107,7 @@ class IndexRepository:
                 embedding_model,
                 row.strategy_version,
                 run_id,
-                list(row.embedding_vector),
+                _to_fixed_vector(row.embedding_vector, dimensions=3072),
                 row.embedding_text,
             )
             for row in rows
@@ -122,7 +122,7 @@ class IndexRepository:
                 embedding_vector,
                 embedded_text,
                 embedded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, now())
+            ) VALUES (?, ?, ?, ?, CAST(? AS FLOAT[3072]), ?, now())
             """,
             payload,
         )
@@ -141,3 +141,35 @@ class IndexRepository:
             """,
             [embedded_records, failed_records, run_id],
         )
+
+    def create_vss_hnsw_index(self, metric: str = "cosine") -> None:
+        """Create or refresh HNSW index for embedding vectors.
+
+        This uses DuckDB's experimental `vss` extension and enables persistence mode
+        for local disk-backed databases.
+        """
+
+        self._connection.execute("INSTALL vss")
+        self._connection.execute("LOAD vss")
+        self._connection.execute("SET hnsw_enable_experimental_persistence = true")
+        if metric not in {"cosine", "l2sq", "ip"}:
+            message = f"Unsupported VSS metric: {metric}"
+            raise ValueError(message)
+        if metric == "cosine":
+            metric_sql = "cosine"
+        elif metric == "l2sq":
+            metric_sql = "l2sq"
+        else:
+            metric_sql = "ip"
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_product_embeddings_hnsw "
+            "ON app.product_embeddings USING HNSW (embedding_vector) "
+            f"WITH (metric = '{metric_sql}')"
+        )
+
+
+def _to_fixed_vector(vector: Sequence[float], dimensions: int) -> list[float]:
+    values = [float(value) for value in vector[:dimensions]]
+    if len(values) < dimensions:
+        values.extend([0.0] * (dimensions - len(values)))
+    return values

@@ -1,4 +1,4 @@
-.PHONY: lint format format-check format-all typecheck test tidy preflight index web eval
+.PHONY: lint format format-check format-all typecheck test tidy preflight index web eval vss-index
 
 lint:
 	uv run ruff check .
@@ -31,6 +31,9 @@ web:
 
 eval:
 	uv run python -m tal_maria_ikea.eval.run --index-run-id latest --k 10
+
+vss-index:
+	./scripts/build_vss_index.sh
 
 # One command before commit.
 tidy: format

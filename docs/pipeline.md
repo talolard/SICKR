@@ -7,6 +7,10 @@
    - `./scripts/load_ikea_data.sh`
 3. Build embeddings (sync-first, parallel):
    - `uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first`
+   - Optional VSS index build:
+     `uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first --build-vss-index`
+   - Or explicit index script:
+     `./scripts/build_vss_index.sh data/ikea.duckdb cosine`
 4. Run local Django search UI:
    - `uv run python -m tal_maria_ikea.web.runserver`
 5. Run eval loop (after labels exist):
@@ -30,6 +34,11 @@
 - `sql/31_retrieval_candidates.sql` retrieval query
 - `sql/32_shortlist.sql` shortlist hydration query
 - `sql/41_eval_registry.sql` eval registry view
+
+## Vector Similarity Notes
+- Retrieval SQL uses `array_cosine_distance` over `FLOAT[3072]` vectors.
+- Optional HNSW index support uses DuckDB `vss` extension.
+- Reference doc: `external_docs/duckdb_vector_similarity.md`.
 
 ## Typed Boundaries
 Key contracts are defined in `src/tal_maria_ikea/shared/types.py`, including:

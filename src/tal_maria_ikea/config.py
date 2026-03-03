@@ -21,11 +21,12 @@ class AppSettings(BaseSettings):
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=True)
 
-    gcp_project_id: str
+    gcp_project_id: str = Field(default="gen-lang-client-0545732168")
     gcp_region: str = Field(default="us-central1")
     gemini_model: str = Field(default="gemini-embedding-001")
     gemini_generation_model: str = Field(default="gemini-2.5-flash")
     embedding_provider: str = Field(default="vertex_gemini")
+    gemini_api_key: str | None = Field(default=None)
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     duckdb_path: str = Field(default="data/ikea.duckdb")
@@ -33,6 +34,8 @@ class AppSettings(BaseSettings):
     default_market: str = Field(default="Germany")
     embedding_parallelism: int = Field(default=8, ge=1, le=64)
     embedding_batch_size: int = Field(default=16, ge=1, le=256)
+    vss_build_index: bool = Field(default=False)
+    vss_metric: str = Field(default="cosine")
     retrieval_low_confidence_threshold: float = Field(default=0.15)
     django_secret_key: str = Field(default="dev-only-secret")
     django_debug: bool = Field(default=True)
