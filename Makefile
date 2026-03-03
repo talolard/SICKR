@@ -1,4 +1,4 @@
-.PHONY: lint format format-check typecheck test tidy preflight
+.PHONY: lint format format-check format-all typecheck test tidy preflight index web eval
 
 lint:
 	uv run ruff check .
@@ -9,6 +9,11 @@ format:
 format-check:
 	uv run ruff format --check .
 
+format-all: format
+	uv run ruff check --fix .
+	uv run ruff format --check .
+	uv run pyrefly check
+
 typecheck:
 	uv run pyrefly check
 
@@ -17,6 +22,15 @@ test:
 
 preflight:
 	./scripts/preflight.sh
+
+index:
+	uv run python -m tal_maria_ikea.ingest.index --strategy v2_metadata_first
+
+web:
+	uv run python -m tal_maria_ikea.web.runserver
+
+eval:
+	uv run python -m tal_maria_ikea.eval.run --index-run-id latest --k 10
 
 # One command before commit.
 tidy: format

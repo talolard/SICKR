@@ -1,12 +1,32 @@
+# Restrict checking to first-party runtime and tests.
 project-includes = [
     "src/**/*.py",
     "tests/**/*.py",
 ]
 
+# Keep excludes explicit and avoid accidental broadening via editor temp dirs.
 project-excludes = [
     "**/.venv/**",
     "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/.ruff_cache/**",
 ]
 
-python-version = "3.12"
+# Deterministic import resolution for src-layout package.
 search-path = ["src"]
+disable-search-path-heuristics = true
+use-ignore-files = true
+
+# Align with repository runtime target.
+python-version = "3.12"
+
+# Keep typing strict and explicit for future agents and modules.
+untyped-def-behavior = "check-and-infer-return-type"
+infer-with-first-use = true
+ignore-errors-in-generated-code = false
+replace-imports-with-any = []
+ignore-missing-imports = []
+enabled-ignores = ["type", "pyrefly"]
+strict-callable-subtyping = true
+
+[errors]

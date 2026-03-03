@@ -14,18 +14,19 @@ Repository-local collaboration and implementation rules.
 ## Tooling Standards
 
 - Python environment and commands run through UV.
+- Use `make format-all` as the go-to local quality command (no tests).
 - Run `make tidy` before commit.
 - Quality gate for changes:
-  - `make lint`
-  - `make format-check`
-  - `make typecheck`
+  - `make format-all`
   - `make test`
 
 ## Typing and Test Expectations
 
 - Use explicit type annotations in production code and tests.
 - Prefer small composable functions and typed dataclasses/protocols.
-- Add tests for new behavior; keep smoke tests passing at minimum.
+- Add tests for new behavior; Test extensively.
+- Use codecov and maintain 98%+ coverage on all code in `src/`.
+- Keep test files small, prefer paramaterized tests. Make sure tests are fully type annotated.
 - Keep files short and split modules before they become hard to scan.
 
 ## Django Standards
@@ -42,6 +43,8 @@ Repository-local collaboration and implementation rules.
 - Avoid embedding complex SQL inside Python unless strongly justified.
 - Update `docs/data/` whenever schema or column semantics change.
 - Treat the IKEA source dataset as static for this project unless we explicitly decide to refresh it.
+- When analysing data yourself, view small result sets and aggregates first, to avoid consuming a lot of data at once.
+- Maintain a docs/data_patterns.md with patterns you notice in the data, and queries that work or dont. reference it often and keep it updated.
 
 ## Logging
 
