@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.23.8/dist/css/uikit.min.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/uikit@3.23.8/dist/js/uikit.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/uikit@3.23.8/dist/js/uikit-icons.min.js"></script>
     <title>{% block title %}IKEA Semantic Search{% endblock %}</title>
     <style>
       :root {
@@ -153,9 +156,8 @@
         gap: 0.75rem;
         flex-wrap: wrap;
       }
-      .pager-inline {
-        display: flex;
-        gap: 0.5rem;
+      .pager-inline .uk-pagination {
+        margin: 0;
       }
       .pager-dock {
         position: fixed;
@@ -172,19 +174,29 @@
         padding: 0.35rem 0.55rem;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
       }
-      .pager-page-label {
-        font-weight: 700;
+      .pager-dock .uk-pagination {
+        margin: 0;
+      }
+      .pager-inline .uk-pagination > li > a,
+      .pager-inline .uk-pagination > li > span,
+      .pager-dock .uk-pagination > li > a,
+      .pager-dock .uk-pagination > li > span {
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
         color: var(--ink);
-        font-size: 0.9rem;
-        white-space: nowrap;
+        font-weight: 600;
+        padding: 0.25rem 0.7rem;
       }
-      .pager-btn {
-        min-width: 7.5rem;
-        text-align: center;
+      .pager-inline .uk-pagination > .uk-active > span,
+      .pager-dock .uk-pagination > .uk-active > span {
+        background: #dbeafe;
+        border-color: #93c5fd;
+        color: #1e3a8a;
       }
-      .pager-btn.is-disabled {
+      .pager-inline .uk-pagination > .uk-disabled > span,
+      .pager-dock .uk-pagination > .uk-disabled > span {
         opacity: 0.55;
-        pointer-events: none;
       }
       .result.card {
         margin-bottom: 0;
@@ -258,12 +270,12 @@
           width: calc(100vw - 1rem);
           max-width: 100%;
           border-radius: 14px;
-          justify-content: space-between;
           left: 0.5rem;
           transform: none;
         }
-        .pager-btn {
-          min-width: 0;
+        .pager-dock .uk-pagination > li > a,
+        .pager-dock .uk-pagination > li > span {
+          padding: 0.25rem 0.45rem;
         }
       }
     </style>

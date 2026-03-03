@@ -107,18 +107,27 @@
         <div class="results-meta-row">
           <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
           {% if has_pagination %}
-            <div class="pager-inline">
-              {% if prev_page_url %}
-                <a class="btn btn-secondary pager-btn" href="{{ prev_page_url }}">Previous</a>
-              {% else %}
-                <span class="btn btn-secondary pager-btn is-disabled" aria-disabled="true">Previous</span>
-              {% endif %}
-              {% if next_page_url %}
-                <a class="btn pager-btn" href="{{ next_page_url }}">Next</a>
-              {% else %}
-                <span class="btn pager-btn is-disabled" aria-disabled="true">Next</span>
-              {% endif %}
-            </div>
+            <nav class="pager-inline" aria-label="Results pagination">
+              <ul class="uk-pagination">
+                <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
+                  {% if prev_page_url %}
+                    <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
+                  {% else %}
+                    <span><span uk-pagination-previous></span> Previous</span>
+                  {% endif %}
+                </li>
+                <li class="uk-active">
+                  <span aria-current="page">Page {{ page_obj.number }}</span>
+                </li>
+                <li class="{% if not next_page_url %}uk-disabled{% endif %}">
+                  {% if next_page_url %}
+                    <a href="{{ next_page_url }}">Next <span uk-pagination-next></span></a>
+                  {% else %}
+                    <span>Next <span uk-pagination-next></span></span>
+                  {% endif %}
+                </li>
+              </ul>
+            </nav>
           {% endif %}
         </div>
       {% endif %}
@@ -154,19 +163,27 @@
         {% endfor %}
       </div>
       {% if has_pagination %}
-        <div class="pager-dock">
-          {% if prev_page_url %}
-            <a class="btn btn-secondary pager-btn" href="{{ prev_page_url }}">Previous page</a>
-          {% else %}
-            <span class="btn btn-secondary pager-btn is-disabled" aria-disabled="true">Previous page</span>
-          {% endif %}
-          <span class="pager-page-label">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-          {% if next_page_url %}
-            <a class="btn pager-btn" href="{{ next_page_url }}">Next page</a>
-          {% else %}
-            <span class="btn pager-btn is-disabled" aria-disabled="true">Next page</span>
-          {% endif %}
-        </div>
+        <nav class="pager-dock" aria-label="Sticky results pagination">
+          <ul class="uk-pagination">
+            <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
+              {% if prev_page_url %}
+                <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
+              {% else %}
+                <span><span uk-pagination-previous></span> Previous</span>
+              {% endif %}
+            </li>
+            <li class="uk-active">
+              <span aria-current="page">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            <li class="{% if not next_page_url %}uk-disabled{% endif %}">
+              {% if next_page_url %}
+                <a href="{{ next_page_url }}">Next <span uk-pagination-next></span></a>
+              {% else %}
+                <span>Next <span uk-pagination-next></span></span>
+              {% endif %}
+            </li>
+          </ul>
+        </nav>
       {% endif %}
     {% else %}
       <p>No results yet.</p>
