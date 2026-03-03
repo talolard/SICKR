@@ -24,6 +24,16 @@
         margin: 0 auto;
         padding: 1.25rem;
       }
+      .top-nav {
+        display: flex;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+      }
+      .top-nav a {
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+      }
       .card {
         background: var(--card);
         border: 1px solid #d8d8d8;
@@ -36,13 +46,26 @@
         gap: 0.75rem;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       }
-      .inline-grid {
-        grid-template-columns: repeat(3, minmax(80px, 1fr));
-      }
       .field {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
+      }
+      .control-block {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 0.6rem;
+      }
+      .control-row {
+        display: grid;
+        grid-template-columns: auto minmax(64px, 1fr) auto minmax(64px, 1fr) auto minmax(64px, 1fr);
+        gap: 0.35rem;
+        align-items: center;
+      }
+      .minor-label {
+        font-size: 0.85rem;
+        color: #475569;
       }
       .hero-field {
         display: flex;
@@ -118,9 +141,56 @@
         border-left: 4px solid var(--accent);
         padding-left: 0.8rem;
       }
+      .results-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+      .result.card {
+        margin-bottom: 0;
+      }
+      .embed-details pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 140px;
+        overflow: auto;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.5rem;
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+      }
+      .stat-value {
+        font-size: 2rem;
+        margin: 0.4rem 0;
+        font-weight: 700;
+      }
+      @media (max-width: 980px) {
+        .results-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 720px) {
+        .control-row {
+          grid-template-columns: auto minmax(64px, 1fr);
+        }
+        .results-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
-    <main class="container">{% block content %}{% endblock %}</main>
+    <main class="container">
+      <nav class="top-nav">
+        <a href="{% url 'web:search' %}">Search</a>
+        <a href="{% url 'web:stats' %}">Data stats</a>
+      </nav>
+      {% block content %}{% endblock %}
+    </main>
   </body>
 </html>

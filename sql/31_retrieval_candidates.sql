@@ -17,6 +17,7 @@ WITH nearest AS (
         c.product_name,
         c.product_type,
         c.description_text,
+        e.embedded_text,
         c.main_category,
         c.sub_category,
         c.dimensions_text,
@@ -26,15 +27,19 @@ WITH nearest AS (
         c.price_eur,
         c.url,
         n.cosine_distance
-    FROM app.products_market_de_v1 AS c
-    JOIN nearest AS n
-      ON n.canonical_product_key = c.canonical_product_key
+FROM app.products_market_de_v1 AS c
+JOIN nearest AS n
+  ON n.canonical_product_key = c.canonical_product_key
+JOIN app.product_embeddings_latest AS e
+  ON e.canonical_product_key = c.canonical_product_key
+ AND e.embedding_model = ?
 )
 SELECT
     canonical_product_key,
     product_name,
     product_type,
     description_text,
+    embedded_text,
     main_category,
     sub_category,
     dimensions_text,

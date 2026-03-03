@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+
+{% block title %}Data Stats{% endblock %}
+
+{% block content %}
+  <h1>Catalog Data Stats</h1>
+  <p class="muted">Current totals from local DuckDB.</p>
+
+  <section class="stats-grid">
+    <article class="card stat-card">
+      <h2>Total items</h2>
+      <p class="stat-value">{{ total_items }}</p>
+      <p class="muted">Rows in Germany catalog view.</p>
+    </article>
+    <article class="card stat-card">
+      <h2>Total vectors</h2>
+      <p class="stat-value">{{ total_vectors }}</p>
+      <p class="muted">Rows in latest embedding store view.</p>
+    </article>
+  </section>
+{% endblock %}

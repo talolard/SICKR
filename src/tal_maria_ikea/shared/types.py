@@ -71,6 +71,7 @@ class RetrievalResult:
     product_name: str
     product_type: str | None
     description_text: str | None
+    embedding_text: str | None
     main_category: str | None
     sub_category: str | None
     dimensions_text: str | None

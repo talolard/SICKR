@@ -13,18 +13,20 @@
         {{ form.query_text }}
       </div>
       <div class="grid top-controls">
-        <div class="field">
+        <div class="field control-block">
           {{ form.category.label_tag }}
           {{ form.category }}
         </div>
-        <div class="field">
-          <label>Price: € min / € max</label>
-          <div class="grid inline-grid">
+        <div class="field control-block">
+          <label>Price (EUR)</label>
+          <div class="control-row">
+            <label for="{{ form.min_price_eur.id_for_label }}" class="minor-label">Min</label>
             {{ form.min_price_eur }}
+            <label for="{{ form.max_price_eur.id_for_label }}" class="minor-label">Max</label>
             {{ form.max_price_eur }}
           </div>
         </div>
-        <div class="field">
+        <div class="field control-block">
           {{ form.sort.label_tag }}
           {{ form.sort }}
         </div>
@@ -35,27 +37,36 @@
         <div class="field checkbox-row">{{ form.exact_dimensions }} {{ form.exact_dimensions.label_tag }}</div>
 
         <div class="grid">
-          <div class="field">
+          <div class="field control-block">
             <label>Width (cm)</label>
-            <div class="grid inline-grid">
+            <div class="control-row">
+              <label for="{{ form.width_min_cm.id_for_label }}" class="minor-label">Min</label>
               {{ form.width_min_cm }}
+              <label for="{{ form.width_max_cm.id_for_label }}" class="minor-label">Max</label>
               {{ form.width_max_cm }}
+              <label for="{{ form.width_exact_cm.id_for_label }}" class="minor-label">Exact</label>
               {{ form.width_exact_cm }}
             </div>
           </div>
-          <div class="field">
+          <div class="field control-block">
             <label>Depth (cm)</label>
-            <div class="grid inline-grid">
+            <div class="control-row">
+              <label for="{{ form.depth_min_cm.id_for_label }}" class="minor-label">Min</label>
               {{ form.depth_min_cm }}
+              <label for="{{ form.depth_max_cm.id_for_label }}" class="minor-label">Max</label>
               {{ form.depth_max_cm }}
+              <label for="{{ form.depth_exact_cm.id_for_label }}" class="minor-label">Exact</label>
               {{ form.depth_exact_cm }}
             </div>
           </div>
-          <div class="field">
+          <div class="field control-block">
             <label>Height (cm)</label>
-            <div class="grid inline-grid">
+            <div class="control-row">
+              <label for="{{ form.height_min_cm.id_for_label }}" class="minor-label">Min</label>
               {{ form.height_min_cm }}
+              <label for="{{ form.height_max_cm.id_for_label }}" class="minor-label">Max</label>
               {{ form.height_max_cm }}
+              <label for="{{ form.height_exact_cm.id_for_label }}" class="minor-label">Exact</label>
               {{ form.height_exact_cm }}
             </div>
           </div>
@@ -87,24 +98,30 @@
       {% if page_obj %}
         <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
       {% endif %}
-      {% for item in results %}
-        <article class="result">
-          <h3>{{ item.product_name }}</h3>
-          <p class="muted">{{ item.product_type }} · {{ item.main_category }} / {{ item.sub_category }}</p>
-          <p><strong>EUR {{ item.price_eur }}</strong></p>
-          <p>{{ item.dimensions_text }}</p>
-          <p class="muted">{{ item.rank_explanation }}</p>
-          <form method="post" action="{% url 'web:shortlist-add' %}">
-            {% csrf_token %}
-            <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
-            <details>
-              <summary>Add note (optional)</summary>
-              <input type="text" name="note" placeholder="optional note" />
+      <div class="results-grid">
+        {% for item in results %}
+          <article class="result card">
+            <h3>{{ item.product_name }}</h3>
+            <p class="muted">{{ item.product_type }} · {{ item.main_category }} / {{ item.sub_category }}</p>
+            <p><strong>EUR {{ item.price_eur }}</strong></p>
+            <p>{{ item.dimensions_text }}</p>
+            <p class="muted">{{ item.rank_explanation }}</p>
+            <details class="embed-details">
+              <summary>Show embedding text</summary>
+              <pre>{{ item.embedding_text }}</pre>
             </details>
-            <button class="btn btn-secondary" type="submit">Add to shortlist</button>
-          </form>
-        </article>
-      {% endfor %}
+            <form method="post" action="{% url 'web:shortlist-add' %}">
+              {% csrf_token %}
+              <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
+              <details>
+                <summary>Add note (optional)</summary>
+                <input type="text" name="note" placeholder="optional note" />
+              </details>
+              <button class="btn btn-secondary" type="submit">Add to shortlist</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
     {% else %}
       <p>No results yet.</p>
     {% endif %}

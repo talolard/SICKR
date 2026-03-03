@@ -42,6 +42,7 @@ def test_is_low_confidence_uses_top_score_threshold() -> None:
         product_name="Desk",
         product_type="Desk",
         description_text="desc",
+        embedding_text="embedding text",
         main_category="tables-desks",
         sub_category="desks",
         dimensions_text="120x60x75 cm",

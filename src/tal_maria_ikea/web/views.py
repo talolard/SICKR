@@ -11,6 +11,7 @@ from django.views.generic import TemplateView
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.retrieval.service import RetrievalService
 from tal_maria_ikea.retrieval.shortlist_service import ShortlistService
+from tal_maria_ikea.shared.db import connect_db, run_sql_file
 from tal_maria_ikea.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
@@ -65,6 +66,33 @@ class SearchView(TemplateView):
                 threshold=settings.retrieval_low_confidence_threshold,
             )
 
+        return context
+
+
+class StatsView(TemplateView):
+    """Render dataset statistics used by the UI."""
+
+    template_name = "web/stats.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Load and expose item/vector totals for the stats dashboard."""
+
+        context = super().get_context_data(**kwargs)
+        settings = get_settings()
+        connection = connect_db(settings.duckdb_path)
+        run_sql_file(connection, "sql/10_schema.sql")
+        run_sql_file(connection, "sql/14_market_views.sql")
+        run_sql_file(connection, "sql/22_embedding_store.sql")
+
+        total_items_row = connection.execute(
+            "SELECT COUNT(*) FROM app.products_market_de_v1"
+        ).fetchone()
+        total_vectors_row = connection.execute(
+            "SELECT COUNT(*) FROM app.product_embeddings_latest"
+        ).fetchone()
+
+        context["total_items"] = int(total_items_row[0]) if total_items_row is not None else 0
+        context["total_vectors"] = int(total_vectors_row[0]) if total_vectors_row is not None else 0
         return context
 
 

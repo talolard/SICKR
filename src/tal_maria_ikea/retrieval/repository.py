@@ -34,6 +34,7 @@ class RetrievalRepository:
             fixed_query_vector,
             embedding_model,
             candidate_limit,
+            embedding_model,
             filters.category,
             filters.category,
             filters.price.min_eur,
@@ -71,21 +72,22 @@ class RetrievalRepository:
 
         results: list[RetrievalResult] = []
         for row in rows:
-            score = float(row[12])
+            score = float(row[13])
             results.append(
                 RetrievalResult(
                     canonical_product_key=str(row[0]),
                     product_name=str(row[1]),
                     product_type=_str_or_none(row[2]),
                     description_text=_str_or_none(row[3]),
-                    main_category=_str_or_none(row[4]),
-                    sub_category=_str_or_none(row[5]),
-                    dimensions_text=_str_or_none(row[6]),
-                    width_cm=_float_or_none(row[7]),
-                    depth_cm=_float_or_none(row[8]),
-                    height_cm=_float_or_none(row[9]),
-                    price_eur=_float_or_none(row[10]),
-                    url=_str_or_none(row[11]),
+                    embedding_text=_str_or_none(row[4]),
+                    main_category=_str_or_none(row[5]),
+                    sub_category=_str_or_none(row[6]),
+                    dimensions_text=_str_or_none(row[7]),
+                    width_cm=_float_or_none(row[8]),
+                    depth_cm=_float_or_none(row[9]),
+                    height_cm=_float_or_none(row[10]),
+                    price_eur=_float_or_none(row[11]),
+                    url=_str_or_none(row[12]),
                     semantic_score=score,
                     filter_pass_reasons=("structured_filters_passed",),
                     rank_explanation=f"semantic cosine score {score:.3f}",

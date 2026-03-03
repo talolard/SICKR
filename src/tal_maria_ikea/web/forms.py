@@ -40,6 +40,31 @@ class SearchForm(forms.Form):
 
     page = forms.IntegerField(required=False, min_value=1, initial=1)
 
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["query_text"].widget.attrs.update(
+            {"placeholder": "e.g. large soft couch", "class": "input-text"}
+        )
+        self.fields["category"].widget.attrs.update(
+            {"placeholder": "e.g. sofas-armchairs", "class": "input-text"}
+        )
+        self.fields["min_price_eur"].widget.attrs.update(
+            {"placeholder": "min", "step": "0.01", "class": "input-number"}
+        )
+        self.fields["max_price_eur"].widget.attrs.update(
+            {"placeholder": "max", "step": "0.01", "class": "input-number"}
+        )
+        for axis in ("width", "depth", "height"):
+            self.fields[f"{axis}_min_cm"].widget.attrs.update(
+                {"placeholder": "min", "step": "0.1", "class": "input-number"}
+            )
+            self.fields[f"{axis}_max_cm"].widget.attrs.update(
+                {"placeholder": "max", "step": "0.1", "class": "input-number"}
+            )
+            self.fields[f"{axis}_exact_cm"].widget.attrs.update(
+                {"placeholder": "exact", "step": "0.1", "class": "input-number"}
+            )
+
 
 class ShortlistNoteForm(forms.Form):
     """Optional note when adding shortlist items."""
