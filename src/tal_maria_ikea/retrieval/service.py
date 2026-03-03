@@ -28,13 +28,17 @@ class RetrievalService:
         run_sql_file(self._connection, "sql/14_market_views.sql")
         run_sql_file(self._connection, "sql/22_embedding_store.sql")
 
-        self._repository = RetrievalRepository(self._connection)
+        self._repository = RetrievalRepository(
+            self._connection,
+            vector_dimensions=settings.embedding_dimensions,
+        )
         self._client = VertexGeminiEmbeddingClient(
             EmbeddingClientConfig(
                 project_id=settings.gcp_project_id,
                 location=settings.gcp_region,
                 model_name=settings.gemini_model,
                 api_key=settings.gemini_api_key,
+                output_dimensions=settings.embedding_dimensions,
             )
         )
         self._logger = get_logger("retrieval.service")

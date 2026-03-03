@@ -69,6 +69,43 @@ class EvalRepository:
             [(row[0], prompt_version, subset_id, row[1], row[2], row[3]) for row in rows],
         )
 
+    def list_generated_queries(
+        self,
+        subset_id: str | None = None,
+        prompt_version: str | None = None,
+    ) -> list[tuple[str, str]]:
+        """Return generated query ids and text, optionally filtered by subset/prompt."""
+
+        rows = self._connection.execute(
+            """
+            SELECT eval_query_id, query_text
+            FROM app.eval_queries_generated
+            WHERE (? IS NULL OR subset_id = ?)
+              AND (? IS NULL OR prompt_version = ?)
+            ORDER BY created_at ASC
+            """,
+            [subset_id, subset_id, prompt_version, prompt_version],
+        ).fetchall()
+        return [(str(row[0]), str(row[1])) for row in rows]
+
+    def upsert_eval_labels(
+        self,
+        rows: Sequence[tuple[str, str, int]],
+    ) -> None:
+        """Insert or replace eval labels for generated queries."""
+
+        self._connection.executemany(
+            """
+            INSERT OR REPLACE INTO app.eval_labels (
+                eval_query_id,
+                canonical_product_key,
+                relevance_rank,
+                created_at
+            ) VALUES (?, ?, ?, now())
+            """,
+            rows,
+        )
+
     def get_labeled_queries(self) -> list[tuple[str, str, list[str]]]:
         """Return query text with expected top labels."""
 
@@ -97,6 +134,20 @@ class EvalRepository:
             (query_id, grouped_queries[query_id], grouped_labels[query_id])
             for query_id in grouped_queries
         ]
+
+    def count_generated_queries(self) -> int:
+        """Return number of generated eval queries currently stored."""
+
+        row = self._connection.execute("SELECT COUNT(*) FROM app.eval_queries_generated").fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def count_labeled_queries(self) -> int:
+        """Return number of distinct eval queries with at least one label."""
+
+        row = self._connection.execute(
+            "SELECT COUNT(DISTINCT eval_query_id) FROM app.eval_labels"
+        ).fetchone()
+        return int(row[0]) if row is not None else 0
 
     def insert_eval_run(
         self,

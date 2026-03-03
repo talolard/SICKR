@@ -40,3 +40,24 @@ def test_read_embedding_inputs_rejects_unknown_view() -> None:
 
     with pytest.raises(ValueError, match="Unsupported embedding input view"):
         repository.read_embedding_inputs("app.unsupported", subset_limit=None)
+
+
+def test_embedding_vector_dimensions_reads_fixed_array_size() -> None:
+    connection = duckdb.connect(":memory:")
+    connection.execute("CREATE SCHEMA app")
+    connection.execute(
+        """
+        CREATE TABLE app.product_embeddings (
+            canonical_product_key VARCHAR,
+            embedding_model VARCHAR,
+            strategy_version VARCHAR,
+            run_id VARCHAR,
+            embedding_vector FLOAT[256],
+            embedded_text VARCHAR,
+            embedded_at TIMESTAMP
+        )
+        """
+    )
+
+    repository = IndexRepository(connection)
+    assert repository.embedding_vector_dimensions() == 256

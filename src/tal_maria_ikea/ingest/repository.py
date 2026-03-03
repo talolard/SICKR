@@ -47,6 +47,29 @@ class IndexRepository:
 
         return [(str(row[0]), str(row[1])) for row in rows]
 
+    def embedding_vector_dimensions(self) -> int:
+        """Return the fixed dimension configured for app.product_embeddings.embedding_vector."""
+
+        row = self._connection.execute(
+            """
+            SELECT column_type
+            FROM (DESCRIBE app.product_embeddings)
+            WHERE column_name = 'embedding_vector'
+            """
+        ).fetchone()
+        if row is None or row[0] is None:
+            message = "Missing embedding_vector column in app.product_embeddings."
+            raise RuntimeError(message)
+
+        column_type = str(row[0])
+        if not (column_type.startswith("FLOAT[") and column_type.endswith("]")):
+            message = (
+                f"Unexpected embedding_vector column type. Expected FLOAT[N], got {column_type}."
+            )
+            raise RuntimeError(message)
+
+        return int(column_type.removeprefix("FLOAT[").removesuffix("]"))
+
     def insert_run(
         self,
         run_id: str,
@@ -98,6 +121,8 @@ class IndexRepository:
         rows: Sequence[EmbeddedVectorRow],
         embedding_model: str,
         run_id: str,
+        vector_dimensions: int,
+        chunk_size: int = 25,
     ) -> None:
         """Write embedding vectors in upsert mode keyed by product/model/strategy."""
 
@@ -107,25 +132,14 @@ class IndexRepository:
                 embedding_model,
                 row.strategy_version,
                 run_id,
-                _to_fixed_vector(row.embedding_vector, dimensions=3072),
+                _to_fixed_vector(row.embedding_vector, dimensions=vector_dimensions),
                 row.embedding_text,
             )
             for row in rows
         ]
-        self._connection.executemany(
-            """
-            INSERT OR REPLACE INTO app.product_embeddings (
-                canonical_product_key,
-                embedding_model,
-                strategy_version,
-                run_id,
-                embedding_vector,
-                embedded_text,
-                embedded_at
-            ) VALUES (?, ?, ?, ?, CAST(? AS FLOAT[3072]), ?, now())
-            """,
-            payload,
-        )
+        for start in range(0, len(payload), chunk_size):
+            chunk = payload[start : start + chunk_size]
+            self._upsert_payload(chunk)
 
     def mark_run_complete(self, run_id: str, embedded_records: int, failed_records: int) -> None:
         """Finalize run metadata after indexing finishes."""
@@ -166,6 +180,37 @@ class IndexRepository:
             "ON app.product_embeddings USING HNSW (embedding_vector) "
             f"WITH (metric = '{metric_sql}')"
         )
+
+    def drop_vss_hnsw_index_if_exists(self) -> None:
+        """Drop HNSW index before bulk upserts to avoid index-maintenance overhead."""
+
+        self._connection.execute("DROP INDEX IF EXISTS idx_product_embeddings_hnsw")
+
+    def _upsert_payload(self, payload: Sequence[tuple[object, ...]]) -> None:
+        """Execute embedding upsert with one retry after loading vss extension."""
+
+        upsert_sql = (
+            "INSERT OR REPLACE INTO app.product_embeddings ("
+            "canonical_product_key, embedding_model, strategy_version, run_id, "
+            "embedding_vector, embedded_text, embedded_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, now())"
+        )
+        try:
+            self._connection.executemany(upsert_sql, payload)
+        except duckdb.Error as error:
+            if "unknown index type 'HNSW'" not in str(error):
+                raise
+            self._ensure_vss_loaded()
+            self._connection.executemany(upsert_sql, payload)
+
+    def _ensure_vss_loaded(self) -> None:
+        """Install/load vss extension for connections touching HNSW-indexed tables."""
+
+        try:
+            self._connection.execute("LOAD vss")
+        except duckdb.Error:
+            self._connection.execute("INSTALL vss")
+            self._connection.execute("LOAD vss")
 
 
 def _to_fixed_vector(vector: Sequence[float], dimensions: int) -> list[float]:

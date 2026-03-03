@@ -3,7 +3,10 @@
 WITH nearest AS (
     SELECT
         e.canonical_product_key,
-        array_cosine_distance(e.embedding_vector, CAST(? AS FLOAT[3072])) AS cosine_distance
+        array_cosine_distance(
+            e.embedding_vector,
+            CAST(? AS FLOAT[__VECTOR_DIMENSIONS__])
+        ) AS cosine_distance
     FROM app.product_embeddings_latest AS e
     WHERE e.embedding_model = ?
       AND e.strategy_version = ?

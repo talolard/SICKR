@@ -12,6 +12,8 @@ from tal_maria_ikea.shared.types import (
     RetrievalFilters,
 )
 
+VECTOR_DIMENSIONS = 256
+
 
 def _setup_schema(connection: duckdb.DuckDBPyConnection) -> None:
     connection.execute(Path("sql/10_schema.sql").read_text(encoding="utf-8"))
@@ -70,11 +72,11 @@ def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
         ) VALUES
             (
                 '1-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
-                list_resize([1.0, 0.0]::FLOAT[], 3072, 0.0)::FLOAT[3072], 'desk one', now()
+                list_resize([1.0, 0.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk one', now()
             ),
             (
                 '2-DE', 'gemini-embedding-001', 'v2_metadata_first', 'run-1',
-                list_resize([0.0, 1.0]::FLOAT[], 3072, 0.0)::FLOAT[3072], 'desk two', now()
+                list_resize([0.0, 1.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk two', now()
             )
         """
     )
@@ -85,7 +87,7 @@ def test_retrieval_repository_search_filters_by_price_and_dimensions() -> None:
     _setup_schema(connection)
     _seed_products(connection)
 
-    repository = RetrievalRepository(connection)
+    repository = RetrievalRepository(connection, vector_dimensions=VECTOR_DIMENSIONS)
     filters = RetrievalFilters(
         category="tables-desks",
         price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),

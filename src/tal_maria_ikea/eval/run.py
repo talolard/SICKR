@@ -43,6 +43,22 @@ def run_eval(options: EvalRunOptions) -> dict[str, float | int | str]:
     repository = EvalRepository(connection)
     retrieval_service = RetrievalService()
 
+    generated_count = repository.count_generated_queries()
+    if generated_count == 0:
+        message = (
+            "No eval queries found. Run `uv run python -m tal_maria_ikea.eval.generate "
+            "--subset-id <id> --prompt-version <version> --target-count 200` first."
+        )
+        raise RuntimeError(message)
+
+    labeled_count = repository.count_labeled_queries()
+    if labeled_count == 0:
+        message = (
+            "No eval labels found. Add expected canonical keys to app.eval_labels "
+            "before running evaluation."
+        )
+        raise RuntimeError(message)
+
     metrics_rows: list[tuple[float, float, float]] = []
     labeled_queries = repository.get_labeled_queries()
 

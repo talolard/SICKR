@@ -16,6 +16,8 @@
 5. Run eval loop (after labels exist):
    - `uv run python -m tal_maria_ikea.eval.run --index-run-id latest --k 10`
 
+For local greenfield setup, `make init` is the canonical bootstrap and resets the DB.
+
 ## Module Layout
 - `src/tal_maria_ikea/shared/` typed contracts + DB/parsing helpers
 - `src/tal_maria_ikea/ingest/` embedding strategies, repository, indexing CLI
@@ -36,9 +38,20 @@
 - `sql/41_eval_registry.sql` eval registry view
 
 ## Vector Similarity Notes
-- Retrieval SQL uses `array_cosine_distance` over `FLOAT[3072]` vectors.
+- Retrieval SQL uses `array_cosine_distance` over `FLOAT[EMBEDDING_DIMENSIONS]`
+  vectors (default `256`).
 - Optional HNSW index support uses DuckDB `vss` extension.
 - Reference doc: `external_docs/duckdb_vector_similarity.md`.
+
+## Operational Note: Embedding Dimensions
+- Large fixed vectors (for example `3072`) significantly increase DuckDB upsert cost.
+- If indexing appears stalled after embedding API calls, reduce `EMBEDDING_DIMENSIONS`
+  and rerun indexing.
+
+## Rate-Limit Handling
+- Indexing retries embedding chunks on provider errors (including quota 429).
+- Retry delay parsing uses Gemini-provided hints when available (`retry in Xs`, `retryDelay`).
+- Backoff is bounded and configurable via `EMBEDDING_*RETRY*` settings.
 
 ## Typed Boundaries
 Key contracts are defined in `src/tal_maria_ikea/shared/types.py`, including:

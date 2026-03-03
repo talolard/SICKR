@@ -13,9 +13,11 @@ from tal_maria_ikea.shared.types import RetrievalFilters, RetrievalResult, Short
 class RetrievalRepository:
     """Run retrieval SQL and persist request logs."""
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
+    def __init__(self, connection: duckdb.DuckDBPyConnection, vector_dimensions: int) -> None:
         self._connection = connection
-        self._retrieval_sql = Path("sql/31_retrieval_candidates.sql").read_text(encoding="utf-8")
+        sql_template = Path("sql/31_retrieval_candidates.sql").read_text(encoding="utf-8")
+        self._vector_dimensions = vector_dimensions
+        self._retrieval_sql = sql_template.replace("__VECTOR_DIMENSIONS__", str(vector_dimensions))
 
     def search(
         self,
@@ -27,7 +29,7 @@ class RetrievalRepository:
     ) -> list[RetrievalResult]:
         """Search catalog vectors and apply structured filters."""
 
-        fixed_query_vector = _to_fixed_vector(query_vector, dimensions=3072)
+        fixed_query_vector = _to_fixed_vector(query_vector, dimensions=self._vector_dimensions)
         candidate_limit = max(result_limit * 10, 200)
         params = [
             fixed_query_vector,

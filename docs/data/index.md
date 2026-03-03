@@ -22,7 +22,8 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 - `app.embedding_runs`
   - Run metadata for indexing job status and throughput
 - `app.product_embeddings`
-  - Embedding vectors per canonical key, model, and strategy version (`FLOAT[3072]`)
+  - Embedding vectors per canonical key, model, and strategy version
+    (`FLOAT[EMBEDDING_DIMENSIONS]`, default `256`)
 - `app.query_log`
   - Retrieval request logs with filter values, latency, and low-confidence flag
 - `app.shortlist_global`

@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS app.product_embeddings (
     embedding_model VARCHAR NOT NULL,
     strategy_version VARCHAR NOT NULL,
     run_id VARCHAR NOT NULL,
-    embedding_vector FLOAT[3072],
+    embedding_vector FLOAT[256],
     embedded_text VARCHAR NOT NULL,
     embedded_at TIMESTAMP DEFAULT now(),
     PRIMARY KEY (canonical_product_key, embedding_model, strategy_version)
