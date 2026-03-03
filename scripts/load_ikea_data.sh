@@ -11,6 +11,9 @@ if [[ ! -f "${CSV_PATH}" ]]; then
 fi
 
 CSV_PATH="${CSV_PATH}" duckdb "${DB_PATH}" < sql/20_load_raw.sql
+duckdb "${DB_PATH}" < sql/12_model_canonical.sql
+duckdb "${DB_PATH}" < sql/14_market_views.sql
+duckdb "${DB_PATH}" < sql/21_embedding_inputs.sql
 
 echo "Loaded IKEA catalog into ${DB_PATH}"
 

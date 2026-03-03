@@ -1,1 +1,1 @@
-"""tal_maria_ikea package scaffold."""
+"""tal_maria_ikea package root."""

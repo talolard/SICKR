@@ -1,0 +1,79 @@
+{% extends "web/base.html" %}
+
+{% block title %}IKEA Search{% endblock %}
+
+{% block content %}
+  <h1>IKEA Semantic Search (Germany)</h1>
+  <p class="muted">Natural language + category/price/dimension filters.</p>
+
+  <section class="card">
+    <form method="get">
+      <div class="grid">
+        {{ form.query_text.label_tag }} {{ form.query_text }}
+        {{ form.category.label_tag }} {{ form.category }}
+        {{ form.min_price_eur.label_tag }} {{ form.min_price_eur }}
+        {{ form.max_price_eur.label_tag }} {{ form.max_price_eur }}
+        {{ form.width_exact_cm.label_tag }} {{ form.width_exact_cm }}
+        {{ form.width_min_cm.label_tag }} {{ form.width_min_cm }}
+        {{ form.width_max_cm.label_tag }} {{ form.width_max_cm }}
+        {{ form.depth_exact_cm.label_tag }} {{ form.depth_exact_cm }}
+        {{ form.depth_min_cm.label_tag }} {{ form.depth_min_cm }}
+        {{ form.depth_max_cm.label_tag }} {{ form.depth_max_cm }}
+        {{ form.height_exact_cm.label_tag }} {{ form.height_exact_cm }}
+        {{ form.height_min_cm.label_tag }} {{ form.height_min_cm }}
+        {{ form.height_max_cm.label_tag }} {{ form.height_max_cm }}
+      </div>
+      <p><button class="btn" type="submit">Search</button></p>
+    </form>
+  </section>
+
+  {% if low_confidence %}
+    <div class="banner-warn">Low confidence retrieval. Try a more specific query or filters.</div>
+  {% endif %}
+
+  <section class="card">
+    <h2>Results</h2>
+    {% if results %}
+      {% for item in results %}
+        <article class="result">
+          <h3>{{ item.product_name }}</h3>
+          <p>{{ item.product_type }} | {{ item.main_category }} / {{ item.sub_category }}</p>
+          <p>{{ item.dimensions_text }} | EUR {{ item.price_eur }}</p>
+          <p>{{ item.rank_explanation }}</p>
+          <form method="post" action="{% url 'web:shortlist-add' %}">
+            {% csrf_token %}
+            <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
+            <input type="text" name="note" placeholder="optional note" />
+            <button class="btn btn-secondary" type="submit">Add to shortlist</button>
+          </form>
+        </article>
+      {% endfor %}
+      {% if page_obj %}
+        <p class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
+      {% endif %}
+    {% else %}
+      <p>No results yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Global shortlist</h2>
+    {% if shortlist %}
+      <ul>
+        {% for item in shortlist %}
+          <li>
+            <strong>{{ item.product_name }}</strong> ({{ item.canonical_product_key }})
+            {% if item.note %}- {{ item.note }}{% endif %}
+            <form style="display:inline" method="post" action="{% url 'web:shortlist-remove' %}">
+              {% csrf_token %}
+              <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
+              <button class="btn btn-secondary" type="submit">Remove</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No shortlisted items.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -23,11 +23,20 @@ class AppSettings(BaseSettings):
 
     gcp_project_id: str
     gcp_region: str = Field(default="us-central1")
-    gemini_model: str = Field(default="text-embedding-004")
+    gemini_model: str = Field(default="gemini-embedding-001")
+    gemini_generation_model: str = Field(default="gemini-2.5-flash")
+    embedding_provider: str = Field(default="vertex_gemini")
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     duckdb_path: str = Field(default="data/ikea.duckdb")
     default_query_limit: int = Field(default=25, ge=1, le=200)
+    default_market: str = Field(default="Germany")
+    embedding_parallelism: int = Field(default=8, ge=1, le=64)
+    embedding_batch_size: int = Field(default=16, ge=1, le=256)
+    retrieval_low_confidence_threshold: float = Field(default=0.15)
+    django_secret_key: str = Field(default="dev-only-secret")
+    django_debug: bool = Field(default=True)
+    django_allowed_hosts: str = Field(default="127.0.0.1,localhost")
 
 
 @lru_cache(maxsize=1)

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}IKEA Semantic Search{% endblock %}</title>
+    <style>
+      :root {
+        --bg: #f2efe8;
+        --card: #ffffff;
+        --ink: #1f2a37;
+        --accent: #0058a3;
+        --accent-soft: #e7f0fb;
+        --warn: #9a3412;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 0% 0%, #dce8f8, var(--bg) 50%);
+        color: var(--ink);
+        font-family: "Georgia", "Times New Roman", serif;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.25rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid #d8d8d8;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+      }
+      .grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .btn {
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        padding: 0.6rem 0.9rem;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .btn-secondary {
+        background: #334155;
+      }
+      .muted {
+        color: #475569;
+      }
+      .banner-warn {
+        background: #ffedd5;
+        border: 1px solid #fdba74;
+        color: var(--warn);
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .result {
+        border-left: 4px solid var(--accent);
+        padding-left: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">{% block content %}{% endblock %}</main>
+  </body>
+</html>
