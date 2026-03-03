@@ -10,6 +10,8 @@ class SearchForm(forms.Form):
 
     query_text = forms.CharField(max_length=300, required=True)
     category = forms.CharField(max_length=120, required=False)
+    include_keyword = forms.CharField(max_length=120, required=False)
+    exclude_keyword = forms.CharField(max_length=120, required=False)
     sort = forms.ChoiceField(
         choices=(
             ("relevance", "Relevance"),
@@ -47,6 +49,12 @@ class SearchForm(forms.Form):
         )
         self.fields["category"].widget.attrs.update(
             {"placeholder": "e.g. sofas-armchairs", "class": "input-text"}
+        )
+        self.fields["include_keyword"].widget.attrs.update(
+            {"placeholder": "must include", "class": "input-text"}
+        )
+        self.fields["exclude_keyword"].widget.attrs.update(
+            {"placeholder": "must exclude", "class": "input-text"}
         )
         self.fields["min_price_eur"].widget.attrs.update(
             {"placeholder": "min", "step": "0.01", "class": "input-number"}

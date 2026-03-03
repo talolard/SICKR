@@ -26,6 +26,16 @@ WITH nearest AS (
         c.height_cm,
         c.price_eur,
         c.url,
+        lower(
+            concat_ws(
+                ' ',
+                c.product_name,
+                coalesce(c.description_text, ''),
+                coalesce(c.main_category, ''),
+                coalesce(c.sub_category, ''),
+                coalesce(e.embedded_text, '')
+            )
+        ) AS searchable_text,
         n.cosine_distance
 FROM app.products_market_de_v1 AS c
 JOIN nearest AS n
@@ -63,6 +73,8 @@ WHERE
     AND (? IS NULL OR depth_cm IS NOT NULL AND depth_cm <= ?)
     AND (? IS NULL OR height_cm IS NOT NULL AND height_cm >= ?)
     AND (? IS NULL OR height_cm IS NOT NULL AND height_cm <= ?)
+    AND (? IS NULL OR strpos(searchable_text, lower(?)) > 0)
+    AND (? IS NULL OR strpos(searchable_text, lower(?)) = 0)
 ORDER BY
     CASE WHEN ? = 'price_asc' THEN price_eur END ASC NULLS LAST,
     CASE WHEN ? = 'price_desc' THEN price_eur END DESC NULLS LAST,

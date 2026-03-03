@@ -7,6 +7,8 @@ from tal_maria_ikea.web.views import _build_filters, _is_low_confidence
 def test_build_filters_maps_numeric_fields() -> None:
     cleaned = {
         "category": "tables-desks",
+        "include_keyword": "soft",
+        "exclude_keyword": "spotlight",
         "sort": "price_asc",
         "min_price_eur": 10.0,
         "max_price_eur": 200.0,
@@ -25,6 +27,8 @@ def test_build_filters_maps_numeric_fields() -> None:
     filters = _build_filters(cleaned)
 
     assert filters.category == "tables-desks"
+    assert filters.include_keyword == "soft"
+    assert filters.exclude_keyword == "spotlight"
     assert filters.sort == "price_asc"
     assert filters.price.min_eur == 10.0
     assert filters.dimensions.width.exact_cm == 120.0

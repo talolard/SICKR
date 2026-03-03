@@ -49,6 +49,8 @@ class RetrievalFilters:
     """Structured filters layered on top of semantic search."""
 
     category: str | None = None
+    include_keyword: str | None = None
+    exclude_keyword: str | None = None
     sort: SortMode = "relevance"
     price: PriceFilterEUR = PriceFilterEUR()
     dimensions: DimensionFilter = DimensionFilter()

@@ -25,11 +25,11 @@ WITH germany_source AS (
         CASE
             WHEN gs.measurements_normalized = '' OR gs.measurements_normalized = 'none'
                 THEN 'missing'
-            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*cm$')
+            WHEN regexp_matches(gs.measurements_normalized, '^[0-9]+(?:[.,][0-9]+)?[ ]*cm$')
                 THEN 'cm_single'
-            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+            WHEN regexp_matches(gs.measurements_normalized, '^[0-9]+(?:[.,][0-9]+)?[ ]*x[ ]*[0-9]+(?:[.,][0-9]+)?[ ]*cm$')
                 THEN 'cm_double'
-            WHEN regexp_matches(gs.measurements_normalized, '^\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?\\s*cm$')
+            WHEN regexp_matches(gs.measurements_normalized, '^[0-9]+(?:[.,][0-9]+)?[ ]*x[ ]*[0-9]+(?:[.,][0-9]+)?[ ]*x[ ]*[0-9]+(?:[.,][0-9]+)?[ ]*cm$')
                 THEN 'cm_triple'
             WHEN strpos(gs.measurements_normalized, '(') > 0 AND regexp_matches(gs.measurements_normalized, 'cm')
                 THEN 'cm_with_parenthetical'
@@ -50,7 +50,7 @@ WITH germany_source AS (
 ), parsed_source AS (
     SELECT
         ts.*,
-        regexp_extract_all(ts.parse_source_text, '(\\d+(?:[.,]\\d+)?)') AS dimension_tokens
+        regexp_extract_all(ts.parse_source_text, '([0-9]+(?:[.,][0-9]+)?)') AS dimension_tokens
     FROM typed_source AS ts
 ), canonical AS (
     SELECT
@@ -129,6 +129,50 @@ SELECT
     url,
     now()
 FROM canonical;
+
+-- Defensive backfill: ensure numeric dimension fields are hydrated from stored
+-- dimensions text if initial parse left gaps.
+UPDATE app.products_canonical
+SET
+    width_cm = coalesce(
+        width_cm,
+        TRY_CAST(
+            replace(
+                list_extract(
+                    regexp_extract_all(lower(trim(coalesce(dimensions_text, ''))), '([0-9]+(?:[.,][0-9]+)?)'),
+                    1
+                ),
+                ',',
+                '.'
+            ) AS DOUBLE
+        )
+    ),
+    depth_cm = coalesce(
+        depth_cm,
+        TRY_CAST(
+            replace(
+                list_extract(
+                    regexp_extract_all(lower(trim(coalesce(dimensions_text, ''))), '([0-9]+(?:[.,][0-9]+)?)'),
+                    2
+                ),
+                ',',
+                '.'
+            ) AS DOUBLE
+        )
+    ),
+    height_cm = coalesce(
+        height_cm,
+        TRY_CAST(
+            replace(
+                list_extract(
+                    regexp_extract_all(lower(trim(coalesce(dimensions_text, ''))), '([0-9]+(?:[.,][0-9]+)?)'),
+                    3
+                ),
+                ',',
+                '.'
+            ) AS DOUBLE
+        )
+    );
 
 -- Alias map for deduplicated records.
 INSERT INTO app.product_alias_map (

@@ -59,6 +59,10 @@ class RetrievalRepository:
             filters.dimensions.height.min_cm,
             filters.dimensions.height.max_cm,
             filters.dimensions.height.max_cm,
+            filters.include_keyword,
+            filters.include_keyword,
+            filters.exclude_keyword,
+            filters.exclude_keyword,
             filters.sort,
             filters.sort,
             filters.sort,
@@ -79,7 +83,7 @@ class RetrievalRepository:
                     product_name=str(row[1]),
                     product_type=_str_or_none(row[2]),
                     description_text=_str_or_none(row[3]),
-                    embedding_text=_str_or_none(row[4]),
+                    embedding_text=_format_embedding_text(row[4]),
                     main_category=_str_or_none(row[5]),
                     sub_category=_str_or_none(row[6]),
                     dimensions_text=_str_or_none(row[7]),
@@ -114,6 +118,8 @@ class RetrievalRepository:
                 query_id,
                 query_text,
                 sort_mode,
+                include_keyword,
+                exclude_keyword,
                 result_limit,
                 category_filter,
                 min_price_eur,
@@ -131,12 +137,14 @@ class RetrievalRepository:
                 request_source,
                 latency_ms,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             """,
             [
                 query_id,
                 query_text,
                 filters.sort,
+                filters.include_keyword,
+                filters.exclude_keyword,
                 result_limit,
                 filters.category,
                 filters.price.min_eur,
@@ -229,3 +237,12 @@ def _to_fixed_vector(query_vector: Sequence[float], dimensions: int) -> list[flo
     if len(values) < dimensions:
         values.extend([0.0] * (dimensions - len(values)))
     return values
+
+
+def _format_embedding_text(value: object) -> str | None:
+    """Normalize serialized newline escapes into display-ready multiline text."""
+
+    text = _str_or_none(value)
+    if text is None:
+        return None
+    return text.replace("\\n", "\n")

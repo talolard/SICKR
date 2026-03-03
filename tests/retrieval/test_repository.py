@@ -71,7 +71,7 @@ def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
         ) VALUES
             (
                 '1-DE', 'gemini-embedding-001', 'run-1',
-                list_resize([1.0, 0.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk one', now()
+                list_resize([1.0, 0.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'line1\\nline2', now()
             ),
             (
                 '2-DE', 'gemini-embedding-001', 'run-1',
@@ -102,6 +102,7 @@ def test_retrieval_repository_search_filters_by_price_and_dimensions() -> None:
 
     assert len(results) == 1
     assert results[0].canonical_product_key == "1-DE"
+    assert results[0].embedding_text == "line1\nline2"
 
 
 def test_shortlist_repository_add_remove_list() -> None:
@@ -119,3 +120,25 @@ def test_shortlist_repository_add_remove_list() -> None:
 
     repository.remove("1-DE")
     assert repository.list_items() == []
+
+
+def test_retrieval_repository_search_filters_by_include_and_exclude_keyword() -> None:
+    connection = duckdb.connect(":memory:")
+    _setup_schema(connection)
+    _seed_products(connection)
+
+    repository = RetrievalRepository(connection, vector_dimensions=VECTOR_DIMENSIONS)
+    filters = RetrievalFilters(
+        include_keyword="work",
+        exclude_keyword="compact",
+    )
+
+    results = repository.search(
+        query_vector=[1.0, 0.0],
+        embedding_model="gemini-embedding-001",
+        filters=filters,
+        result_limit=10,
+    )
+
+    assert len(results) == 1
+    assert results[0].canonical_product_key == "1-DE"

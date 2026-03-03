@@ -127,6 +127,8 @@ def _build_filters(cleaned_data: dict[str, object]) -> RetrievalFilters:
 
     return RetrievalFilters(
         category=_to_optional_str(cleaned_data.get("category")),
+        include_keyword=_to_optional_str(cleaned_data.get("include_keyword")),
+        exclude_keyword=_to_optional_str(cleaned_data.get("exclude_keyword")),
         sort=_to_sort_mode(cleaned_data.get("sort")),
         price=PriceFilterEUR(
             min_eur=_to_optional_float(cleaned_data.get("min_price_eur")),
@@ -187,10 +189,30 @@ def _to_sort_mode(value: object) -> SortMode:
 
 def _build_active_filter_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
     chips: list[str] = []
+    chips.extend(_category_and_keyword_chips(cleaned_data))
+    chips.extend(_sort_and_price_chips(cleaned_data))
+    chips.extend(_dimension_chips(cleaned_data))
+    return tuple(chips)
+
+
+def _category_and_keyword_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
+    chips: list[str] = []
     category = _to_optional_str(cleaned_data.get("category"))
     if category is not None:
         chips.append(f"Category: {_humanize_category(category)}")
 
+    include_keyword = _to_optional_str(cleaned_data.get("include_keyword"))
+    if include_keyword is not None:
+        chips.append(f"Must include: {include_keyword}")
+
+    exclude_keyword = _to_optional_str(cleaned_data.get("exclude_keyword"))
+    if exclude_keyword is not None:
+        chips.append(f"Must exclude: {exclude_keyword}")
+    return tuple(chips)
+
+
+def _sort_and_price_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
+    chips: list[str] = []
     sort = _to_sort_mode(cleaned_data.get("sort"))
     if sort != "relevance":
         chips.append(f"Sort: {sort.replace('_', ' ')}")
@@ -199,9 +221,12 @@ def _build_active_filter_chips(cleaned_data: dict[str, object]) -> tuple[str, ..
     max_price = _to_optional_float(cleaned_data.get("max_price_eur"))
     if min_price is not None or max_price is not None:
         chips.append(f"Price: €{_display_price(min_price)} - €{_display_price(max_price)}")
+    return tuple(chips)
 
-    exact_dimensions = bool(cleaned_data.get("exact_dimensions"))
-    if exact_dimensions:
+
+def _dimension_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
+    chips: list[str] = []
+    if bool(cleaned_data.get("exact_dimensions")):
         chips.append("Dimensions: exact mode")
 
     for axis in ("width", "depth", "height"):
@@ -213,7 +238,6 @@ def _build_active_filter_chips(cleaned_data: dict[str, object]) -> tuple[str, ..
             chips.append(f"{label}: {exact:g} cm")
         elif min_value is not None or max_value is not None:
             chips.append(f"{label}: {_display_price(min_value)}-{_display_price(max_value)} cm")
-
     return tuple(chips)
 
 

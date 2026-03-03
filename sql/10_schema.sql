@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS app.query_log (
     query_id VARCHAR PRIMARY KEY,
     query_text VARCHAR NOT NULL,
     sort_mode VARCHAR NOT NULL DEFAULT 'relevance',
+    include_keyword VARCHAR,
+    exclude_keyword VARCHAR,
     result_limit INTEGER NOT NULL,
     category_filter VARCHAR,
     min_price_eur DOUBLE,
@@ -128,6 +130,8 @@ CREATE TABLE IF NOT EXISTS app.query_log (
 );
 
 ALTER TABLE app.query_log ADD COLUMN IF NOT EXISTS sort_mode VARCHAR DEFAULT 'relevance';
+ALTER TABLE app.query_log ADD COLUMN IF NOT EXISTS include_keyword VARCHAR;
+ALTER TABLE app.query_log ADD COLUMN IF NOT EXISTS exclude_keyword VARCHAR;
 
 CREATE TABLE IF NOT EXISTS app.shortlist_global (
     canonical_product_key VARCHAR PRIMARY KEY,
