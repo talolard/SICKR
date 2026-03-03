@@ -104,7 +104,23 @@
     <h2>Results</h2>
     {% if results %}
       {% if page_obj %}
-        <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
+        <div class="results-meta-row">
+          <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
+          {% if has_pagination %}
+            <div class="pager-inline">
+              {% if prev_page_url %}
+                <a class="btn btn-secondary pager-btn" href="{{ prev_page_url }}">Previous</a>
+              {% else %}
+                <span class="btn btn-secondary pager-btn is-disabled" aria-disabled="true">Previous</span>
+              {% endif %}
+              {% if next_page_url %}
+                <a class="btn pager-btn" href="{{ next_page_url }}">Next</a>
+              {% else %}
+                <span class="btn pager-btn is-disabled" aria-disabled="true">Next</span>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
       {% endif %}
       <div class="results-grid">
         {% for item in results %}
@@ -137,6 +153,21 @@
           </article>
         {% endfor %}
       </div>
+      {% if has_pagination %}
+        <div class="pager-dock">
+          {% if prev_page_url %}
+            <a class="btn btn-secondary pager-btn" href="{{ prev_page_url }}">Previous page</a>
+          {% else %}
+            <span class="btn btn-secondary pager-btn is-disabled" aria-disabled="true">Previous page</span>
+          {% endif %}
+          <span class="pager-page-label">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+          {% if next_page_url %}
+            <a class="btn pager-btn" href="{{ next_page_url }}">Next page</a>
+          {% else %}
+            <span class="btn pager-btn is-disabled" aria-disabled="true">Next page</span>
+          {% endif %}
+        </div>
+      {% endif %}
     {% else %}
       <p>No results yet.</p>
     {% endif %}

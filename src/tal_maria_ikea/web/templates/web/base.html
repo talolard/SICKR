@@ -146,6 +146,46 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 0.75rem;
       }
+      .results-meta-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .pager-inline {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .pager-dock {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 0.75rem;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        padding: 0.35rem 0.55rem;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+      }
+      .pager-page-label {
+        font-weight: 700;
+        color: var(--ink);
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+      .pager-btn {
+        min-width: 7.5rem;
+        text-align: center;
+      }
+      .pager-btn.is-disabled {
+        opacity: 0.55;
+        pointer-events: none;
+      }
       .result.card {
         margin-bottom: 0;
       }
@@ -213,6 +253,17 @@
         }
         .results-grid {
           grid-template-columns: 1fr;
+        }
+        .pager-dock {
+          width: calc(100vw - 1rem);
+          max-width: 100%;
+          border-radius: 14px;
+          justify-content: space-between;
+          left: 0.5rem;
+          transform: none;
+        }
+        .pager-btn {
+          min-width: 0;
         }
       }
     </style>

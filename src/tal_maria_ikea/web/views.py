@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.views import View
@@ -40,6 +40,9 @@ class SearchView(TemplateView):
                 "form": form,
                 "results": [],
                 "page_obj": None,
+                "has_pagination": False,
+                "prev_page_url": None,
+                "next_page_url": None,
                 "low_confidence": False,
                 "shortlist": shortlist_service.get_state().items,
                 "active_filter_chips": (),
@@ -60,6 +63,7 @@ class SearchView(TemplateView):
             page_obj = paginator.get_page(page)
             context["results"] = list(page_obj.object_list)
             context["page_obj"] = page_obj
+            context.update(_build_pagination_context(self.request, page_obj))
             context["active_filter_chips"] = _build_active_filter_chips(form.cleaned_data)
             context["low_confidence"] = _is_low_confidence(
                 results,
@@ -261,3 +265,22 @@ def _is_low_confidence(results: list[RetrievalResult], threshold: float | None =
         settings = get_settings()
         threshold = settings.retrieval_low_confidence_threshold
     return bool(top_score < threshold)
+
+
+def _build_pagination_context(
+    request: HttpRequest, page_obj: Page[RetrievalResult]
+) -> dict[str, str | bool | None]:
+    has_pagination = bool(page_obj.paginator.num_pages > 1)
+    return {
+        "has_pagination": has_pagination,
+        "prev_page_url": (
+            _page_url(request, page_obj.previous_page_number()) if page_obj.has_previous() else None
+        ),
+        "next_page_url": _page_url(request, page_obj.next_page_number()) if page_obj.has_next() else None,
+    }
+
+
+def _page_url(request: HttpRequest, page_number: int) -> str:
+    query = request.GET.copy()
+    query["page"] = str(page_number)
+    return f"{request.path}?{query.urlencode()}"

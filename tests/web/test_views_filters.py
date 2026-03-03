@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from django.conf import settings
+from django.core.paginator import Paginator
+from django.http import HttpRequest, QueryDict
+
 from tal_maria_ikea.shared.types import RetrievalResult
-from tal_maria_ikea.web.views import _build_filters, _is_low_confidence
+from tal_maria_ikea.web.views import _build_filters, _build_pagination_context, _is_low_confidence
 
 
 def test_build_filters_maps_numeric_fields() -> None:
@@ -61,3 +65,27 @@ def test_is_low_confidence_uses_top_score_threshold() -> None:
     )
 
     assert _is_low_confidence([high], threshold=0.15) is False
+
+
+def test_build_pagination_context_preserves_existing_query_params() -> None:
+    if not settings.configured:
+        settings.configure(DEFAULT_CHARSET="utf-8")
+
+    request = HttpRequest()
+    request.path = "/"
+    request.GET = QueryDict(
+        "query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=2",
+        mutable=False,
+        encoding="utf-8",
+    )
+    page_obj = Paginator([1, 2, 3], per_page=1).get_page(2)
+
+    context = _build_pagination_context(request, page_obj)
+
+    assert context["has_pagination"] is True
+    assert context["prev_page_url"] == (
+        "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=1"
+    )
+    assert context["next_page_url"] == (
+        "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=3"
+    )
