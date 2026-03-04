@@ -111,6 +111,9 @@
     {% if rerank_diff_url %}
       <p class="muted"><a href="{{ rerank_diff_url }}">View rerank diff</a></p>
     {% endif %}
+    {% if prompt_lab_url %}
+      <p class="muted"><a href="{{ prompt_lab_url }}">Compare prompt variants</a></p>
+    {% endif %}
   </section>
 
   {% if low_confidence %}

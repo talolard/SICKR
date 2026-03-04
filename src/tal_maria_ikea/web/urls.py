@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.urls import path
 
 from tal_maria_ikea.web.views import (
+    PromptLabView,
     RerankDiffView,
     SearchView,
     ShortlistAddView,
@@ -16,6 +17,7 @@ app_name = "web"
 
 urlpatterns = [
     path("", SearchView.as_view(), name="search"),
+    path("prompt-lab", PromptLabView.as_view(), name="prompt-lab"),
     path("stats", StatsView.as_view(), name="stats"),
     path("analysis/rerank-diff/<str:request_id>", RerankDiffView.as_view(), name="rerank-diff"),
     path("shortlist/add", ShortlistAddView.as_view(), name="shortlist-add"),

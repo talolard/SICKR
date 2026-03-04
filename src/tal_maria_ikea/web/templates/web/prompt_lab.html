@@ -1,0 +1,38 @@
+{% extends "web/base.html" %}
+
+{% block title %}Prompt Lab{% endblock %}
+
+{% block content %}
+  <h1>Prompt Lab</h1>
+  <p class="muted">Request ID: {{ request_id }}</p>
+  <p class="muted">Query: {{ query_text }}</p>
+
+  {% if results %}
+    <section class="card">
+      <div class="results-grid">
+        {% for result in results %}
+          <article class="result card">
+            <h3>{{ result.variant_key }} / {{ result.variant_version }}</h3>
+            <p class="muted">Status: {{ result.status }} · {{ result.latency_ms }} ms</p>
+            <p>{{ result.summary }}</p>
+            {% if result.items %}
+              <ul>
+                {% for item in result.items %}
+                  <li><strong>{{ item.canonical_product_key }}</strong>: {{ item.why }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">No items returned.</p>
+            {% endif %}
+            <p class="muted">Prompt run id: {{ result.prompt_run_id }}</p>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% else %}
+    <section class="card">
+      <p>No prompt run results available yet. Navigate here from a search run.</p>
+    </section>
+  {% endif %}
+{% endblock %}
+

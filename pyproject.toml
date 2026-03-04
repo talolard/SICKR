@@ -111,6 +111,7 @@ max-complexity = 8
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN201", "D100", "D101", "D102", "D103", "PLR2004", "S101"]
 "src/tal_maria_ikea/web/migrations/*.py" = ["D100", "D101", "D104", "RUF012"]
+"tests/phase3/test_prompt_lab.py" = ["E402"]
 
 [tool.ruff.format]
 docstring-code-format = true

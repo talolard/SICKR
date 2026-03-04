@@ -447,6 +447,22 @@ class Phase3Repository:
             for row in rows
         ]
 
+    def list_result_keys_for_request(self, request_id: str, limit: int = 10) -> tuple[str, ...]:
+        """Return top product keys from reranked snapshot rows for one request."""
+
+        rows = self._connection.execute(
+            """
+            SELECT canonical_product_key
+            FROM app.search_result_snapshot
+            WHERE request_id = ?
+              AND ranking_stage = 'after_rerank'
+            ORDER BY rank_position ASC, canonical_product_key ASC
+            LIMIT ?
+            """,
+            [request_id, limit],
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
 
 def _float_or_none(value: object) -> float | None:
     if value is None:

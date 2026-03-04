@@ -106,6 +106,7 @@ def test_result_snapshots_and_diff_view() -> None:
 
     diff_rows = repository.list_result_diff("req-2")
     assert diff_rows == [("1-DE", 1, 2, 0.88, 0.42, -1)]
+    assert repository.list_result_keys_for_request("req-2", limit=5) == ("1-DE",)
 
 
 def test_prompt_conversation_and_ratings_roundtrip() -> None:

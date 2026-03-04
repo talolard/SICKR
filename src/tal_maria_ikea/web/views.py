@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from django.core.paginator import Page, Paginator
@@ -11,6 +12,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from tal_maria_ikea.config import get_settings
+from tal_maria_ikea.phase3.prompt_lab import PromptLabService
 from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
 from tal_maria_ikea.phase3.repository import (
     Phase3Repository,
@@ -59,6 +61,7 @@ class SearchView(TemplateView):
                 "expansion_applied": False,
                 "show_without_expansion_url": None,
                 "rerank_diff_url": None,
+                "prompt_lab_url": None,
             }
         )
 
@@ -105,6 +108,10 @@ class SearchView(TemplateView):
             )
             context["show_without_expansion_url"] = _show_without_expansion_url(self.request)
             context["rerank_diff_url"] = _rerank_diff_url(execution.request_id)
+            context["prompt_lab_url"] = _prompt_lab_url(
+                request_id=execution.request_id,
+                query_text=form.cleaned_data["query_text"],
+            )
             context["low_confidence"] = _is_low_confidence(
                 results,
                 threshold=settings.retrieval_low_confidence_threshold,
@@ -199,6 +206,34 @@ class RerankDiffView(TemplateView):
         rows = _phase3_repository().list_result_diff(request_id=request_id)
         context["request_id"] = request_id
         context["rows"] = rows
+        return context
+
+
+class PromptLabView(TemplateView):
+    """Run and display parallel prompt-variant comparison results."""
+
+    template_name = "web/prompt_lab.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Load prompt variants and execution outputs for one request."""
+
+        context = super().get_context_data(**kwargs)
+        request_id = str(self.request.GET.get("request_id", "")).strip()
+        query_text = str(self.request.GET.get("query_text", "")).strip()
+        context["request_id"] = request_id
+        context["query_text"] = query_text
+        context["results"] = ()
+        if not request_id or not query_text:
+            return context
+
+        repository = _phase3_repository()
+        product_keys = repository.list_result_keys_for_request(request_id=request_id, limit=10)
+        results = PromptLabService(repository).run_compare(
+            request_id=request_id,
+            user_query=query_text,
+            product_keys=product_keys,
+        )
+        context["results"] = results
         return context
 
 
@@ -494,3 +529,8 @@ def _snapshot_rows_from_results(
 
 def _rerank_diff_url(request_id: str) -> str:
     return f"/analysis/rerank-diff/{request_id}"
+
+
+def _prompt_lab_url(request_id: str, query_text: str) -> str:
+    query = urlencode({"request_id": request_id, "query_text": query_text})
+    return f"/prompt-lab?{query}"

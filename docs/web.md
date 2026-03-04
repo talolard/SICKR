@@ -12,6 +12,7 @@
 ## Routes
 - `/` search page (query + filters + results + shortlist)
 - `/admin/` Django admin for Phase 3 config entities
+- `/prompt-lab` side-by-side prompt variant comparison view
 - `/analysis/rerank-diff/<request_id>` before/after rank comparison view
 - `POST /shortlist/add` add one item to global shortlist
 - `POST /shortlist/remove` remove one item from global shortlist
