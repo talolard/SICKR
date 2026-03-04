@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from tal_maria_ikea.chat.agent import build_chat_agent
@@ -124,7 +125,11 @@ def create_app(runtime: ChatRuntime | None = None, *, mount_web_ui: bool = True)
 
     if mount_web_ui:
         web_agent = build_chat_agent()
-        app.mount("/chat", web_agent.to_web(deps=deps))
+        app.mount("/", web_agent.to_web(deps=deps))
+
+        @app.get("/chat")
+        def redirect_chat_alias() -> RedirectResponse:
+            return RedirectResponse(url="/", status_code=307)
 
     return app
 
@@ -153,5 +158,5 @@ def _optional(value: str | None) -> str | None:
     return text or None
 
 
-# Avoid network side effects at import time; runserver uses app factory.
-app = create_app(mount_web_ui=False)
+# Import-safe placeholder; runserver uses the app factory.
+app = FastAPI(title="tal_maria_ikea chat runtime (placeholder)")
