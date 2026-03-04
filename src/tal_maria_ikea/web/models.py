@@ -25,6 +25,8 @@ class SystemPromptTemplate(models.Model):
             models.UniqueConstraint(fields=["key", "version"], name="uniq_prompt_key_version"),
         )
         ordering = ("key", "version")
+        verbose_name = "Prompt template"
+        verbose_name_plural = "Prompt templates (Search + Follow-up)"
 
     def clean(self) -> None:
         """Ensure templates include explicit user-query context interpolation."""
@@ -61,6 +63,8 @@ class PromptVariantSet(models.Model):
         """Default ordering for admin/query display."""
 
         ordering = ("name",)
+        verbose_name = "Prompt variant set"
+        verbose_name_plural = "Prompt variant sets (Prompt Lab)"
 
     def __str__(self) -> str:
         """Return a concise admin display identifier."""
@@ -100,6 +104,8 @@ class FeedbackReasonTag(models.Model):
             ),
         )
         ordering = ("scope", "polarity", "label")
+        verbose_name = "Feedback reason tag"
+        verbose_name_plural = "Feedback reason tags (Ratings UI)"
 
     def __str__(self) -> str:
         """Return a concise admin display identifier."""
@@ -126,6 +132,8 @@ class ExpansionPolicyConfig(models.Model):
         """Default ordering for admin/query display."""
 
         ordering = ("key",)
+        verbose_name = "Expansion policy"
+        verbose_name_plural = "Expansion policies (Query expansion)"
 
     def __str__(self) -> str:
         """Return a concise admin display identifier."""
