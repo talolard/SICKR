@@ -44,6 +44,7 @@ class VariantRunResult:
     """One prompt variant execution result payload for display."""
 
     prompt_run_id: str
+    turn_id: str
     variant_key: str
     variant_version: str
     status: str
@@ -189,9 +190,10 @@ class PromptLabService:
                 error_message=error_message,
             )
         )
+        turn_id = str(uuid4())
         self._repository.insert_prompt_turn(
             PromptTurnEvent(
-                turn_id=str(uuid4()),
+                turn_id=turn_id,
                 prompt_run_id=prompt_run_id,
                 conversation_id=f"compare-{request_id}",
                 summary_text=response.summary,
@@ -209,6 +211,7 @@ class PromptLabService:
         )
         return VariantRunResult(
             prompt_run_id=prompt_run_id,
+            turn_id=turn_id,
             variant_key=str(template_row.key),
             variant_version=str(template_row.version),
             status=status,

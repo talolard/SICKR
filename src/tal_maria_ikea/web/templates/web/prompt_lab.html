@@ -15,10 +15,41 @@
             <h3>{{ result.variant_key }} / {{ result.variant_version }}</h3>
             <p class="muted">Status: {{ result.status }} · {{ result.latency_ms }} ms</p>
             <p>{{ result.summary }}</p>
+            <form method="post" action="{% url 'web:feedback-turn' %}">
+              {% csrf_token %}
+              <input type="hidden" name="turn_id" value="{{ result.turn_id }}" />
+              <input type="hidden" name="request_id" value="{{ request_id }}" />
+              <input type="hidden" name="query_text" value="{{ query_text }}" />
+              <input type="hidden" name="prompt_run_id" value="{{ result.prompt_run_id }}" />
+              <label>Turn feedback</label>
+              <select name="thumb">
+                <option value="up">Thumbs up</option>
+                <option value="down">Thumbs down</option>
+              </select>
+              <input type="text" name="reason_tags" placeholder="reason tags, comma-separated" />
+              <input type="text" name="note" placeholder="optional note" />
+              <button class="btn btn-secondary" type="submit">Save turn feedback</button>
+            </form>
             {% if result.items %}
               <ul>
                 {% for item in result.items %}
-                  <li><strong>{{ item.canonical_product_key }}</strong>: {{ item.why }}</li>
+                  <li>
+                    <strong>{{ item.canonical_product_key }}</strong>: {{ item.why }}
+                    <form method="post" action="{% url 'web:feedback-item' %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="turn_id" value="{{ result.turn_id }}" />
+                      <input type="hidden" name="request_id" value="{{ request_id }}" />
+                      <input type="hidden" name="query_text" value="{{ query_text }}" />
+                      <input type="hidden" name="prompt_run_id" value="{{ result.prompt_run_id }}" />
+                      <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
+                      <select name="thumb">
+                        <option value="up">Thumbs up</option>
+                        <option value="down">Thumbs down</option>
+                      </select>
+                      <input type="text" name="reason_tags" placeholder="reason tags" />
+                      <button class="btn btn-secondary" type="submit">Rate item</button>
+                    </form>
+                  </li>
                 {% endfor %}
               </ul>
             {% else %}

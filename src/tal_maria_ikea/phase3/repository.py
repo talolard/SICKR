@@ -543,6 +543,49 @@ class Phase3Repository:
             [conversation_id],
         )
 
+    def latest_turn_id_for_prompt_run(self, prompt_run_id: str) -> str | None:
+        """Return latest assistant turn ID for one prompt run."""
+
+        row = self._connection.execute(
+            """
+            SELECT turn_id
+            FROM app.prompt_response_turn
+            WHERE prompt_run_id = ?
+            ORDER BY created_at DESC, turn_id DESC
+            LIMIT 1
+            """,
+            [prompt_run_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row[0])
+
+    def summarize_turn_feedback(self) -> tuple[tuple[str, int], ...]:
+        """Return aggregate turn feedback counts grouped by thumb."""
+
+        rows = self._connection.execute(
+            """
+            SELECT thumb, COUNT(*) AS feedback_count
+            FROM app.feedback_turn_rating
+            GROUP BY thumb
+            ORDER BY thumb ASC
+            """
+        ).fetchall()
+        return tuple((str(row[0]), int(row[1])) for row in rows)
+
+    def summarize_item_feedback(self) -> tuple[tuple[str, int], ...]:
+        """Return aggregate item feedback counts grouped by thumb."""
+
+        rows = self._connection.execute(
+            """
+            SELECT thumb, COUNT(*) AS feedback_count
+            FROM app.feedback_item_rating
+            GROUP BY thumb
+            ORDER BY thumb ASC
+            """
+        ).fetchall()
+        return tuple((str(row[0]), int(row[1])) for row in rows)
+
 
 def _float_or_none(value: object) -> float | None:
     if value is None:

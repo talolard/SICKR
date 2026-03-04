@@ -16,9 +16,11 @@ from tal_maria_ikea.phase3.conversation import ConversationService
 from tal_maria_ikea.phase3.prompt_lab import PromptLabService
 from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
 from tal_maria_ikea.phase3.repository import (
+    ItemRatingEvent,
     Phase3Repository,
     SearchRequestEvent,
     SearchResultSnapshotRow,
+    TurnRatingEvent,
 )
 from tal_maria_ikea.phase3.reranker import RerankerService
 from tal_maria_ikea.retrieval.service import RetrievalService
@@ -34,7 +36,13 @@ from tal_maria_ikea.shared.types import (
     RetrievalResult,
     SortMode,
 )
-from tal_maria_ikea.web.forms import FollowUpForm, SearchForm, ShortlistNoteForm
+from tal_maria_ikea.web.forms import (
+    FollowUpForm,
+    ItemFeedbackForm,
+    SearchForm,
+    ShortlistNoteForm,
+    TurnFeedbackForm,
+)
 
 
 class SearchView(TemplateView):
@@ -191,6 +199,9 @@ class StatsView(TemplateView):
 
         context["total_items"] = int(total_items_row[0]) if total_items_row is not None else 0
         context["total_vectors"] = int(total_vectors_row[0]) if total_vectors_row is not None else 0
+        phase3_repository = Phase3Repository(connection)
+        context["turn_feedback_summary"] = phase3_repository.summarize_turn_feedback()
+        context["item_feedback_summary"] = phase3_repository.summarize_item_feedback()
         return context
 
 
@@ -273,6 +284,55 @@ class ConversationView(View):
                 user_message=str(form.cleaned_data["user_message"]),
             )
         return redirect(_conversation_url(conversation_id))
+
+
+class TurnFeedbackView(View):
+    """Persist turn-level feedback events."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        """Validate and store one turn feedback submission."""
+
+        form = TurnFeedbackForm(request.POST)
+        if form.is_valid():
+            _phase3_repository().insert_turn_rating(
+                TurnRatingEvent(
+                    turn_rating_id=str(uuid4()),
+                    turn_id=str(form.cleaned_data["turn_id"]),
+                    request_id=str(form.cleaned_data["request_id"]),
+                    prompt_run_id=str(form.cleaned_data["prompt_run_id"]),
+                    thumb=str(form.cleaned_data["thumb"]),
+                    reason_tags=_parse_reason_tags(form.cleaned_data.get("reason_tags")),
+                    note=_to_optional_str(form.cleaned_data.get("note")),
+                    user_ref=None,
+                    session_ref=_session_ref(request),
+                )
+            )
+        return redirect(_prompt_lab_redirect(request))
+
+
+class ItemFeedbackView(View):
+    """Persist item-level feedback events."""
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        """Validate and store one item feedback submission."""
+
+        form = ItemFeedbackForm(request.POST)
+        if form.is_valid():
+            _phase3_repository().insert_item_rating(
+                ItemRatingEvent(
+                    item_rating_id=str(uuid4()),
+                    turn_id=str(form.cleaned_data["turn_id"]),
+                    request_id=str(form.cleaned_data["request_id"]),
+                    prompt_run_id=str(form.cleaned_data["prompt_run_id"]),
+                    canonical_product_key=str(form.cleaned_data["canonical_product_key"]),
+                    thumb=str(form.cleaned_data["thumb"]),
+                    reason_tags=_parse_reason_tags(form.cleaned_data.get("reason_tags")),
+                    note=_to_optional_str(form.cleaned_data.get("note")),
+                    user_ref=None,
+                    session_ref=_session_ref(request),
+                )
+            )
+        return redirect(_prompt_lab_redirect(request))
 
 
 class ShortlistAddView(View):
@@ -576,3 +636,16 @@ def _prompt_lab_url(request_id: str, query_text: str) -> str:
 
 def _conversation_url(conversation_id: str) -> str:
     return f"/conversations/{conversation_id}"
+
+
+def _parse_reason_tags(raw: object) -> tuple[str, ...]:
+    text = _to_optional_str(raw)
+    if text is None:
+        return ()
+    return tuple(part.strip() for part in text.split(",") if part.strip())
+
+
+def _prompt_lab_redirect(request: HttpRequest) -> str:
+    request_id = _to_optional_str(request.POST.get("request_id")) or ""
+    query_text = _to_optional_str(request.POST.get("query_text")) or ""
+    return _prompt_lab_url(request_id=request_id, query_text=query_text)

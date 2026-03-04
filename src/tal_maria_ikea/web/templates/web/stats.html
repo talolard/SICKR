@@ -18,4 +18,30 @@
       <p class="muted">Rows in latest embedding store view.</p>
     </article>
   </section>
+
+  <section class="card">
+    <h2>Turn Feedback Summary</h2>
+    {% if turn_feedback_summary %}
+      <ul>
+        {% for row in turn_feedback_summary %}
+          <li>{{ row.0 }}: {{ row.1 }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No turn feedback captured yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Item Feedback Summary</h2>
+    {% if item_feedback_summary %}
+      <ul>
+        {% for row in item_feedback_summary %}
+          <li>{{ row.0 }}: {{ row.1 }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No item feedback captured yet.</p>
+    {% endif %}
+  </section>
 {% endblock %}

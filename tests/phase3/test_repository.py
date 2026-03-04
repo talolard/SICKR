@@ -201,3 +201,6 @@ def test_prompt_conversation_and_ratings_roundtrip() -> None:
     assert len(threads) == 1
     messages = repository.list_conversation_messages(conversation_id="conv-1", limit=10)
     assert len(messages) == 1
+    assert repository.latest_turn_id_for_prompt_run("run-1") == "turn-1"
+    assert repository.summarize_turn_feedback() == (("up", 1),)
+    assert repository.summarize_item_feedback() == (("down", 1),)

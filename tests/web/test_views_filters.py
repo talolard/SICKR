@@ -10,6 +10,7 @@ from tal_maria_ikea.web.views import (
     _build_filters,
     _build_pagination_context,
     _is_low_confidence,
+    _parse_reason_tags,
 )
 
 
@@ -145,3 +146,8 @@ def test_apply_expanded_filters_prefers_user_inputs_when_present() -> None:
     assert merged.price.min_eur == 10.0
     assert merged.price.max_eur == 100.0
     assert merged.dimensions.width.max_cm == 120.0
+
+
+def test_parse_reason_tags_handles_empty_and_commas() -> None:
+    assert _parse_reason_tags("") == ()
+    assert _parse_reason_tags("helpful, clear,  ") == ("helpful", "clear")

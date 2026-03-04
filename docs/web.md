@@ -15,6 +15,8 @@
 - `/prompt-lab` side-by-side prompt variant comparison view
 - `/conversations/<conversation_id>` follow-up thread and history sidebar
 - `/analysis/rerank-diff/<request_id>` before/after rank comparison view
+- `POST /feedback/turn` persist turn-level thumbs/reason feedback
+- `POST /feedback/item` persist item-level thumbs/reason feedback
 - `POST /shortlist/add` add one item to global shortlist
 - `POST /shortlist/remove` remove one item from global shortlist
 

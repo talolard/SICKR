@@ -95,3 +95,32 @@ class FollowUpForm(forms.Form):
 
     prompt_run_id = forms.CharField(max_length=64, required=False, widget=forms.HiddenInput())
     user_message = forms.CharField(max_length=500, required=True)
+
+
+class TurnFeedbackForm(forms.Form):
+    """Turn-level thumbs + reasons + note payload."""
+
+    turn_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    request_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    prompt_run_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    thumb = forms.ChoiceField(
+        choices=(("up", "Thumbs up"), ("down", "Thumbs down")),
+        required=True,
+    )
+    reason_tags = forms.CharField(max_length=300, required=False)
+    note = forms.CharField(max_length=300, required=False)
+
+
+class ItemFeedbackForm(forms.Form):
+    """Item-level thumbs + reasons + note payload."""
+
+    turn_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    request_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    prompt_run_id = forms.CharField(max_length=64, widget=forms.HiddenInput())
+    canonical_product_key = forms.CharField(max_length=120, widget=forms.HiddenInput())
+    thumb = forms.ChoiceField(
+        choices=(("up", "Thumbs up"), ("down", "Thumbs down")),
+        required=True,
+    )
+    reason_tags = forms.CharField(max_length=300, required=False)
+    note = forms.CharField(max_length=300, required=False)
