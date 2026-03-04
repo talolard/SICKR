@@ -111,19 +111,19 @@
               <ul class="uk-pagination uk-margin-remove">
                 <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
                   {% if prev_page_url %}
-                    <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
+                    <a href="{{ prev_page_url }}">Previous</a>
                   {% else %}
-                    <span><span uk-pagination-previous></span> Previous</span>
+                    <span>Previous</span>
                   {% endif %}
                 </li>
                 <li class="uk-active">
-                  <span aria-current="page">Page {{ page_obj.number }}</span>
+                  <span aria-current="page">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
                 </li>
                 <li class="{% if not next_page_url %}uk-disabled{% endif %}">
                   {% if next_page_url %}
-                    <a href="{{ next_page_url }}">Next <span uk-pagination-next></span></a>
+                    <a href="{{ next_page_url }}">Next</a>
                   {% else %}
-                    <span>Next <span uk-pagination-next></span></span>
+                    <span>Next</span>
                   {% endif %}
                 </li>
               </ul>
@@ -167,9 +167,9 @@
           <ul class="uk-pagination uk-margin-remove uk-flex-center">
             <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
               {% if prev_page_url %}
-                <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
+                <a href="{{ prev_page_url }}">Previous</a>
               {% else %}
-                <span><span uk-pagination-previous></span> Previous</span>
+                <span>Previous</span>
               {% endif %}
             </li>
             <li class="uk-active">
@@ -177,9 +177,9 @@
             </li>
             <li class="{% if not next_page_url %}uk-disabled{% endif %}">
               {% if next_page_url %}
-                <a href="{{ next_page_url }}">Next <span uk-pagination-next></span></a>
+                <a href="{{ next_page_url }}">Next</a>
               {% else %}
-                <span>Next <span uk-pagination-next></span></span>
+                <span>Next</span>
               {% endif %}
             </li>
           </ul>
