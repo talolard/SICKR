@@ -16,6 +16,7 @@ class ShortlistService:
         self._connection = connect_db(settings.duckdb_path)
         run_sql_file(self._connection, "sql/10_schema.sql")
         run_sql_file(self._connection, "sql/14_market_views.sql")
+        run_sql_file(self._connection, "sql/42_phase3_runtime.sql")
         self._repository = ShortlistRepository(self._connection)
 
     def add(self, canonical_product_key: str, note: str | None = None) -> None:

@@ -27,6 +27,7 @@ class RetrievalService:
         run_sql_file(self._connection, "sql/10_schema.sql")
         run_sql_file(self._connection, "sql/14_market_views.sql")
         run_sql_file(self._connection, "sql/22_embedding_store.sql")
+        run_sql_file(self._connection, "sql/42_phase3_runtime.sql")
 
         self._repository = RetrievalRepository(
             self._connection,

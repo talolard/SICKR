@@ -38,6 +38,30 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 - `app.eval_labels`
 - `app.eval_runs`
 
+## Phase 3 Runtime Tables
+Defined in `sql/42_phase3_runtime.sql`:
+
+- `app.search_request_v2`
+  - Request-scoped metadata including expansion/rerank mode lineage
+- `app.search_expansion_event`
+  - Query expansion proposals, parsed filters, confidence, and apply decision
+- `app.search_result_snapshot`
+  - Before/after ranking snapshots for reranker comparison
+- `app.prompt_run`
+  - Prompt execution metadata with template/version/hash provenance
+- `app.prompt_response_turn`
+  - Structured summary response payloads per assistant turn
+- `app.conversation_thread`
+  - Conversation-level metadata with user/session refs
+- `app.conversation_message`
+  - Thread message history with role and optional prompt linkage
+- `app.feedback_turn_rating`
+  - Turn-level thumbs/reason/note feedback
+- `app.feedback_item_rating`
+  - Item-level thumbs/reason/note feedback
+- `app.search_result_diff` (view)
+  - Convenience view for before/after rank deltas by request
+
 ## SQL-First Policy
 - All schema/load/query logic is under `sql/`.
 - Python orchestration calls SQL files and avoids inline complex SQL.

@@ -86,6 +86,7 @@ class StatsView(TemplateView):
         run_sql_file(connection, "sql/10_schema.sql")
         run_sql_file(connection, "sql/14_market_views.sql")
         run_sql_file(connection, "sql/22_embedding_store.sql")
+        run_sql_file(connection, "sql/42_phase3_runtime.sql")
 
         total_items_row = connection.execute(
             "SELECT COUNT(*) FROM app.products_market_de_v1"
