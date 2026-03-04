@@ -14,6 +14,10 @@
       </div>
       <div class="grid top-controls">
         <div class="field control-block">
+          {{ form.expansion_mode.label_tag }}
+          {{ form.expansion_mode }}
+        </div>
+        <div class="field control-block">
           {{ form.category.label_tag }}
           {{ form.category }}
         </div>
@@ -93,6 +97,16 @@
           <span class="chip">{{ chip }}</span>
         {% endfor %}
       </div>
+    {% endif %}
+    {% if expansion_chips %}
+      <div class="chips">
+        {% for chip in expansion_chips %}
+          <span class="chip">{{ chip }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if expansion_applied and show_without_expansion_url %}
+      <p class="muted"><a href="{{ show_without_expansion_url }}">Show without filters</a></p>
     {% endif %}
   </section>
 

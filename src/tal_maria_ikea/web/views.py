@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from django.core.paginator import Page, Paginator
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect
@@ -9,6 +11,8 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from tal_maria_ikea.config import get_settings
+from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
+from tal_maria_ikea.phase3.repository import Phase3Repository, SearchRequestEvent
 from tal_maria_ikea.retrieval.service import RetrievalService
 from tal_maria_ikea.retrieval.shortlist_service import ShortlistService
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
@@ -16,6 +20,7 @@ from tal_maria_ikea.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
     PriceFilterEUR,
+    QueryExpansionMode,
     RetrievalFilters,
     RetrievalRequest,
     RetrievalResult,
@@ -45,28 +50,79 @@ class SearchView(TemplateView):
                 "low_confidence": False,
                 "shortlist": shortlist_service.get_state().items,
                 "active_filter_chips": (),
+                "expansion_chips": (),
+                "expansion_applied": False,
+                "show_without_expansion_url": None,
             }
         )
 
         if form.is_valid() and form.cleaned_data.get("query_text"):
             settings = get_settings()
             page = form.cleaned_data.get("page") or 1
+            expansion_mode = _to_expansion_mode(form.cleaned_data.get("expansion_mode"))
+            suppress_expansion = self.request.GET.get("show_without_expansion") == "1"
+            expansion_outcome = QueryExpansionService().expand(
+                query_text=form.cleaned_data["query_text"],
+                mode=expansion_mode,
+            )
+            expanded_filters = _apply_expanded_filters(
+                base_filters=_build_filters(form.cleaned_data),
+                extracted=expansion_outcome.extracted_filters,
+            )
+            effective_filters = (
+                _build_filters(form.cleaned_data) if suppress_expansion else expanded_filters
+            )
             request = RetrievalRequest(
                 query_text=form.cleaned_data["query_text"],
                 result_limit=max(200, settings.default_query_limit),
-                filters=_build_filters(form.cleaned_data),
+                filters=effective_filters,
             )
             service = RetrievalService()
-            results = service.retrieve(request)
+            execution = service.retrieve_with_trace(request)
+            results = execution.results
             paginator = Paginator(results, settings.default_query_limit)
             page_obj = paginator.get_page(page)
             context["results"] = list(page_obj.object_list)
             context["page_obj"] = page_obj
             context.update(_build_pagination_context(self.request, page_obj))
             context["active_filter_chips"] = _build_active_filter_chips(form.cleaned_data)
+            context["expansion_chips"] = _build_expansion_chips(
+                expansion_outcome.extracted_filters,
+                applied=bool(expansion_outcome.applied and not suppress_expansion),
+            )
+            context["expansion_applied"] = bool(
+                expansion_outcome.applied and not suppress_expansion
+            )
+            context["show_without_expansion_url"] = _show_without_expansion_url(self.request)
             context["low_confidence"] = _is_low_confidence(
                 results,
                 threshold=settings.retrieval_low_confidence_threshold,
+            )
+            phase3_repository = _phase3_repository()
+            phase3_repository.insert_search_request(
+                SearchRequestEvent(
+                    request_id=execution.request_id,
+                    query_text=form.cleaned_data["query_text"],
+                    user_ref=None,
+                    session_ref=_session_ref(self.request),
+                    expansion_mode=expansion_mode,
+                    expansion_applied=bool(expansion_outcome.applied and not suppress_expansion),
+                    filter_timing_mode="embed_then_filter",
+                    rerank_enabled=False,
+                    request_source="web",
+                    latency_ms=execution.latency_ms,
+                )
+            )
+            phase3_repository.insert_expansion_event(
+                expansion_event_id=str(uuid4()),
+                request_id=execution.request_id,
+                prompt_template_key="expansion-default",
+                prompt_template_version="v1",
+                expanded_query_text=expansion_outcome.expanded_query_text,
+                extracted_filters=expansion_outcome.extracted_filters,
+                confidence=expansion_outcome.confidence,
+                heuristic_reason=expansion_outcome.heuristic_reason,
+                applied=bool(expansion_outcome.applied and not suppress_expansion),
             )
 
         return context
@@ -191,11 +247,29 @@ def _to_sort_mode(value: object) -> SortMode:
     return "relevance"
 
 
+def _to_expansion_mode(value: object) -> QueryExpansionMode:
+    if value == "on":
+        return "on"
+    if value == "off":
+        return "off"
+    return "auto"
+
+
 def _build_active_filter_chips(cleaned_data: dict[str, object]) -> tuple[str, ...]:
     chips: list[str] = []
     chips.extend(_category_and_keyword_chips(cleaned_data))
     chips.extend(_sort_and_price_chips(cleaned_data))
     chips.extend(_dimension_chips(cleaned_data))
+    return tuple(chips)
+
+
+def _build_expansion_chips(extracted: dict[str, object], applied: bool) -> tuple[str, ...]:
+    if not extracted:
+        return ()
+    prefix = "AI filter" if applied else "AI suggestion"
+    chips: list[str] = []
+    for key, value in sorted(extracted.items()):
+        chips.append(f"{prefix}: {key}={value}")
     return tuple(chips)
 
 
@@ -289,3 +363,62 @@ def _page_url(request: HttpRequest, page_number: int) -> str:
     query = request.GET.copy()
     query["page"] = str(page_number)
     return f"{request.path}?{query.urlencode()}"
+
+
+def _apply_expanded_filters(
+    base_filters: RetrievalFilters, extracted: dict[str, object]
+) -> RetrievalFilters:
+    category = base_filters.category or _to_optional_str(extracted.get("category"))
+    include_keyword = base_filters.include_keyword or _to_optional_str(
+        extracted.get("include_keyword")
+    )
+    exclude_keyword = base_filters.exclude_keyword or _to_optional_str(
+        extracted.get("exclude_keyword")
+    )
+    min_price = base_filters.price.min_eur or _to_optional_float(extracted.get("min_price_eur"))
+    max_price = base_filters.price.max_eur or _to_optional_float(extracted.get("max_price_eur"))
+    width_max = base_filters.dimensions.width.max_cm or _to_optional_float(
+        extracted.get("width_max_cm")
+    )
+
+    return RetrievalFilters(
+        category=category,
+        include_keyword=include_keyword,
+        exclude_keyword=exclude_keyword,
+        sort=base_filters.sort,
+        price=PriceFilterEUR(min_eur=min_price, max_eur=max_price),
+        dimensions=DimensionFilter(
+            width=DimensionAxisFilter(
+                exact_cm=base_filters.dimensions.width.exact_cm,
+                min_cm=base_filters.dimensions.width.min_cm,
+                max_cm=width_max,
+            ),
+            depth=base_filters.dimensions.depth,
+            height=base_filters.dimensions.height,
+        ),
+    )
+
+
+def _show_without_expansion_url(request: HttpRequest) -> str:
+    query = request.GET.copy()
+    query["show_without_expansion"] = "1"
+    return f"{request.path}?{query.urlencode()}"
+
+
+def _phase3_repository() -> Phase3Repository:
+    settings = get_settings()
+    connection = connect_db(settings.duckdb_path)
+    run_sql_file(connection, "sql/10_schema.sql")
+    run_sql_file(connection, "sql/42_phase3_runtime.sql")
+    return Phase3Repository(connection)
+
+
+def _session_ref(request: HttpRequest) -> str:
+    session = getattr(request, "session", None)
+    if session is None:
+        return "no-session"
+    key = session.session_key
+    if key is not None:
+        return str(key)
+    session.save()
+    return str(session.session_key)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from time import monotonic
 from uuid import uuid4
 
@@ -14,6 +15,16 @@ from tal_maria_ikea.logging_config import get_logger
 from tal_maria_ikea.retrieval.repository import RetrievalRepository
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
 from tal_maria_ikea.shared.types import RetrievalRequest, RetrievalResult
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalExecution:
+    """Retrieval response with request metadata for downstream telemetry."""
+
+    request_id: str
+    results: list[RetrievalResult]
+    latency_ms: int
+    low_confidence: bool
 
 
 class RetrievalService:
@@ -46,6 +57,14 @@ class RetrievalService:
 
     def retrieve(self, request: RetrievalRequest, source: str = "web") -> list[RetrievalResult]:
         """Return ranked products for the given query request."""
+
+        execution = self.retrieve_with_trace(request=request, source=source)
+        return execution.results
+
+    def retrieve_with_trace(
+        self, request: RetrievalRequest, source: str = "web"
+    ) -> RetrievalExecution:
+        """Return ranked products plus request metadata for Phase 3 analytics."""
 
         start = monotonic()
         query_vector = self._client.embed_query(request.query_text)
@@ -82,4 +101,9 @@ class RetrievalService:
             latency_ms=latency_ms,
             low_confidence=low_confidence,
         )
-        return results
+        return RetrievalExecution(
+            request_id=query_id,
+            results=results,
+            latency_ms=latency_ms,
+            low_confidence=low_confidence,
+        )

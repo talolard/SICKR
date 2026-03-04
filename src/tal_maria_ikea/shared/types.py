@@ -12,6 +12,8 @@ from typing import Literal
 MarketCode = Literal["DE"]
 EmbeddingProvider = Literal["vertex_gemini"]
 SortMode = Literal["relevance", "price_asc", "price_desc", "size"]
+QueryExpansionMode = Literal["auto", "on", "off"]
+FilterTimingMode = Literal["embed_then_filter", "filter_then_embed"]
 
 
 @dataclass(frozen=True, slots=True)

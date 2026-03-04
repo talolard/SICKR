@@ -9,6 +9,15 @@ class SearchForm(forms.Form):
     """Query and filter controls for semantic search."""
 
     query_text = forms.CharField(max_length=300, required=True)
+    expansion_mode = forms.ChoiceField(
+        choices=(
+            ("auto", "Expansion: Auto"),
+            ("on", "Expansion: On"),
+            ("off", "Expansion: Off"),
+        ),
+        required=False,
+        initial="auto",
+    )
     category = forms.CharField(max_length=120, required=False)
     include_keyword = forms.CharField(max_length=120, required=False)
     exclude_keyword = forms.CharField(max_length=120, required=False)
@@ -47,6 +56,7 @@ class SearchForm(forms.Form):
         self.fields["query_text"].widget.attrs.update(
             {"placeholder": "e.g. large soft couch", "class": "input-text"}
         )
+        self.fields["expansion_mode"].widget.attrs.update({"class": "input-text"})
         self.fields["category"].widget.attrs.update(
             {"placeholder": "e.g. sofas-armchairs", "class": "input-text"}
         )

@@ -5,7 +5,12 @@ from django.core.paginator import Paginator
 from django.http import HttpRequest, QueryDict
 
 from tal_maria_ikea.shared.types import RetrievalResult
-from tal_maria_ikea.web.views import _build_filters, _build_pagination_context, _is_low_confidence
+from tal_maria_ikea.web.views import (
+    _apply_expanded_filters,
+    _build_filters,
+    _build_pagination_context,
+    _is_low_confidence,
+)
 
 
 def test_build_filters_maps_numeric_fields() -> None:
@@ -101,3 +106,42 @@ def test_build_pagination_context_preserves_existing_query_params() -> None:
             "is_current": False,
         },
     )
+
+
+def test_apply_expanded_filters_prefers_user_inputs_when_present() -> None:
+    base_filters = _build_filters(
+        {
+            "category": "tables-desks",
+            "include_keyword": None,
+            "exclude_keyword": None,
+            "sort": "relevance",
+            "min_price_eur": 10.0,
+            "max_price_eur": None,
+            "exact_dimensions": False,
+            "width_exact_cm": None,
+            "width_min_cm": None,
+            "width_max_cm": None,
+            "depth_exact_cm": None,
+            "depth_min_cm": None,
+            "depth_max_cm": None,
+            "height_exact_cm": None,
+            "height_min_cm": None,
+            "height_max_cm": None,
+        }
+    )
+
+    merged = _apply_expanded_filters(
+        base_filters=base_filters,
+        extracted={
+            "category": "sofas-armchairs",
+            "max_price_eur": 100.0,
+            "width_max_cm": 120.0,
+            "include_keyword": "soft",
+        },
+    )
+
+    assert merged.category == "tables-desks"
+    assert merged.include_keyword == "soft"
+    assert merged.price.min_eur == 10.0
+    assert merged.price.max_eur == 100.0
+    assert merged.dimensions.width.max_cm == 120.0
