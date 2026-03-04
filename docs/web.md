@@ -11,8 +11,22 @@
 
 ## Routes
 - `/` search page (query + filters + results + shortlist)
+- `/admin/` Django admin for Phase 3 config entities
 - `POST /shortlist/add` add one item to global shortlist
 - `POST /shortlist/remove` remove one item from global shortlist
+
+## Admin-Managed Config Models (SQLite)
+
+These entities are managed in Django admin and used as Phase 3 control/config plane:
+
+- `SystemPromptTemplate`
+  - Versioned system-prompt templates with required `{{ user_query }}` placeholder.
+- `PromptVariantSet`
+  - Named groups of templates for prompt-comparison runs.
+- `FeedbackReasonTag`
+  - Allowed reason tags by scope (`turn`/`item`) and polarity (`up`/`down`).
+- `ExpansionPolicyConfig`
+  - Query expansion heuristic thresholds and feature toggles.
 
 ## Search Filters
 - Category

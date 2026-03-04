@@ -39,6 +39,16 @@ The current required/expected keys are:
 - `DJANGO_DEBUG` (default `true`)
 - `DJANGO_ALLOWED_HOSTS` (default `127.0.0.1,localhost`)
 
+## Django DB Scope
+
+Phase 3 keeps Django SQLite as a config/admin plane and DuckDB as retrieval/runtime analytics plane.
+
+Current Django-managed entities include:
+
+- prompt templates and prompt variant sets
+- feedback reason tags
+- query expansion policy config
+
 ## Layering Order
 Configuration precedence (lowest to highest):
 1. Code defaults in `AppSettings`
