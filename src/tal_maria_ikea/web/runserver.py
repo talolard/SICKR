@@ -17,6 +17,7 @@ def main() -> None:
     args = parser.parse_args()
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tal_maria_ikea.web.project.settings")
+    execute_from_command_line(["manage.py", "migrate", "--noinput"])
     execute_from_command_line(["manage.py", "runserver", f"{args.host}:{args.port}"])
 
 
