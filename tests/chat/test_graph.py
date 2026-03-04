@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from tal_maria_ikea.chat.graph import (
     ChatGraphDeps,
@@ -8,6 +9,7 @@ from tal_maria_ikea.chat.graph import (
     ParseUserIntentNode,
     build_chat_graph,
 )
+from tal_maria_ikea.chat.runtime import ChatRuntime
 from tal_maria_ikea.phase3.query_expansion import ExpansionOutcome
 from tal_maria_ikea.phase3.search_summary import (
     SearchSummaryExecution,
@@ -160,7 +162,7 @@ def test_graph_returns_clarification_when_no_results() -> None:
     output = graph.run_sync(
         ParseUserIntentNode(user_message="need a couch"),
         state=ChatGraphState(),
-        deps=ChatGraphDeps(runtime=runtime),
+        deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
     ).output
 
     assert output.needs_clarification is True
@@ -182,7 +184,7 @@ def test_graph_returns_ranked_answer_and_persists_messages() -> None:
     output = graph.run_sync(
         ParseUserIntentNode(user_message="need a lamp"),
         state=ChatGraphState(),
-        deps=ChatGraphDeps(runtime=runtime),
+        deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
     ).output
 
     assert output.needs_clarification is False

@@ -36,18 +36,15 @@ The current required/expected keys are:
 - `VSS_METRIC` (default `cosine`)
 - `RETRIEVAL_LOW_CONFIDENCE_THRESHOLD` (default `0.15`)
 - `RERANK_ENABLED` (default `true`)
-- `RERANK_BACKEND` (default `lexical`)
+- `RERANK_BACKEND` (default `transformer`)
 - `RERANK_CANDIDATE_LIMIT` (default `100`)
 - `RERANK_MODEL_NAME` (default `cross-encoder/ms-marco-MiniLM-L-6-v2`)
-- `DJANGO_SECRET_KEY` (default `dev-only-secret`)
-- `DJANGO_DEBUG` (default `true`)
-- `DJANGO_ALLOWED_HOSTS` (default `127.0.0.1,localhost`)
 
-## Django DB Scope
+## Chat Config Scope (DuckDB)
 
-Phase 3 keeps Django SQLite as a config/admin plane and DuckDB as retrieval/runtime analytics plane.
+Phase 3 keeps DuckDB as both retrieval/runtime analytics plane and chat config plane.
 
-Current Django-managed entities include:
+Current config entities are persisted in DuckDB and seeded by `sql/43_chat_config.sql`:
 
 - prompt templates and prompt variant sets
 - feedback reason tags

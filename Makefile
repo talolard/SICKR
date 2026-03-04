@@ -1,4 +1,4 @@
-.PHONY: deps init db-init db-load db-reset index vss-index web chat eval eval-generate eval-labels demo \
+.PHONY: deps init db-init db-load db-reset index vss-index chat eval eval-generate eval-labels demo \
 	lint format format-check format-all typecheck test tidy preflight
 
 DB_PATH ?= data/ikea.duckdb
@@ -63,9 +63,6 @@ preflight:
 index:
 	uv run python -m tal_maria_ikea.ingest.index $(if $(INDEX_LIMIT),--subset-limit $(INDEX_LIMIT),) $(INDEX_FLAGS)
 
-web:
-	uv run python -m tal_maria_ikea.web.runserver --host $(HOST) --port $(PORT)
-
 chat:
 	uv run python -m tal_maria_ikea.chat_app.runserver --host $(HOST) --port $(PORT)
 
@@ -81,7 +78,7 @@ eval-labels:
 vss-index:
 	./scripts/build_vss_index.sh $(DB_PATH) cosine
 
-demo: init web
+demo: init chat
 
 # One command before commit.
 tidy: format

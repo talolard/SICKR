@@ -164,7 +164,8 @@ class SearchSummaryService:
                 template_text = template_row.template_text
 
         user_query = str(context.get("user_query", ""))
-        candidates = context.get("candidate_items", [])
+        candidate_obj = context.get("candidate_items", [])
+        candidates = candidate_obj if isinstance(candidate_obj, list) else []
         candidate_lines = "\n".join(
             [
                 f"- {item.get('canonical_product_key', '')} | {item.get('item_name', '')}"

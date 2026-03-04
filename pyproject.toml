@@ -9,7 +9,6 @@ description = "Scaffold for IKEA semantic search learning project."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "django>=5.2.0",
   "duckdb>=1.4.0",
   "fastapi>=0.127.1",
   "google-genai>=1.30.0",
@@ -116,8 +115,6 @@ max-complexity = 8
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN201", "D100", "D101", "D102", "D103", "PLR2004", "S101"]
-"src/tal_maria_ikea/web/migrations/*.py" = ["D100", "D101", "D104", "RUF012"]
-"tests/phase3/test_prompt_lab.py" = ["E402"]
 
 [tool.ruff.format]
 docstring-code-format = true

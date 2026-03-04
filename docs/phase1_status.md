@@ -4,7 +4,7 @@
 - Data audit/modeling: `done` (SQL schema/modeling and profile scripts added)
 - Embedding pipeline: `done` (sync-first parallel indexer + run metadata)
 - Retrieval service: `done` (semantic retrieval + structured filters + query logging)
-- Django web app: `done` (search UI + filters + global shortlist)
+- Chat web runtime: `done` (FastAPI + graph-backed chat UI and typed chat API)
 - Eval loop: `done` (Gemini structured generation + metrics runner + registries)
 - Integration hardening: `partial` (runbook/scripts/tests in place, live API flows depend on credentials)
 

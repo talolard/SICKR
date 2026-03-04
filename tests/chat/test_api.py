@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from fastapi.testclient import TestClient
 
+from tal_maria_ikea.chat.runtime import ChatRuntime
 from tal_maria_ikea.chat_app.main import create_app
 from tal_maria_ikea.phase3.query_expansion import ExpansionOutcome
-from tal_maria_ikea.phase3.repository import ConversationMessageRow
+from tal_maria_ikea.phase3.repository import ConversationMessageEvent, ConversationMessageRow
 from tal_maria_ikea.phase3.search_summary import (
     SearchSummaryExecution,
     SearchSummaryItem,
@@ -108,7 +110,7 @@ class _Phase3RepoStub:
     def upsert_conversation_thread(self, event: object) -> None:
         _ = event
 
-    def insert_conversation_message(self, event: object) -> None:
+    def insert_conversation_message(self, event: ConversationMessageEvent) -> None:
         self._messages.append(
             ConversationMessageRow(
                 message_id="m1",
@@ -173,7 +175,7 @@ def test_healthz() -> None:
         summary_service=_SummaryStub(),
         phase3_repository=_Phase3RepoStub(),
     )
-    client = TestClient(create_app(runtime=runtime, mount_web_ui=False))
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
 
     response = client.get("/healthz")
 
@@ -191,7 +193,7 @@ def test_chat_run_and_trace() -> None:
         summary_service=_SummaryStub(),
         phase3_repository=repository,
     )
-    client = TestClient(create_app(runtime=runtime, mount_web_ui=False))
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
 
     run_response = client.post("/api/chat/run", json={"query_text": "need a lamp"})
 

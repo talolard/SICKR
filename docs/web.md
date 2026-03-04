@@ -6,46 +6,26 @@
    - `./scripts/load_ikea_data.sh`
 2. Build embeddings:
    - `uv run python -m tal_maria_ikea.ingest.index`
-3. Run Django app:
-   - `uv run python -m tal_maria_ikea.web.runserver --host 127.0.0.1 --port 8000`
+3. Run chat app:
+   - `uv run python -m tal_maria_ikea.chat_app.runserver --host 127.0.0.1 --port 8000`
 
 ## Routes
-- `/` search page (query + filters + results + shortlist)
-- `/admin/` Django admin for Phase 3 config entities
-- `/prompt-lab` side-by-side prompt variant comparison view
-- `/conversations/<conversation_id>` follow-up thread and history sidebar
-- `/analysis/rerank-diff/<request_id>` before/after rank comparison view
-- `POST /feedback/turn` persist turn-level thumbs/reason feedback
-- `POST /feedback/item` persist item-level thumbs/reason feedback
-- `POST /shortlist/add` add one item to global shortlist
-- `POST /shortlist/remove` remove one item from global shortlist
+- `GET /healthz` runtime health probe
+- `POST /api/chat/run` typed chat execution endpoint
+- `GET /api/chat/trace/<request_id>` minimal persisted trace view
+- `GET /chat` pydantic-ai web chat UI
 
-## Admin-Managed Config Models (SQLite)
+## Config Plane (DuckDB)
 
-These entities are managed in Django admin and used as Phase 3 control/config plane:
+Phase 3 runtime config now lives in DuckDB tables seeded by `sql/43_chat_config.sql`:
 
-- `SystemPromptTemplate`
-  - Versioned system-prompt templates with required `{{ user_query }}` placeholder.
-- `PromptVariantSet`
-  - Named groups of templates for prompt-comparison runs.
-- `FeedbackReasonTag`
-  - Allowed reason tags by scope (`turn`/`item`) and polarity (`up`/`down`).
-- `ExpansionPolicyConfig`
-  - Query expansion heuristic thresholds and feature toggles.
+- `app.system_prompt_template_config`
+- `app.prompt_variant_set_config`
+- `app.prompt_variant_set_template_link`
+- `app.feedback_reason_tag_config`
+- `app.expansion_policy_config`
 
-## Search Filters
-- Category
-- Sort (`relevance`, `price_asc`, `price_desc`, `size`)
-- EUR price range (`min_price_eur`, `max_price_eur`)
-- Dimensions in collapsed advanced controls (exact/min/max per width/depth/height in cm)
-- Active filter chips and reset action
-
-## Shortlist Behavior
-- Persistence table: `app.shortlist_global`
-- Scope: global (no auth/session split)
-- Duplicate adds: de-duplicated by `canonical_product_key` via upsert
-
-## Debugging
-- Query logs: `app.query_log`
-- Query logs include `sort_mode` for behavior analysis.
-- Low-confidence banner is based on top semantic score threshold from settings.
+## Runtime Behavior
+- Chat executes one graph run per user turn:
+  - parse -> expand -> retrieve -> rerank -> summarize -> refine -> persist -> respond
+- Retrieval snapshots and conversation messages persist via `app.search_*` and `app.conversation_*` tables.

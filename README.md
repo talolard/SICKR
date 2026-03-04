@@ -15,7 +15,7 @@ Phase 2 semantic-search implementation for IKEA catalog exploration.
    - Note: `make init` resets `data/ikea.duckdb` (greenfield workflow).
    - `make init` also runs eval query generation (`phase1_de_v1` / `p1_v1`).
 5. Start web app:
-   - `make web`
+   - `make chat`
 6. Open:
    - `http://127.0.0.1:8000`
 

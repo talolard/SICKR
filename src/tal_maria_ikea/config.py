@@ -51,9 +51,6 @@ class AppSettings(BaseSettings):
     rerank_backend: str = Field(default="transformer")
     rerank_candidate_limit: int = Field(default=100, ge=10, le=500)
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
-    django_secret_key: str = Field(default="dev-only-secret")
-    django_debug: bool = Field(default=True)
-    django_allowed_hosts: str = Field(default="127.0.0.1,localhost")
 
 
 @lru_cache(maxsize=1)

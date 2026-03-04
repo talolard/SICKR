@@ -11,8 +11,8 @@
      `uv run python -m tal_maria_ikea.ingest.index --build-vss-index`
    - Or explicit index script:
      `./scripts/build_vss_index.sh data/ikea.duckdb cosine`
-4. Run local Django search UI:
-   - `uv run python -m tal_maria_ikea.web.runserver`
+4. Run local chat runtime:
+   - `uv run python -m tal_maria_ikea.chat_app.runserver`
 5. Run eval loop (after labels exist):
    - `uv run python -m tal_maria_ikea.eval.run --index-run-id latest --k 10`
 
@@ -22,7 +22,9 @@ For local greenfield setup, `make init` is the canonical bootstrap and resets th
 - `src/tal_maria_ikea/shared/` typed contracts + DB/parsing helpers
 - `src/tal_maria_ikea/ingest/` embedding repository and indexing CLI
 - `src/tal_maria_ikea/retrieval/` retrieval and shortlist services
-- `src/tal_maria_ikea/web/` Django forms/views/routes/templates
+- `src/tal_maria_ikea/phase3/` reranking, summary, conversation, and telemetry repositories
+- `src/tal_maria_ikea/chat/` typed graph and agent runtime orchestration
+- `src/tal_maria_ikea/chat_app/` FastAPI app and server entrypoint
 - `src/tal_maria_ikea/eval/` query generation and metrics runner
 
 ## SQL Layout
@@ -38,6 +40,8 @@ For local greenfield setup, `make init` is the canonical bootstrap and resets th
 - `sql/31_retrieval_candidates.sql` retrieval query
 - `sql/32_shortlist.sql` shortlist hydration query
 - `sql/41_eval_registry.sql` eval registry view
+- `sql/42_phase3_runtime.sql` phase3 runtime events/tables
+- `sql/43_chat_config.sql` chat config plane tables + seed rows
 
 ## Vector Similarity Notes
 - Retrieval SQL uses `array_cosine_distance` over `FLOAT[EMBEDDING_DIMENSIONS]`
