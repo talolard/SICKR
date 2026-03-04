@@ -12,6 +12,7 @@ from tal_maria_ikea.web.views import (
     _build_pagination_context,
     _is_low_confidence,
     _parse_reason_tags,
+    _query_signature_hash,
     _split_changed_and_unchanged,
 )
 
@@ -183,3 +184,34 @@ def test_split_changed_and_unchanged_collapses_zero_delta_rows() -> None:
 
     assert [row.canonical_product_key for row in changed_rows] == ["1-DE"]
     assert unchanged_count == 1
+
+
+def test_query_signature_hash_ignores_page_number() -> None:
+    base = {
+        "query_text": "bed storage",
+        "expansion_mode": "auto",
+        "category": "beds",
+        "include_keyword": "",
+        "exclude_keyword": "",
+        "sort": "relevance",
+        "min_price_eur": None,
+        "max_price_eur": None,
+        "exact_dimensions": False,
+        "width_exact_cm": None,
+        "width_min_cm": None,
+        "width_max_cm": None,
+        "depth_exact_cm": None,
+        "depth_min_cm": None,
+        "depth_max_cm": None,
+        "height_exact_cm": None,
+        "height_min_cm": None,
+        "height_max_cm": None,
+        "page": 1,
+    }
+    with_other_page = dict(base)
+    with_other_page["page"] = 5
+
+    first_hash = _query_signature_hash(cleaned_data=base, suppress=False)
+    second_hash = _query_signature_hash(cleaned_data=with_other_page, suppress=False)
+
+    assert first_hash == second_hash

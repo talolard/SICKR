@@ -11,54 +11,79 @@
     <section class="card">
       <div class="results-grid">
         {% for result in results %}
-          <article class="result card">
-            <h3>{{ result.variant_key }} / {{ result.variant_version }}</h3>
-            <p class="muted">Status: {{ result.status }} · {{ result.latency_ms }} ms</p>
-            <p>{{ result.summary }}</p>
-            <form method="post" action="{% url 'web:feedback-turn' %}">
+          <article class="result card uk-card uk-card-default uk-card-body">
+            <header class="uk-margin-small-bottom">
+              <h3 class="uk-margin-remove-bottom">{{ result.variant_key }} / {{ result.variant_version }}</h3>
+              <p class="muted uk-margin-small-top">Status: {{ result.status }} · {{ result.latency_ms }} ms</p>
+            </header>
+            <section class="uk-margin-small-bottom">
+              <h4 class="uk-heading-bullet uk-margin-small-bottom">Summary</h4>
+              <p class="uk-margin-remove-top">{{ result.summary }}</p>
+            </section>
+            <details class="uk-margin-small-bottom">
+              <summary>Show system prompt</summary>
+              <pre class="prompt-text-block">{{ result.rendered_system_prompt }}</pre>
+            </details>
+            <form class="uk-margin-medium-bottom" method="post" action="{% url 'web:feedback-turn' %}">
               {% csrf_token %}
               <input type="hidden" name="turn_id" value="{{ result.turn_id }}" />
               <input type="hidden" name="request_id" value="{{ request_id }}" />
               <input type="hidden" name="query_text" value="{{ query_text }}" />
               <input type="hidden" name="prompt_run_id" value="{{ result.prompt_run_id }}" />
-              <label>Turn feedback</label>
-              <select name="thumb">
-                <option value="up">Thumbs up</option>
-                <option value="down">Thumbs down</option>
-              </select>
-              <input type="text" name="reason_tags" placeholder="reason tags, comma-separated" />
-              <input type="text" name="note" placeholder="optional note" />
-              <button class="btn btn-secondary" type="submit">Save turn feedback</button>
+              <label class="uk-form-label">Turn feedback</label>
+              <div class="uk-grid-small uk-child-width-1-1" uk-grid>
+                <div>
+                  <select name="thumb" class="uk-select">
+                    <option value="up">Thumbs up</option>
+                    <option value="down">Thumbs down</option>
+                  </select>
+                </div>
+                <div><input type="text" name="reason_tags" placeholder="reason tags, comma-separated" class="uk-input" /></div>
+                <div><input type="text" name="note" placeholder="optional note" class="uk-input" /></div>
+                <div><button class="btn btn-secondary" type="submit">Save turn feedback</button></div>
+              </div>
             </form>
-            {% if result.items %}
-              <ul>
-                {% for item in result.items %}
-                  <li>
-                    <strong>{{ item.canonical_product_key }}</strong>: {{ item.why }}
-                    <form method="post" action="{% url 'web:feedback-item' %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="turn_id" value="{{ result.turn_id }}" />
-                      <input type="hidden" name="request_id" value="{{ request_id }}" />
-                      <input type="hidden" name="query_text" value="{{ query_text }}" />
-                      <input type="hidden" name="prompt_run_id" value="{{ result.prompt_run_id }}" />
-                      <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
-                      <select name="thumb">
-                        <option value="up">Thumbs up</option>
-                        <option value="down">Thumbs down</option>
-                      </select>
-                      <input type="text" name="reason_tags" placeholder="reason tags" />
-                      <button class="btn btn-secondary" type="submit">Rate item</button>
-                    </form>
-                  </li>
-                {% endfor %}
-              </ul>
-            {% else %}
-              <p class="muted">No items returned.</p>
-            {% endif %}
-            <p class="muted">Prompt run id: {{ result.prompt_run_id }}</p>
-            {% if conversation_id %}
-              <p><a href="{% url 'web:conversation' conversation_id=conversation_id %}">Open conversation</a></p>
-            {% endif %}
+            <section>
+              <h4 class="uk-heading-bullet uk-margin-small-bottom">Recommended items</h4>
+              {% if result.items %}
+                <ul class="uk-list uk-list-divider uk-margin-small-top">
+                  {% for item in result.items %}
+                    <li>
+                      <p class="uk-margin-small-bottom">
+                        <strong style="overflow-wrap:anywhere;">{{ item.item_name }}</strong>
+                        <span class="muted">({{ item.canonical_product_key }})</span>: {{ item.why }}
+                      </p>
+                      <form method="post" action="{% url 'web:feedback-item' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="turn_id" value="{{ result.turn_id }}" />
+                        <input type="hidden" name="request_id" value="{{ request_id }}" />
+                        <input type="hidden" name="query_text" value="{{ query_text }}" />
+                        <input type="hidden" name="prompt_run_id" value="{{ result.prompt_run_id }}" />
+                        <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
+                        <div class="uk-grid-small uk-child-width-1-1" uk-grid>
+                          <div>
+                            <select name="thumb" class="uk-select">
+                              <option value="up">Thumbs up</option>
+                              <option value="down">Thumbs down</option>
+                            </select>
+                          </div>
+                          <div><input type="text" name="reason_tags" placeholder="reason tags" class="uk-input" /></div>
+                          <div><button class="btn btn-secondary" type="submit">Rate item</button></div>
+                        </div>
+                      </form>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="muted">No items returned.</p>
+              {% endif %}
+            </section>
+            <footer class="uk-margin-small-top">
+              <p class="muted uk-margin-remove">Prompt run id: {{ result.prompt_run_id }}</p>
+              {% if conversation_id %}
+                <p class="uk-margin-small-top"><a href="{% url 'web:conversation' conversation_id=conversation_id %}">Open conversation</a></p>
+              {% endif %}
+            </footer>
           </article>
         {% endfor %}
       </div>

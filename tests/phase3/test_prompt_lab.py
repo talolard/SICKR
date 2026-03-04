@@ -58,17 +58,19 @@ class _ServiceUnderTest(PromptLabService):
         *,
         system_prompt: str,
         user_prompt: str,
-        product_keys: tuple[str, ...],
+        candidates: tuple[tuple[str, str], ...],
         generation_config: dict[str, object],
     ) -> SummaryResponse | None:
         _ = (user_prompt, generation_config)
         if "fail" in system_prompt:
             return None
+        first_key, first_name = candidates[0]
         return SummaryResponse(
             summary="ok",
             items=[
                 SummaryItem(
-                    canonical_product_key=product_keys[0],
+                    canonical_product_key=first_key,
+                    item_name=first_name,
                     why="matched",
                 )
             ],
@@ -86,7 +88,7 @@ def test_prompt_lab_runs_variants_in_parallel_and_persists_events() -> None:
     results = service.run_compare(
         request_id="req-1",
         user_query="hallway lamps",
-        product_keys=("1-DE", "2-DE"),
+        candidates=(("1-DE", "Lamp A"), ("2-DE", "Lamp B")),
         template_rows=cast("tuple[PromptTemplateRow, ...]", templates),
     )
 
@@ -109,7 +111,7 @@ def test_prompt_lab_partial_failure_is_isolated_per_variant() -> None:
     results = service.run_compare(
         request_id="req-2",
         user_query="desk lamps",
-        product_keys=("1-DE",),
+        candidates=(("1-DE", "Lamp A"),),
         template_rows=cast("tuple[PromptTemplateRow, ...]", templates),
     )
 

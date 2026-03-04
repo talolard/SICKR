@@ -13,7 +13,7 @@ from uuid import uuid4
 from django.db.utils import OperationalError, ProgrammingError
 from django.template import Context, Template
 from google.genai import types as genai_types
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.ingest.embedding_client import EmbeddingClientConfig, build_generation_client
@@ -30,6 +30,7 @@ class SummaryItem(BaseModel):
     """One recommended item from model output."""
 
     canonical_product_key: str
+    item_name: str = Field(min_length=1)
     why: str
 
 
@@ -37,7 +38,7 @@ class SummaryResponse(BaseModel):
     """Structured output contract for prompt-lab summaries."""
 
     summary: str = Field(min_length=1)
-    items: list[SummaryItem] = Field(default_factory=list)
+    items: list[SummaryItem] = Field(default_factory=list, min_length=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ class VariantRunResult:
     summary: str
     items: tuple[SummaryItem, ...]
     error_message: str | None
+    rendered_system_prompt: str
 
 
 class PromptTemplateRow(Protocol):
@@ -92,7 +94,7 @@ class PromptLabService:
         *,
         request_id: str,
         user_query: str,
-        product_keys: tuple[str, ...],
+        candidates: tuple[tuple[str, str], ...],
         variant_ids: tuple[int, ...] | None = None,
         template_rows: tuple[PromptTemplateRow, ...] | None = None,
         max_variants: int = 5,
@@ -124,7 +126,7 @@ class PromptLabService:
                     self._run_single_variant,
                     request_id=request_id,
                     user_query=user_query,
-                    product_keys=product_keys,
+                    candidates=candidates,
                     template_row=template_row,
                 )
                 for template_row in templates
@@ -151,13 +153,16 @@ class PromptLabService:
         *,
         request_id: str,
         user_query: str,
-        product_keys: tuple[str, ...],
+        candidates: tuple[tuple[str, str], ...],
         template_row: PromptTemplateRow,
     ) -> VariantRunResult:
         start = monotonic()
         context = {
             "user_query": user_query,
-            "product_keys": product_keys,
+            "candidate_items": [
+                {"canonical_product_key": key, "item_name": item_name}
+                for key, item_name in candidates
+            ],
         }
         rendered = Template(str(template_row.template_text)).render(Context(context))
         prompt_hash = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
@@ -172,13 +177,13 @@ class PromptLabService:
         response = self._generate_summary(
             system_prompt=rendered,
             user_prompt=user_query,
-            product_keys=product_keys,
+            candidates=candidates,
             generation_config=generation_config,
         )
         if response is None:
             status = "error"
             error_message = "No summary response generated."
-            response = SummaryResponse(summary="No summary generated.", items=[])
+            response = _fallback_summary(user_query=user_query, candidates=candidates)
 
         latency_ms = int((monotonic() - start) * 1000)
         self._repository.insert_prompt_run(
@@ -227,6 +232,7 @@ class PromptLabService:
             summary=response.summary,
             items=tuple(response.items),
             error_message=error_message,
+            rendered_system_prompt=rendered,
         )
 
     def _generate_summary(
@@ -234,22 +240,13 @@ class PromptLabService:
         *,
         system_prompt: str,
         user_prompt: str,
-        product_keys: tuple[str, ...],
+        candidates: tuple[tuple[str, str], ...],
         generation_config: genai_types.GenerateContentConfigDict,
     ) -> SummaryResponse | None:
         _ = system_prompt
+        fallback = _fallback_summary(user_query=user_prompt, candidates=candidates)
         if self._settings.gemini_api_key is None:
-            items = tuple(
-                SummaryItem(
-                    canonical_product_key=key,
-                    why="Selected as a relevant candidate from the current result set.",
-                )
-                for key in product_keys[:3]
-            )
-            return SummaryResponse(
-                summary="Local fallback summary (Gemini key not configured).",
-                items=list(items),
-            )
+            return fallback
 
         client = build_generation_client(
             EmbeddingClientConfig(
@@ -265,8 +262,13 @@ class PromptLabService:
             config=generation_config,
         )
         if response.text is None:
-            return None
-        return SummaryResponse.model_validate_json(response.text)
+            return fallback
+        try:
+            parsed = SummaryResponse.model_validate_json(response.text)
+        except ValidationError:
+            return fallback
+        sanitized = _sanitize_summary_response(parsed=parsed, candidates=candidates)
+        return sanitized if sanitized is not None else fallback
 
 
 def _summary_generation_config(*, system_instruction: str) -> genai_types.GenerateContentConfigDict:
@@ -277,3 +279,44 @@ def _summary_generation_config(*, system_instruction: str) -> genai_types.Genera
         "response_mime_type": "application/json",
         "response_json_schema": SummaryResponse.model_json_schema(),
     }
+
+
+def _fallback_summary(
+    *, user_query: str, candidates: tuple[tuple[str, str], ...]
+) -> SummaryResponse:
+    """Return deterministic summary payload when model output is unavailable/invalid."""
+
+    return SummaryResponse(
+        summary=f"Top matches for '{user_query}' from the current reranked candidate set.",
+        items=[
+            SummaryItem(
+                canonical_product_key=key,
+                item_name=item_name,
+                why="Selected as a relevant candidate from the current result set.",
+            )
+            for key, item_name in candidates[:3]
+        ],
+    )
+
+
+def _sanitize_summary_response(
+    *, parsed: SummaryResponse, candidates: tuple[tuple[str, str], ...]
+) -> SummaryResponse | None:
+    """Normalize model output to known candidate IDs and names only."""
+
+    candidate_name_by_key = dict(candidates)
+    sanitized_items: list[SummaryItem] = []
+    for item in parsed.items:
+        expected_name = candidate_name_by_key.get(item.canonical_product_key)
+        if expected_name is None:
+            continue
+        sanitized_items.append(
+            SummaryItem(
+                canonical_product_key=item.canonical_product_key,
+                item_name=expected_name,
+                why=item.why,
+            )
+        )
+    if not sanitized_items:
+        return None
+    return SummaryResponse(summary=parsed.summary, items=sanitized_items)

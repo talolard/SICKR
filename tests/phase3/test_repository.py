@@ -132,6 +132,40 @@ def test_result_snapshots_and_diff_view() -> None:
         ),
     )
     assert repository.list_result_keys_for_request("req-2", limit=5) == ("1-DE",)
+    hydrated_results = repository.list_results_for_request("req-2")
+    assert hydrated_results[0].canonical_product_key == "1-DE"
+    assert hydrated_results[0].product_name == "Lamp"
+
+    repository.upsert_query_cache(
+        query_signature_hash="qsig-1",
+        request_id="req-2",
+        query_text="lamp",
+        filters_json='{"sort":"relevance"}',
+        cache_config_hash="cfg-1",
+        ttl_hours=24,
+    )
+    query_cache_row = repository.get_query_cache(
+        query_signature_hash="qsig-1",
+        cache_config_hash="cfg-1",
+    )
+    assert query_cache_row is not None
+    assert query_cache_row.request_id == "req-2"
+
+    repository.upsert_summary_cache(
+        summary_cache_key="sum-1",
+        request_id="req-2",
+        query_signature_hash="qsig-1",
+        resultset_hash="rset-1",
+        summary_config_hash="scfg-1",
+        summary_json='{"summary":"ok","items":[]}',
+        ttl_hours=24,
+    )
+    summary_cache_row = repository.get_summary_cache(
+        summary_cache_key="sum-1",
+        summary_config_hash="scfg-1",
+    )
+    assert summary_cache_row is not None
+    assert summary_cache_row.summary_json == '{"summary":"ok","items":[]}'
 
 
 def test_prompt_conversation_and_ratings_roundtrip() -> None:

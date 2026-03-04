@@ -41,6 +41,19 @@ CREATE TABLE IF NOT EXISTS app.search_result_snapshot (
     created_at TIMESTAMP DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS app.search_query_cache (
+    query_signature_hash VARCHAR PRIMARY KEY,
+    request_id VARCHAR NOT NULL,
+    query_text VARCHAR NOT NULL,
+    filters_json VARCHAR NOT NULL,
+    cache_config_hash VARCHAR NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_query_cache_expires_at
+ON app.search_query_cache (expires_at);
+
 CREATE TABLE IF NOT EXISTS app.prompt_run (
     prompt_run_id VARCHAR PRIMARY KEY,
     request_id VARCHAR NOT NULL,
@@ -59,6 +72,27 @@ CREATE TABLE IF NOT EXISTS app.prompt_run (
 );
 
 ALTER TABLE app.prompt_run ADD COLUMN IF NOT EXISTS generation_config_json VARCHAR;
+
+CREATE TABLE IF NOT EXISTS app.search_summary_cache (
+    summary_cache_key VARCHAR PRIMARY KEY,
+    request_id VARCHAR NOT NULL,
+    query_signature_hash VARCHAR NOT NULL,
+    resultset_hash VARCHAR NOT NULL,
+    summary_config_hash VARCHAR NOT NULL,
+    summary_json VARCHAR NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_summary_cache_expires_at
+ON app.search_summary_cache (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_search_summary_cache_lookup
+ON app.search_summary_cache (
+    query_signature_hash,
+    resultset_hash,
+    summary_config_hash
+);
 
 CREATE TABLE IF NOT EXISTS app.prompt_response_turn (
     turn_id VARCHAR PRIMARY KEY,

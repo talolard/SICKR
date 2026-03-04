@@ -7,7 +7,15 @@
   <p class="muted">Natural language search with compact controls and advanced filters on demand.</p>
 
   <section class="card">
-    <form method="get">
+    <form
+      method="get"
+      hx-get="{% url 'web:search-results' %}"
+      hx-target="#search-results-region"
+      hx-swap="innerHTML"
+      hx-push-url="false"
+      hx-indicator="#search-loading-indicator"
+      hx-disabled-elt="#search-submit-btn"
+    >
       <div class="hero-field">
         {{ form.query_text.label_tag }}
         {{ form.query_text }}
@@ -86,8 +94,12 @@
       </details>
 
       <div class="actions">
-        <button class="btn" type="submit">Search</button>
+        <button class="btn" id="search-submit-btn" type="submit">Search</button>
         <a class="btn btn-secondary" href="{% url 'web:search' %}">Reset</a>
+        <span id="search-loading-indicator" class="htmx-indicator loading-inline">
+          <span uk-spinner="ratio: 0.7"></span>
+          <span>Searching...</span>
+        </span>
       </div>
     </form>
 
@@ -119,83 +131,9 @@
     {% endif %}
   </section>
 
-  {% if low_confidence %}
-    <div class="banner-warn">Low confidence retrieval. Try a more specific query or filters.</div>
-  {% endif %}
-
-  <section class="card">
-    <h2>Results</h2>
-    {% if results %}
-      {% if page_obj %}
-        <div class="results-meta-row">
-          <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
-          {% if has_pagination %}
-            <nav class="pager-inline" aria-label="Results pagination">
-              <ul class="uk-pagination uk-margin-remove">
-                {% for link in page_links %}
-                  <li class="{% if link.is_current %}uk-active{% endif %}">
-                    {% if link.is_current %}
-                      <span aria-current="page">{{ link.number }}</span>
-                    {% else %}
-                      <a href="{{ link.url }}">{{ link.number }}</a>
-                    {% endif %}
-                  </li>
-                {% endfor %}
-              </ul>
-            </nav>
-          {% endif %}
-        </div>
-      {% endif %}
-      <div class="results-grid">
-        {% for item in results %}
-          <article class="result card">
-            <div class="result-head">
-              <h3 class="result-title">{{ item.product_type|default:item.product_name }}</h3>
-              <span class="product-id-badge">ID {{ item.canonical_product_key }}</span>
-            </div>
-            <p class="result-family muted">Family: {{ item.product_name }}</p>
-            {% if item.description_text %}
-              <p class="result-description">{{ item.description_text }}</p>
-            {% endif %}
-            <p class="muted">{{ item.main_category }} / {{ item.sub_category }}</p>
-            <p><strong>EUR {{ item.price_eur }}</strong></p>
-            <p>{{ item.dimensions_text }}</p>
-            <p class="muted">{{ item.rank_explanation }}</p>
-            <details class="embed-details">
-              <summary>Show embedding text</summary>
-              <pre>{{ item.embedding_text }}</pre>
-            </details>
-            <form method="post" action="{% url 'web:shortlist-add' %}">
-              {% csrf_token %}
-              <input type="hidden" name="canonical_product_key" value="{{ item.canonical_product_key }}" />
-              <details>
-                <summary>Add note (optional)</summary>
-                <input type="text" name="note" placeholder="optional note" />
-              </details>
-              <button class="btn btn-secondary" type="submit">Add to shortlist</button>
-            </form>
-          </article>
-        {% endfor %}
-      </div>
-      {% if has_pagination %}
-        <nav class="pager-dock" aria-label="Sticky results pagination">
-          <ul class="uk-pagination uk-margin-remove uk-flex-center">
-            {% for link in page_links %}
-              <li class="{% if link.is_current %}uk-active{% endif %}">
-                {% if link.is_current %}
-                  <span aria-current="page">{{ link.number }}</span>
-                {% else %}
-                  <a href="{{ link.url }}">{{ link.number }}</a>
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ul>
-        </nav>
-      {% endif %}
-    {% else %}
-      <p>No results yet.</p>
-    {% endif %}
-  </section>
+  <div id="search-results-region">
+    {% include "web/partials/search_results.html" %}
+  </div>
 
   <section class="card">
     <h2>Global shortlist</h2>

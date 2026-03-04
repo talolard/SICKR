@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 import duckdb
 
+from tal_maria_ikea.shared.types import RetrievalResult
+
 
 @dataclass(frozen=True, slots=True)
 class SearchRequestEvent:
@@ -159,6 +161,24 @@ class ResultDiffRow:
     rank_delta: int
 
 
+@dataclass(frozen=True, slots=True)
+class QueryCacheRow:
+    """Read model for one cached query->request mapping row."""
+
+    query_signature_hash: str
+    request_id: str
+    expires_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryCacheRow:
+    """Read model for one cached summary payload row."""
+
+    summary_cache_key: str
+    summary_json: str
+    expires_at: str
+
+
 class Phase3Repository:
     """Persistence operations for Phase 3 event and conversation tables."""
 
@@ -277,6 +297,187 @@ class Phase3Repository:
                 for row in rows
             ],
         )
+
+    def get_query_cache(
+        self, *, query_signature_hash: str, cache_config_hash: str
+    ) -> QueryCacheRow | None:
+        """Return unexpired cached request mapping for one query signature."""
+
+        row = self._connection.execute(
+            """
+            SELECT query_signature_hash, request_id, expires_at
+            FROM app.search_query_cache
+            WHERE query_signature_hash = ?
+              AND cache_config_hash = ?
+              AND expires_at > now()
+            LIMIT 1
+            """,
+            [query_signature_hash, cache_config_hash],
+        ).fetchone()
+        if row is None:
+            return None
+        return QueryCacheRow(
+            query_signature_hash=str(row[0]),
+            request_id=str(row[1]),
+            expires_at=str(row[2]),
+        )
+
+    def upsert_query_cache(
+        self,
+        *,
+        query_signature_hash: str,
+        request_id: str,
+        query_text: str,
+        filters_json: str,
+        cache_config_hash: str,
+        ttl_hours: int,
+    ) -> None:
+        """Insert or update one query cache row with expiration."""
+
+        self._connection.execute(
+            """
+            INSERT OR REPLACE INTO app.search_query_cache (
+                query_signature_hash,
+                request_id,
+                query_text,
+                filters_json,
+                cache_config_hash,
+                expires_at,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, now() + (? * INTERVAL '1 hour'), now())
+            """,
+            [
+                query_signature_hash,
+                request_id,
+                query_text,
+                filters_json,
+                cache_config_hash,
+                ttl_hours,
+            ],
+        )
+
+    def get_summary_cache(
+        self, *, summary_cache_key: str, summary_config_hash: str
+    ) -> SummaryCacheRow | None:
+        """Return unexpired cached summary for one summary cache key."""
+
+        row = self._connection.execute(
+            """
+            SELECT summary_cache_key, summary_json, expires_at
+            FROM app.search_summary_cache
+            WHERE summary_cache_key = ?
+              AND summary_config_hash = ?
+              AND expires_at > now()
+            LIMIT 1
+            """,
+            [summary_cache_key, summary_config_hash],
+        ).fetchone()
+        if row is None:
+            return None
+        return SummaryCacheRow(
+            summary_cache_key=str(row[0]),
+            summary_json=str(row[1]),
+            expires_at=str(row[2]),
+        )
+
+    def upsert_summary_cache(
+        self,
+        *,
+        summary_cache_key: str,
+        request_id: str,
+        query_signature_hash: str,
+        resultset_hash: str,
+        summary_config_hash: str,
+        summary_json: str,
+        ttl_hours: int,
+    ) -> None:
+        """Insert or update one summary cache row with expiration."""
+
+        self._connection.execute(
+            """
+            INSERT OR REPLACE INTO app.search_summary_cache (
+                summary_cache_key,
+                request_id,
+                query_signature_hash,
+                resultset_hash,
+                summary_config_hash,
+                summary_json,
+                expires_at,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, now() + (? * INTERVAL '1 hour'), now())
+            """,
+            [
+                summary_cache_key,
+                request_id,
+                query_signature_hash,
+                resultset_hash,
+                summary_config_hash,
+                summary_json,
+                ttl_hours,
+            ],
+        )
+
+    def list_results_for_request(
+        self, request_id: str, ranking_stage: str = "after_rerank"
+    ) -> list[RetrievalResult]:
+        """Hydrate ordered product results from persisted snapshot rows."""
+
+        rows = self._connection.execute(
+            """
+            SELECT
+                snapshot.canonical_product_key,
+                coalesce(product.product_name, snapshot.canonical_product_key),
+                product.product_type,
+                product.description_text,
+                NULL AS embedding_text,
+                product.main_category,
+                product.sub_category,
+                product.dimensions_text,
+                product.width_cm,
+                product.depth_cm,
+                product.height_cm,
+                product.price_eur,
+                product.url,
+                snapshot.semantic_score,
+                snapshot.score_explanation
+            FROM app.search_result_snapshot AS snapshot
+            LEFT JOIN app.products_canonical AS product
+              ON product.canonical_product_key = snapshot.canonical_product_key
+             AND product.country = 'Germany'
+            WHERE snapshot.request_id = ?
+              AND snapshot.ranking_stage = ?
+            ORDER BY snapshot.rank_position ASC, snapshot.canonical_product_key ASC
+            """,
+            [request_id, ranking_stage],
+        ).fetchall()
+
+        results: list[RetrievalResult] = []
+        for row in rows:
+            semantic_score = _float_or_none(row[13]) or 0.0
+            score_explanation = (
+                _str_or_none(row[14]) or f"semantic cosine score {semantic_score:.3f}"
+            )
+            results.append(
+                RetrievalResult(
+                    canonical_product_key=str(row[0]),
+                    product_name=str(row[1]),
+                    product_type=_str_or_none(row[2]),
+                    description_text=_str_or_none(row[3]),
+                    embedding_text=_str_or_none(row[4]),
+                    main_category=_str_or_none(row[5]),
+                    sub_category=_str_or_none(row[6]),
+                    dimensions_text=_str_or_none(row[7]),
+                    width_cm=_float_or_none(row[8]),
+                    depth_cm=_float_or_none(row[9]),
+                    height_cm=_float_or_none(row[10]),
+                    price_eur=_float_or_none(row[11]),
+                    url=_str_or_none(row[12]),
+                    semantic_score=semantic_score,
+                    filter_pass_reasons=("structured_filters_passed",),
+                    rank_explanation=score_explanation,
+                )
+            )
+        return results
 
     def insert_prompt_run(self, event: PromptRunEvent) -> None:
         """Insert one prompt execution metadata row."""

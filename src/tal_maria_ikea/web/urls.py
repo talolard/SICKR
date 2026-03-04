@@ -9,6 +9,8 @@ from tal_maria_ikea.web.views import (
     ItemFeedbackView,
     PromptLabView,
     RerankDiffView,
+    SearchResultsPartialView,
+    SearchSummaryPartialView,
     SearchView,
     ShortlistAddView,
     ShortlistRemoveView,
@@ -20,6 +22,8 @@ app_name = "web"
 
 urlpatterns = [
     path("", SearchView.as_view(), name="search"),
+    path("search/results", SearchResultsPartialView.as_view(), name="search-results"),
+    path("search/summary", SearchSummaryPartialView.as_view(), name="search-summary"),
     path("prompt-lab", PromptLabView.as_view(), name="prompt-lab"),
     path("conversations/<str:conversation_id>", ConversationView.as_view(), name="conversation"),
     path("stats", StatsView.as_view(), name="stats"),

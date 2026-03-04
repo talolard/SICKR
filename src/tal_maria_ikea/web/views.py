@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from dataclasses import dataclass
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -10,11 +13,12 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views import View
 from django.views.generic import TemplateView
+from pydantic import ValidationError
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.phase3.conversation import ConversationService
 from tal_maria_ikea.phase3.prompt_lab import PromptLabService
-from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
+from tal_maria_ikea.phase3.query_expansion import ExpansionOutcome, QueryExpansionService
 from tal_maria_ikea.phase3.repository import (
     ItemRatingEvent,
     Phase3Repository,
@@ -24,6 +28,7 @@ from tal_maria_ikea.phase3.repository import (
     TurnRatingEvent,
 )
 from tal_maria_ikea.phase3.reranker import RerankerService
+from tal_maria_ikea.phase3.search_summary import SearchSummaryResponse, SearchSummaryService
 from tal_maria_ikea.retrieval.service import RetrievalService
 from tal_maria_ikea.retrieval.shortlist_service import ShortlistService
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
@@ -56,123 +61,131 @@ class SearchView(TemplateView):
 
         context = super().get_context_data(**kwargs)
         form = SearchForm(self.request.GET or None)
-        shortlist_service = ShortlistService()
-        context.update(
-            {
-                "form": form,
-                "results": [],
-                "page_obj": None,
-                "has_pagination": False,
-                "page_links": (),
-                "low_confidence": False,
-                "shortlist": shortlist_service.get_state().items,
-                "active_filter_chips": (),
-                "expansion_chips": (),
-                "expansion_applied": False,
-                "show_without_expansion_url": None,
-                "rerank_diff_url": None,
-                "prompt_lab_url": None,
-            }
+        context.update(_empty_search_context(form=form))
+        context["shortlist"] = ShortlistService().get_state().items
+        if form.is_valid() and form.cleaned_data.get("query_text"):
+            payload = _build_search_payload(
+                request=self.request,
+                cleaned_data=form.cleaned_data,
+            )
+            context.update(_search_payload_to_context(request=self.request, payload=payload))
+        return context
+
+
+class SearchResultsPartialView(View):
+    """Render HTMX search results without full-page reload."""
+
+    template_name = "web/partials/search_results.html"
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render only results region content for HTMX GET requests."""
+
+        form = SearchForm(request.GET or None)
+        if not form.is_valid() or not form.cleaned_data.get("query_text"):
+            context = _empty_search_context(form=form)
+            return render(request, self.template_name, context)
+        payload = _build_search_payload(request=request, cleaned_data=form.cleaned_data)
+        context = _search_payload_to_context(request=request, payload=payload)
+        return render(request, self.template_name, context)
+
+
+class SearchSummaryPartialView(View):
+    """Render one async summary block for a completed search request."""
+
+    template_name = "web/partials/search_summary.html"
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render async summary block, using cache when available."""
+
+        request_id = _to_optional_str(request.GET.get("request_id"))
+        query_signature_hash = _to_optional_str(request.GET.get("query_signature_hash"))
+        query_text = _to_optional_str(request.GET.get("query_text"))
+        template_key = (
+            _to_optional_str(request.GET.get("summary_template_key")) or "summary-default"
+        )
+        template_version = _to_optional_str(request.GET.get("summary_template_version")) or "v1"
+        if request_id is None or query_signature_hash is None or query_text is None:
+            return render(
+                request,
+                self.template_name,
+                {"summary": None, "summary_items": (), "summary_status": "missing_params"},
+            )
+
+        repository = _phase3_repository()
+        ranked_results = repository.list_results_for_request(
+            request_id=request_id, ranking_stage="after_rerank"
+        )
+        candidates = tuple(
+            (result.canonical_product_key, result.product_name) for result in ranked_results[:50]
+        )
+        if not candidates:
+            return render(
+                request,
+                self.template_name,
+                {"summary": None, "summary_items": (), "summary_status": "no_results"},
+            )
+
+        resultset_hash = _resultset_hash(candidates)
+        summary_config_hash = _summary_config_hash(
+            template_key=template_key,
+            template_version=template_version,
+        )
+        summary_cache_key = _summary_cache_key(
+            query_signature_hash=query_signature_hash,
+            resultset_hash=resultset_hash,
+            summary_config_hash=summary_config_hash,
+        )
+        summary_cache_row = repository.get_summary_cache(
+            summary_cache_key=summary_cache_key,
+            summary_config_hash=summary_config_hash,
         )
 
-        if form.is_valid() and form.cleaned_data.get("query_text"):
-            settings = get_settings()
-            page = form.cleaned_data.get("page") or 1
-            expansion_mode = _to_expansion_mode(form.cleaned_data.get("expansion_mode"))
-            suppress_expansion = self.request.GET.get("show_without_expansion") == "1"
-            expansion_outcome = QueryExpansionService().expand(
-                query_text=form.cleaned_data["query_text"],
-                mode=expansion_mode,
-            )
-            expanded_filters = _apply_expanded_filters(
-                base_filters=_build_filters(form.cleaned_data),
-                extracted=expansion_outcome.extracted_filters,
-            )
-            effective_filters = (
-                _build_filters(form.cleaned_data) if suppress_expansion else expanded_filters
-            )
-            request = RetrievalRequest(
-                query_text=form.cleaned_data["query_text"],
-                result_limit=max(200, settings.default_query_limit),
-                filters=effective_filters,
-            )
-            service = RetrievalService()
-            execution = service.retrieve_with_trace(request)
-            reranked_items = RerankerService().rerank(
-                query_text=form.cleaned_data["query_text"],
-                results=execution.results,
-            )
-            results = [item.result for item in reranked_items]
-            paginator = Paginator(results, settings.default_query_limit)
-            page_obj = paginator.get_page(page)
-            context["results"] = list(page_obj.object_list)
-            context["page_obj"] = page_obj
-            context.update(_build_pagination_context(self.request, page_obj))
-            context["active_filter_chips"] = _build_active_filter_chips(form.cleaned_data)
-            context["expansion_chips"] = _build_expansion_chips(
-                expansion_outcome.extracted_filters,
-                applied=bool(expansion_outcome.applied and not suppress_expansion),
-            )
-            context["expansion_applied"] = bool(
-                expansion_outcome.applied and not suppress_expansion
-            )
-            context["show_without_expansion_url"] = _show_without_expansion_url(self.request)
-            context["rerank_diff_url"] = _rerank_diff_url(execution.request_id)
-            context["prompt_lab_url"] = _prompt_lab_url(
-                request_id=execution.request_id,
-                query_text=form.cleaned_data["query_text"],
-            )
-            context["low_confidence"] = _is_low_confidence(
-                results,
-                threshold=settings.retrieval_low_confidence_threshold,
-            )
-            phase3_repository = _phase3_repository()
-            phase3_repository.insert_search_request(
-                SearchRequestEvent(
-                    request_id=execution.request_id,
-                    query_text=form.cleaned_data["query_text"],
-                    user_ref=None,
-                    session_ref=_session_ref(self.request),
-                    expansion_mode=expansion_mode,
-                    expansion_applied=bool(expansion_outcome.applied and not suppress_expansion),
-                    filter_timing_mode="embed_then_filter",
-                    rerank_enabled=True,
-                    request_source="web",
-                    latency_ms=execution.latency_ms,
-                )
-            )
-            phase3_repository.insert_result_snapshots(
-                _snapshot_rows_from_results(
-                    request_id=execution.request_id,
-                    ranking_stage="semantic_before_rerank",
-                    results=execution.results,
-                    rerank_scores={},
-                )
-            )
-            phase3_repository.insert_result_snapshots(
-                _snapshot_rows_from_results(
-                    request_id=execution.request_id,
-                    ranking_stage="after_rerank",
-                    results=results,
-                    rerank_scores={
-                        item.result.canonical_product_key: item.rerank_score
-                        for item in reranked_items
-                    },
-                )
-            )
-            phase3_repository.insert_expansion_event(
-                expansion_event_id=str(uuid4()),
-                request_id=execution.request_id,
-                prompt_template_key="expansion-default",
-                prompt_template_version="v1",
-                expanded_query_text=expansion_outcome.expanded_query_text,
-                extracted_filters=expansion_outcome.extracted_filters,
-                confidence=expansion_outcome.confidence,
-                heuristic_reason=expansion_outcome.heuristic_reason,
-                applied=bool(expansion_outcome.applied and not suppress_expansion),
+        cached = _load_cached_summary(
+            repository=repository,
+            summary_json=summary_cache_row.summary_json if summary_cache_row else None,
+            summary_cache_key=summary_cache_key,
+            request_id=request_id,
+            query_signature_hash=query_signature_hash,
+            resultset_hash=resultset_hash,
+            summary_config_hash=summary_config_hash,
+            candidates=candidates,
+        )
+        if cached is not None:
+            return render(
+                request,
+                self.template_name,
+                {
+                    "summary": cached.summary,
+                    "summary_items": tuple(cached.items),
+                    "summary_status": "cache_hit",
+                },
             )
 
-        return context
+        execution = SearchSummaryService(repository).generate(
+            request_id=request_id,
+            query_text=query_text,
+            candidates=candidates,
+            template_key=template_key,
+            template_version=template_version,
+        )
+        repository.upsert_summary_cache(
+            summary_cache_key=summary_cache_key,
+            request_id=request_id,
+            query_signature_hash=query_signature_hash,
+            resultset_hash=resultset_hash,
+            summary_config_hash=summary_config_hash,
+            summary_json=execution.response.model_dump_json(),
+            ttl_hours=24,
+        )
+        return render(
+            request,
+            self.template_name,
+            {
+                "summary": execution.response.summary,
+                "summary_items": tuple(execution.response.items),
+                "summary_status": "generated",
+            },
+        )
 
 
 class StatsView(TemplateView):
@@ -243,11 +256,18 @@ class PromptLabView(TemplateView):
             return context
 
         repository = _phase3_repository()
-        product_keys = repository.list_result_keys_for_request(request_id=request_id, limit=10)
+        ranked_results = repository.list_results_for_request(
+            request_id=request_id, ranking_stage="after_rerank"
+        )
+        candidates = tuple(
+            (result.canonical_product_key, result.product_name) for result in ranked_results[:10]
+        )
+        if not candidates:
+            return context
         results = PromptLabService(repository).run_compare(
             request_id=request_id,
             user_query=query_text,
-            product_keys=product_keys,
+            candidates=candidates,
         )
         context["results"] = results
         return context
@@ -362,6 +382,233 @@ class ShortlistRemoveView(View):
         if isinstance(canonical_product_key, str) and canonical_product_key:
             ShortlistService().remove(canonical_product_key)
         return redirect("web:search")
+
+
+@dataclass(frozen=True, slots=True)
+class SearchPayload:
+    """Normalized search execution output used by full and HTMX views."""
+
+    query_text: str
+    request_id: str
+    query_signature_hash: str
+    page_obj: Page
+    paginated_results: list[RetrievalResult]
+    all_results: list[RetrievalResult]
+    active_filter_chips: tuple[str, ...]
+    expansion_chips: tuple[str, ...]
+    expansion_applied: bool
+    show_without_expansion_url: str
+    rerank_diff_url: str
+    prompt_lab_url: str
+    low_confidence: bool
+
+
+def _empty_search_context(form: SearchForm) -> dict[str, object]:
+    """Return baseline template context for empty/invalid search state."""
+
+    return {
+        "form": form,
+        "results": [],
+        "page_obj": None,
+        "has_pagination": False,
+        "page_links": (),
+        "low_confidence": False,
+        "active_filter_chips": (),
+        "expansion_chips": (),
+        "expansion_applied": False,
+        "show_without_expansion_url": None,
+        "rerank_diff_url": None,
+        "prompt_lab_url": None,
+        "request_id": "",
+        "query_signature_hash": "",
+        "query_text": "",
+        "summary_url": None,
+    }
+
+
+def _build_search_payload(
+    *, request: HttpRequest, cleaned_data: dict[str, object]
+) -> SearchPayload:
+    """Execute retrieval flow with query cache and return normalized payload."""
+
+    settings = get_settings()
+    query_text = str(cleaned_data["query_text"])
+    page_value = cleaned_data.get("page")
+    page = int(page_value) if isinstance(page_value, int | float | str) else 1
+    expansion_mode = _to_expansion_mode(cleaned_data.get("expansion_mode"))
+    suppress_expansion = request.GET.get("show_without_expansion") == "1"
+    expansion_outcome = QueryExpansionService().expand(
+        query_text=query_text,
+        mode=expansion_mode,
+    )
+    base_filters = _build_filters(cleaned_data)
+    expanded_filters = _apply_expanded_filters(
+        base_filters=base_filters,
+        extracted=expansion_outcome.extracted_filters,
+    )
+    effective_filters = base_filters if suppress_expansion else expanded_filters
+
+    query_signature_hash = _query_signature_hash(
+        cleaned_data=cleaned_data, suppress=suppress_expansion
+    )
+    cache_config_hash = _query_cache_config_hash()
+    repository = _phase3_repository()
+    query_cache_row = repository.get_query_cache(
+        query_signature_hash=query_signature_hash,
+        cache_config_hash=cache_config_hash,
+    )
+
+    if query_cache_row is None:
+        request_id = _run_search_and_persist(
+            http_request=request,
+            repository=repository,
+            query_text=query_text,
+            effective_filters=effective_filters,
+            expansion_mode=expansion_mode,
+            suppress_expansion=suppress_expansion,
+            expansion_outcome=expansion_outcome,
+        )
+        repository.upsert_query_cache(
+            query_signature_hash=query_signature_hash,
+            request_id=request_id,
+            query_text=query_text,
+            filters_json=json.dumps(cleaned_data, sort_keys=True, default=str),
+            cache_config_hash=cache_config_hash,
+            ttl_hours=24,
+        )
+    else:
+        request_id = query_cache_row.request_id
+
+    all_results = repository.list_results_for_request(
+        request_id=request_id, ranking_stage="after_rerank"
+    )
+    paginator = Paginator(all_results, settings.default_query_limit)
+    page_obj = paginator.get_page(page)
+    paginated_results = list(page_obj.object_list)
+
+    return SearchPayload(
+        query_text=query_text,
+        request_id=request_id,
+        query_signature_hash=query_signature_hash,
+        page_obj=page_obj,
+        paginated_results=paginated_results,
+        all_results=all_results,
+        active_filter_chips=_build_active_filter_chips(cleaned_data),
+        expansion_chips=_build_expansion_chips(
+            expansion_outcome.extracted_filters,
+            applied=bool(expansion_outcome.applied and not suppress_expansion),
+        ),
+        expansion_applied=bool(expansion_outcome.applied and not suppress_expansion),
+        show_without_expansion_url=_show_without_expansion_url(request),
+        rerank_diff_url=_rerank_diff_url(request_id),
+        prompt_lab_url=_prompt_lab_url(request_id=request_id, query_text=query_text),
+        low_confidence=_is_low_confidence(
+            all_results,
+            threshold=settings.retrieval_low_confidence_threshold,
+        ),
+    )
+
+
+def _run_search_and_persist(
+    *,
+    http_request: HttpRequest,
+    repository: Phase3Repository,
+    query_text: str,
+    effective_filters: RetrievalFilters,
+    expansion_mode: QueryExpansionMode,
+    suppress_expansion: bool,
+    expansion_outcome: ExpansionOutcome,
+) -> str:
+    """Execute retrieval+rereank pipeline and persist request snapshots."""
+
+    settings = get_settings()
+    request_payload = RetrievalRequest(
+        query_text=query_text,
+        result_limit=max(200, settings.default_query_limit),
+        filters=effective_filters,
+    )
+    execution = RetrievalService().retrieve_with_trace(request_payload)
+    reranked_items = RerankerService().rerank(
+        query_text=query_text,
+        results=execution.results,
+    )
+    reranked_results = [item.result for item in reranked_items]
+    repository.insert_search_request(
+        SearchRequestEvent(
+            request_id=execution.request_id,
+            query_text=query_text,
+            user_ref=None,
+            session_ref=_session_ref(http_request),
+            expansion_mode=expansion_mode,
+            expansion_applied=bool(expansion_outcome.applied and not suppress_expansion),
+            filter_timing_mode="embed_then_filter",
+            rerank_enabled=True,
+            request_source="web",
+            latency_ms=execution.latency_ms,
+        )
+    )
+    repository.insert_result_snapshots(
+        _snapshot_rows_from_results(
+            request_id=execution.request_id,
+            ranking_stage="semantic_before_rerank",
+            results=execution.results,
+            rerank_scores={},
+        )
+    )
+    repository.insert_result_snapshots(
+        _snapshot_rows_from_results(
+            request_id=execution.request_id,
+            ranking_stage="after_rerank",
+            results=reranked_results,
+            rerank_scores={
+                item.result.canonical_product_key: item.rerank_score for item in reranked_items
+            },
+        )
+    )
+    repository.insert_expansion_event(
+        expansion_event_id=str(uuid4()),
+        request_id=execution.request_id,
+        prompt_template_key="expansion-default",
+        prompt_template_version="v1",
+        expanded_query_text=expansion_outcome.expanded_query_text,
+        extracted_filters=expansion_outcome.extracted_filters,
+        confidence=expansion_outcome.confidence,
+        heuristic_reason=expansion_outcome.heuristic_reason,
+        applied=bool(expansion_outcome.applied and not suppress_expansion),
+    )
+    return execution.request_id
+
+
+def _search_payload_to_context(request: HttpRequest, payload: SearchPayload) -> dict[str, object]:
+    """Map one payload object to template context fields."""
+
+    context: dict[str, object] = {
+        "results": payload.paginated_results,
+        "page_obj": payload.page_obj,
+        "request_id": payload.request_id,
+        "query_text": payload.query_text,
+        "query_signature_hash": payload.query_signature_hash,
+        "active_filter_chips": payload.active_filter_chips,
+        "expansion_chips": payload.expansion_chips,
+        "expansion_applied": payload.expansion_applied,
+        "show_without_expansion_url": payload.show_without_expansion_url,
+        "rerank_diff_url": payload.rerank_diff_url,
+        "prompt_lab_url": payload.prompt_lab_url,
+        "low_confidence": payload.low_confidence,
+        "summary_url": (
+            _summary_url(
+                request_id=payload.request_id,
+                query_signature_hash=payload.query_signature_hash,
+                query_text=payload.query_text,
+                template_key="summary-default",
+                template_version="v1",
+            )
+            if payload.all_results
+            else None
+        ),
+    }
+    context.update(_build_pagination_context(request, payload.page_obj))
+    return context
 
 
 def _build_filters(cleaned_data: dict[str, object]) -> RetrievalFilters:
@@ -544,7 +791,10 @@ def _build_pagination_context(
 def _page_url(request: HttpRequest, page_number: int) -> str:
     query = request.GET.copy()
     query["page"] = str(page_number)
-    return f"{request.path}?{query.urlencode()}"
+    path = request.path
+    if path.endswith("/search/results"):
+        path = "/"
+    return f"{path}?{query.urlencode()}"
 
 
 def _apply_expanded_filters(
@@ -635,6 +885,149 @@ def _rerank_diff_url(request_id: str) -> str:
 def _prompt_lab_url(request_id: str, query_text: str) -> str:
     query = urlencode({"request_id": request_id, "query_text": query_text})
     return f"/prompt-lab?{query}"
+
+
+def _summary_url(
+    *,
+    request_id: str,
+    query_signature_hash: str,
+    query_text: str,
+    template_key: str,
+    template_version: str,
+) -> str:
+    query = urlencode(
+        {
+            "request_id": request_id,
+            "query_signature_hash": query_signature_hash,
+            "query_text": query_text,
+            "summary_template_key": template_key,
+            "summary_template_version": template_version,
+        }
+    )
+    return f"/search/summary?{query}"
+
+
+def _query_signature_hash(*, cleaned_data: dict[str, object], suppress: bool) -> str:
+    payload = {
+        "query_text": _to_optional_str(cleaned_data.get("query_text")),
+        "expansion_mode": _to_expansion_mode(cleaned_data.get("expansion_mode")),
+        "category": _to_optional_str(cleaned_data.get("category")),
+        "include_keyword": _to_optional_str(cleaned_data.get("include_keyword")),
+        "exclude_keyword": _to_optional_str(cleaned_data.get("exclude_keyword")),
+        "sort": _to_sort_mode(cleaned_data.get("sort")),
+        "min_price_eur": _to_optional_float(cleaned_data.get("min_price_eur")),
+        "max_price_eur": _to_optional_float(cleaned_data.get("max_price_eur")),
+        "exact_dimensions": bool(cleaned_data.get("exact_dimensions")),
+        "width_exact_cm": _to_optional_float(cleaned_data.get("width_exact_cm")),
+        "width_min_cm": _to_optional_float(cleaned_data.get("width_min_cm")),
+        "width_max_cm": _to_optional_float(cleaned_data.get("width_max_cm")),
+        "depth_exact_cm": _to_optional_float(cleaned_data.get("depth_exact_cm")),
+        "depth_min_cm": _to_optional_float(cleaned_data.get("depth_min_cm")),
+        "depth_max_cm": _to_optional_float(cleaned_data.get("depth_max_cm")),
+        "height_exact_cm": _to_optional_float(cleaned_data.get("height_exact_cm")),
+        "height_min_cm": _to_optional_float(cleaned_data.get("height_min_cm")),
+        "height_max_cm": _to_optional_float(cleaned_data.get("height_max_cm")),
+        "show_without_expansion": suppress,
+    }
+    serialized = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _query_cache_config_hash() -> str:
+    settings = get_settings()
+    payload = {
+        "embedding_model": settings.gemini_model,
+        "embedding_dimensions": settings.embedding_dimensions,
+        "rerank_backend": settings.rerank_backend,
+        "rerank_enabled": settings.rerank_enabled,
+        "rerank_model_name": settings.rerank_model_name,
+        "rerank_candidate_limit": settings.rerank_candidate_limit,
+        "result_limit": max(200, settings.default_query_limit),
+    }
+    serialized = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _resultset_hash(candidates: tuple[tuple[str, str], ...]) -> str:
+    serialized = json.dumps(candidates, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _summary_config_hash(*, template_key: str, template_version: str) -> str:
+    settings = get_settings()
+    payload = {
+        "template_key": template_key,
+        "template_version": template_version,
+        "model_name": settings.gemini_generation_model,
+        "schema_version": 2,
+    }
+    serialized = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _summary_cache_key(
+    *, query_signature_hash: str, resultset_hash: str, summary_config_hash: str
+) -> str:
+    seed = f"{query_signature_hash}:{resultset_hash}:{summary_config_hash}"
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+
+def _sanitize_summary_items(
+    *, parsed: SearchSummaryResponse, candidates: tuple[tuple[str, str], ...]
+) -> SearchSummaryResponse | None:
+    """Normalize cached summary items to known candidate IDs and names only."""
+
+    candidate_name_by_key = dict(candidates)
+    items = []
+    for item in parsed.items:
+        name = candidate_name_by_key.get(item.canonical_product_key)
+        if name is None:
+            continue
+        items.append(
+            {
+                "canonical_product_key": item.canonical_product_key,
+                "item_name": name,
+                "why": item.why,
+            }
+        )
+    if not items:
+        return None
+    return SearchSummaryResponse(summary=parsed.summary, items=items)
+
+
+def _load_cached_summary(
+    *,
+    repository: Phase3Repository,
+    summary_json: str | None,
+    summary_cache_key: str,
+    request_id: str,
+    query_signature_hash: str,
+    resultset_hash: str,
+    summary_config_hash: str,
+    candidates: tuple[tuple[str, str], ...],
+) -> SearchSummaryResponse | None:
+    """Load cached summary, sanitize candidate IDs/names, and re-cache if normalized."""
+
+    if summary_json is None:
+        return None
+    try:
+        parsed = SearchSummaryResponse.model_validate_json(summary_json)
+    except ValidationError:
+        return None
+    sanitized = _sanitize_summary_items(parsed=parsed, candidates=candidates)
+    if sanitized is None:
+        return None
+    if sanitized.model_dump_json() != summary_json:
+        repository.upsert_summary_cache(
+            summary_cache_key=summary_cache_key,
+            request_id=request_id,
+            query_signature_hash=query_signature_hash,
+            resultset_hash=resultset_hash,
+            summary_config_hash=summary_config_hash,
+            summary_json=sanitized.model_dump_json(),
+            ttl_hours=24,
+        )
+    return sanitized
 
 
 def _conversation_url(conversation_id: str) -> str:
