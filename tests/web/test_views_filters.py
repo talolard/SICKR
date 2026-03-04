@@ -83,9 +83,21 @@ def test_build_pagination_context_preserves_existing_query_params() -> None:
     context = _build_pagination_context(request, page_obj)
 
     assert context["has_pagination"] is True
-    assert context["prev_page_url"] == (
-        "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=1"
-    )
-    assert context["next_page_url"] == (
-        "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=3"
+    page_links = context["page_links"]
+    assert page_links == (
+        {
+            "number": 1,
+            "url": "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=1",
+            "is_current": False,
+        },
+        {
+            "number": 2,
+            "url": "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=2",
+            "is_current": True,
+        },
+        {
+            "number": 3,
+            "url": "/?query_text=Closet&exclude_keyword=frame&min_price_eur=10&page=3",
+            "is_current": False,
+        },
     )

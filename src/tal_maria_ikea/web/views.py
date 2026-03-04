@@ -41,8 +41,7 @@ class SearchView(TemplateView):
                 "results": [],
                 "page_obj": None,
                 "has_pagination": False,
-                "prev_page_url": None,
-                "next_page_url": None,
+                "page_links": (),
                 "low_confidence": False,
                 "shortlist": shortlist_service.get_state().items,
                 "active_filter_chips": (),
@@ -269,14 +268,19 @@ def _is_low_confidence(results: list[RetrievalResult], threshold: float | None =
 
 def _build_pagination_context(
     request: HttpRequest, page_obj: Page[RetrievalResult]
-) -> dict[str, str | bool | None]:
+) -> dict[str, bool | tuple[dict[str, int | str | bool], ...]]:
     has_pagination = bool(page_obj.paginator.num_pages > 1)
+    page_links = tuple(
+        {
+            "number": page_number,
+            "url": _page_url(request, page_number),
+            "is_current": bool(page_number == page_obj.number),
+        }
+        for page_number in page_obj.paginator.page_range
+    )
     return {
         "has_pagination": has_pagination,
-        "prev_page_url": (
-            _page_url(request, page_obj.previous_page_number()) if page_obj.has_previous() else None
-        ),
-        "next_page_url": _page_url(request, page_obj.next_page_number()) if page_obj.has_next() else None,
+        "page_links": page_links,
     }
 
 

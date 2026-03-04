@@ -109,23 +109,15 @@
           {% if has_pagination %}
             <nav class="pager-inline" aria-label="Results pagination">
               <ul class="uk-pagination uk-margin-remove">
-                <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
-                  {% if prev_page_url %}
-                    <a href="{{ prev_page_url }}">Previous</a>
-                  {% else %}
-                    <span>Previous</span>
-                  {% endif %}
-                </li>
-                <li class="uk-active">
-                  <span aria-current="page">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-                </li>
-                <li class="{% if not next_page_url %}uk-disabled{% endif %}">
-                  {% if next_page_url %}
-                    <a href="{{ next_page_url }}">Next</a>
-                  {% else %}
-                    <span>Next</span>
-                  {% endif %}
-                </li>
+                {% for link in page_links %}
+                  <li class="{% if link.is_current %}uk-active{% endif %}">
+                    {% if link.is_current %}
+                      <span aria-current="page">{{ link.number }}</span>
+                    {% else %}
+                      <a href="{{ link.url }}">{{ link.number }}</a>
+                    {% endif %}
+                  </li>
+                {% endfor %}
               </ul>
             </nav>
           {% endif %}
@@ -165,23 +157,15 @@
       {% if has_pagination %}
         <nav class="pager-dock" aria-label="Sticky results pagination">
           <ul class="uk-pagination uk-margin-remove uk-flex-center">
-            <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
-              {% if prev_page_url %}
-                <a href="{{ prev_page_url }}">Previous</a>
-              {% else %}
-                <span>Previous</span>
-              {% endif %}
-            </li>
-            <li class="uk-active">
-              <span aria-current="page">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-            </li>
-            <li class="{% if not next_page_url %}uk-disabled{% endif %}">
-              {% if next_page_url %}
-                <a href="{{ next_page_url }}">Next</a>
-              {% else %}
-                <span>Next</span>
-              {% endif %}
-            </li>
+            {% for link in page_links %}
+              <li class="{% if link.is_current %}uk-active{% endif %}">
+                {% if link.is_current %}
+                  <span aria-current="page">{{ link.number }}</span>
+                {% else %}
+                  <a href="{{ link.url }}">{{ link.number }}</a>
+                {% endif %}
+              </li>
+            {% endfor %}
           </ul>
         </nav>
       {% endif %}
