@@ -153,6 +153,7 @@ def test_prompt_conversation_and_ratings_roundtrip() -> None:
             status="ok",
             latency_ms=210,
             error_message=None,
+            generation_config_json='{"system_instruction":"You are a helper."}',
         )
     )
     repository.upsert_conversation_thread(
@@ -215,13 +216,14 @@ def test_prompt_conversation_and_ratings_roundtrip() -> None:
         """
         SELECT
             (SELECT COUNT(*) FROM app.prompt_run),
+            (SELECT generation_config_json FROM app.prompt_run WHERE prompt_run_id = 'run-1'),
             (SELECT COUNT(*) FROM app.prompt_response_turn),
             (SELECT COUNT(*) FROM app.conversation_message),
             (SELECT COUNT(*) FROM app.feedback_turn_rating),
             (SELECT COUNT(*) FROM app.feedback_item_rating)
         """
     ).fetchone()
-    assert counts == (1, 1, 1, 1, 1)
+    assert counts == (1, '{"system_instruction":"You are a helper."}', 1, 1, 1, 1)
     threads = repository.list_conversation_threads(limit=10)
     assert len(threads) == 1
     messages = repository.list_conversation_messages(conversation_id="conv-1", limit=10)

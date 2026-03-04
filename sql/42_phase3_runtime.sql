@@ -54,8 +54,11 @@ CREATE TABLE IF NOT EXISTS app.prompt_run (
     status VARCHAR NOT NULL,
     latency_ms BIGINT,
     error_message VARCHAR,
+    generation_config_json VARCHAR,
     created_at TIMESTAMP DEFAULT now()
 );
+
+ALTER TABLE app.prompt_run ADD COLUMN IF NOT EXISTS generation_config_json VARCHAR;
 
 CREATE TABLE IF NOT EXISTS app.prompt_response_turn (
     turn_id VARCHAR PRIMARY KEY,

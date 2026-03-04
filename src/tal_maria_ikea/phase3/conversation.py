@@ -66,12 +66,7 @@ class ConversationService:
         history_text = "\n".join(
             f"{message.role}: {message.content_text}" for message in history[-10:]
         )
-        prompt = (
-            "You are assisting a user with IKEA recommendations. Use conversation context.\n"
-            f"{history_text}\n"
-            f"user: {user_message}\n"
-            "assistant:"
-        )
+        system_instruction = _build_follow_up_system_instruction(history_text=history_text)
         client = build_generation_client(
             EmbeddingClientConfig(
                 project_id=self._settings.gcp_project_id,
@@ -82,8 +77,27 @@ class ConversationService:
         )
         response = client.models.generate_content(
             model=self._settings.gemini_generation_model,
-            contents=prompt,
+            contents=user_message,
+            config={"system_instruction": system_instruction},
         )
         if response.text is None:
             return "No follow-up response generated."
         return response.text.strip()
+
+
+def _build_follow_up_system_instruction(*, history_text: str) -> str:
+    """Build system instruction for follow-up replies with clear constraints."""
+
+    return (
+        "You are an IKEA shopping assistant.\n"
+        "Goal: answer the user's follow-up using only information in the conversation.\n"
+        "Rules:\n"
+        "1) Be concise and practical (3-6 sentences).\n"
+        "2) If information is missing, state uncertainty and ask one clarifying question.\n"
+        "3) Prefer concrete tradeoffs: size, budget, style, and placement.\n"
+        "4) Do not claim unavailable product facts.\n"
+        "5) End with one actionable next step.\n"
+        "\n"
+        "Conversation history (oldest to newest):\n"
+        f"{history_text}\n"
+    )

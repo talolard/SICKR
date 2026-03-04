@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tal_maria_ikea.web.project.settings")
 
 import django
 from django.contrib.auth import get_user_model
@@ -38,10 +41,12 @@ def main() -> None:
     parser.add_argument("--port", default="8000")
     args = parser.parse_args()
 
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tal_maria_ikea.web.project.settings")
     execute_from_command_line(["manage.py", "migrate", "--noinput"])
     django.setup()
+
     _ensure_local_admin_user()
+    bootstrap_module = importlib.import_module("tal_maria_ikea.web.bootstrap")
+    bootstrap_module.ensure_default_prompt_templates()
     execute_from_command_line(["manage.py", "runserver", f"{args.host}:{args.port}"])
 
 

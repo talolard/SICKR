@@ -55,6 +55,7 @@ class PromptRunEvent:
     status: str
     latency_ms: int | None
     error_message: str | None
+    generation_config_json: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,8 +296,9 @@ class Phase3Repository:
                 status,
                 latency_ms,
                 error_message,
+                generation_config_json,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
             """,
             [
                 event.prompt_run_id,
@@ -311,6 +313,7 @@ class Phase3Repository:
                 event.status,
                 event.latency_ms,
                 event.error_message,
+                event.generation_config_json,
             ],
         )
 

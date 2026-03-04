@@ -129,11 +129,7 @@ class QueryExpansionService:
         if not _gemini_available():
             return None
 
-        prompt = (
-            "Extract structured shopping filters from the user query for IKEA search. "
-            "Return JSON only. Keep unknown fields null. "
-            f"User query: {query_text}"
-        )
+        system_instruction = _build_expansion_system_instruction()
         client = build_generation_client(
             EmbeddingClientConfig(
                 project_id=self._settings.gcp_project_id,
@@ -144,8 +140,9 @@ class QueryExpansionService:
         )
         response = client.models.generate_content(
             model=self._settings.gemini_generation_model,
-            contents=prompt,
+            contents=query_text,
             config={
+                "system_instruction": system_instruction,
                 "response_mime_type": "application/json",
                 "response_json_schema": GeminiExpansionOutput.model_json_schema(),
             },
@@ -153,6 +150,50 @@ class QueryExpansionService:
         if response.text is None:
             return None
         return GeminiExpansionOutput.model_validate_json(response.text)
+
+
+def _build_expansion_system_instruction() -> str:
+    """Build a deterministic system instruction for structured expansion extraction."""
+
+    return (
+        "You are a structured extraction assistant for IKEA e-commerce search.\n"
+        "Task: extract normalized filters from one user query.\n"
+        "Output requirements:\n"
+        "1) Output must match the provided JSON schema.\n"
+        "2) Use null for unknown or missing fields.\n"
+        "3) Keep expanded_query_text short and faithful to user intent.\n"
+        "4) confidence must be between 0 and 1.\n"
+        "5) rationale should be one short sentence.\n"
+        "6) Do not invent unsupported constraints.\n"
+        "\n"
+        "Valid category examples: lighting, sofas-armchairs, tables-desks, "
+        "beds, storage-organisation, home-textiles.\n"
+        "\n"
+        "Few-shot examples:\n"
+        'Input: "tall lamp under 100 eur"\n'
+        "Output idea: {"
+        '"expanded_query_text":"tall floor lamp under 100 eur",'
+        '"category":"lighting",'
+        '"include_keyword":"floor lamp",'
+        '"exclude_keyword":null,'
+        '"width_max_cm":null,'
+        '"min_price_eur":null,'
+        '"max_price_eur":100.0,'
+        '"confidence":0.88,'
+        '"rationale":"User specifies lamp category and price ceiling."}\n'
+        "\n"
+        'Input: "white desk 120 cm wide"\n'
+        "Output idea: {"
+        '"expanded_query_text":"white desk width 120 cm",'
+        '"category":"tables-desks",'
+        '"include_keyword":"white",'
+        '"exclude_keyword":null,'
+        '"width_max_cm":120.0,'
+        '"min_price_eur":null,'
+        '"max_price_eur":null,'
+        '"confidence":0.84,'
+        '"rationale":"User specifies desk category and width constraint."}\n'
+    )
 
 
 def _filters_from_gemini(output: GeminiExpansionOutput) -> dict[str, Any]:

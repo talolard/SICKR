@@ -174,16 +174,16 @@ def _generate_batch(
             api_key=settings.gemini_api_key,
         )
     )
-    prompt_text = _build_prompt(
-        batch_size=batch_size,
-        prompt_version=prompt_version,
-        round_index=round_index,
-        request_index=request_index,
-    )
     response = client.models.generate_content(
         model=settings.gemini_generation_model,
-        contents=prompt_text,
+        contents=_build_prompt_user_message(
+            batch_size=batch_size,
+            prompt_version=prompt_version,
+            round_index=round_index,
+            request_index=request_index,
+        ),
         config={
+            "system_instruction": _build_prompt_system_instruction(batch_size=batch_size),
             "response_mime_type": "application/json",
             "response_json_schema": GeneratedQueryResponse.model_json_schema(),
         },
@@ -198,14 +198,54 @@ def _generate_batch(
 def _build_prompt(
     batch_size: int, prompt_version: str, round_index: int, request_index: int
 ) -> str:
+    system_instruction = _build_prompt_system_instruction(batch_size=batch_size)
+    user_message = _build_prompt_user_message(
+        batch_size=batch_size,
+        prompt_version=prompt_version,
+        round_index=round_index,
+        request_index=request_index,
+    )
+    return f"{system_instruction}\n\n{user_message}"
+
+
+def _build_prompt_system_instruction(batch_size: int) -> str:
+    """Return system instruction for structured eval query generation."""
+
     return (
-        "Generate natural-language IKEA shopping search queries for semantic retrieval. "
-        "Return concise user-style search text. Include categories such as storage, sofas, "
-        "lighting, desks, beds, and dining furniture. Include dimensions and style intents "
-        "where useful. Avoid duplicates. "
-        f"Return exactly {batch_size} items. "
-        f"Prompt version: {prompt_version}. "
-        f"Batch round: {round_index + 1}. Request: {request_index + 1}."
+        "You generate realistic IKEA shopping search queries for retrieval evaluation.\n"
+        "Output must match the provided JSON schema and contain exactly "
+        f"{batch_size} query objects.\n"
+        "Requirements:\n"
+        "1) query_text should look like real user input (short, natural phrases).\n"
+        "2) Include diverse intents: budget, size constraints, style, room use.\n"
+        "3) Include diverse categories across storage, sofas-armchairs, lighting, "
+        "tables-desks, beds, dining.\n"
+        "4) Avoid duplicates and near-duplicates.\n"
+        "5) category_hint should be a probable catalog category slug when clear, "
+        "otherwise null.\n"
+        "6) intent_kind should be one of: browse, constraint, comparison, style.\n"
+        "\n"
+        "Few-shot examples:\n"
+        '- query_text: "small hallway shoe cabinet under 80 eur"; '
+        'category_hint: "storage-organisation"; intent_kind: "constraint"\n'
+        '- query_text: "minimalist white floor lamp for reading corner"; '
+        'category_hint: "lighting"; intent_kind: "style"\n'
+        '- query_text: "ikea desks with cable management"; '
+        'category_hint: "tables-desks"; intent_kind: "browse"\n'
+    )
+
+
+def _build_prompt_user_message(
+    *, batch_size: int, prompt_version: str, round_index: int, request_index: int
+) -> str:
+    """Return user message for the current eval generation batch."""
+
+    return (
+        "Generate this batch now.\n"
+        f"Required count: {batch_size}\n"
+        f"Prompt version: {prompt_version}\n"
+        f"Batch round: {round_index + 1}\n"
+        f"Request index: {request_index + 1}"
     )
 
 

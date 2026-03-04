@@ -54,9 +54,15 @@ class _RepoStub:
 
 class _ServiceUnderTest(PromptLabService):
     def _generate_summary(  # type: ignore[override]
-        self, *, rendered: str, product_keys: tuple[str, ...]
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        product_keys: tuple[str, ...],
+        generation_config: dict[str, object],
     ) -> SummaryResponse | None:
-        if "fail" in rendered:
+        _ = (user_prompt, generation_config)
+        if "fail" in system_prompt:
             return None
         return SummaryResponse(
             summary="ok",

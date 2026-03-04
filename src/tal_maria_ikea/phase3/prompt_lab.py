@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from django.db.utils import OperationalError, ProgrammingError
 from django.template import Context, Template
+from google.genai import types as genai_types
 from pydantic import BaseModel, Field
 
 from tal_maria_ikea.config import get_settings
@@ -167,7 +168,13 @@ class PromptLabService:
 
         status = "ok"
         error_message: str | None = None
-        response = self._generate_summary(rendered=rendered, product_keys=product_keys)
+        generation_config = _summary_generation_config(system_instruction=rendered)
+        response = self._generate_summary(
+            system_prompt=rendered,
+            user_prompt=user_query,
+            product_keys=product_keys,
+            generation_config=generation_config,
+        )
         if response is None:
             status = "error"
             error_message = "No summary response generated."
@@ -188,6 +195,7 @@ class PromptLabService:
                 status=status,
                 latency_ms=latency_ms,
                 error_message=error_message,
+                generation_config_json=json.dumps(generation_config, sort_keys=True),
             )
         )
         turn_id = str(uuid4())
@@ -222,8 +230,14 @@ class PromptLabService:
         )
 
     def _generate_summary(
-        self, *, rendered: str, product_keys: tuple[str, ...]
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        product_keys: tuple[str, ...],
+        generation_config: genai_types.GenerateContentConfigDict,
     ) -> SummaryResponse | None:
+        _ = system_prompt
         if self._settings.gemini_api_key is None:
             items = tuple(
                 SummaryItem(
@@ -247,12 +261,19 @@ class PromptLabService:
         )
         response = client.models.generate_content(
             model=self._settings.gemini_generation_model,
-            contents=rendered,
-            config={
-                "response_mime_type": "application/json",
-                "response_json_schema": SummaryResponse.model_json_schema(),
-            },
+            contents=user_prompt,
+            config=generation_config,
         )
         if response.text is None:
             return None
         return SummaryResponse.model_validate_json(response.text)
+
+
+def _summary_generation_config(*, system_instruction: str) -> genai_types.GenerateContentConfigDict:
+    """Return serializable generation config for prompt lab summary runs."""
+
+    return {
+        "system_instruction": system_instruction,
+        "response_mime_type": "application/json",
+        "response_json_schema": SummaryResponse.model_json_schema(),
+    }
