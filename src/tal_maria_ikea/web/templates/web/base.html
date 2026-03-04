@@ -25,7 +25,7 @@
       .container {
         max-width: 1100px;
         margin: 0 auto;
-        padding: 1.25rem;
+        padding: 1.25rem 1.25rem 6rem;
       }
       .top-nav {
         display: flex;
@@ -165,38 +165,15 @@
         transform: translateX(-50%);
         bottom: 0.75rem;
         z-index: 30;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: #f8fafc;
+        background: rgba(248, 250, 252, 0.94);
         border: 1px solid #cbd5e1;
-        border-radius: 999px;
-        padding: 0.35rem 0.55rem;
+        border-radius: 12px;
+        padding: 0.25rem 0.6rem;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(2px);
       }
       .pager-dock .uk-pagination {
         margin: 0;
-      }
-      .pager-inline .uk-pagination > li > a,
-      .pager-inline .uk-pagination > li > span,
-      .pager-dock .uk-pagination > li > a,
-      .pager-dock .uk-pagination > li > span {
-        border-radius: 999px;
-        border: 1px solid #cbd5e1;
-        background: #ffffff;
-        color: var(--ink);
-        font-weight: 600;
-        padding: 0.25rem 0.7rem;
-      }
-      .pager-inline .uk-pagination > .uk-active > span,
-      .pager-dock .uk-pagination > .uk-active > span {
-        background: #dbeafe;
-        border-color: #93c5fd;
-        color: #1e3a8a;
-      }
-      .pager-inline .uk-pagination > .uk-disabled > span,
-      .pager-dock .uk-pagination > .uk-disabled > span {
-        opacity: 0.55;
       }
       .result.card {
         margin-bottom: 0;
@@ -272,10 +249,6 @@
           border-radius: 14px;
           left: 0.5rem;
           transform: none;
-        }
-        .pager-dock .uk-pagination > li > a,
-        .pager-dock .uk-pagination > li > span {
-          padding: 0.25rem 0.45rem;
         }
       }
     </style>

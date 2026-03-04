@@ -108,7 +108,7 @@
           <p class="muted">{{ page_obj.paginator.count }} results · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
           {% if has_pagination %}
             <nav class="pager-inline" aria-label="Results pagination">
-              <ul class="uk-pagination">
+              <ul class="uk-pagination uk-margin-remove">
                 <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
                   {% if prev_page_url %}
                     <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
@@ -164,7 +164,7 @@
       </div>
       {% if has_pagination %}
         <nav class="pager-dock" aria-label="Sticky results pagination">
-          <ul class="uk-pagination">
+          <ul class="uk-pagination uk-margin-remove uk-flex-center">
             <li class="{% if not prev_page_url %}uk-disabled{% endif %}">
               {% if prev_page_url %}
                 <a href="{{ prev_page_url }}"><span uk-pagination-previous></span> Previous</a>
