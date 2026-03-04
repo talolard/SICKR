@@ -28,7 +28,11 @@ from tal_maria_ikea.phase3.repository import (
     TurnRatingEvent,
 )
 from tal_maria_ikea.phase3.reranker import RerankerService
-from tal_maria_ikea.phase3.search_summary import SearchSummaryResponse, SearchSummaryService
+from tal_maria_ikea.phase3.search_summary import (
+    SearchSummaryResponse,
+    SearchSummaryService,
+    SummaryCandidateProduct,
+)
 from tal_maria_ikea.retrieval.service import RetrievalService
 from tal_maria_ikea.retrieval.shortlist_service import ShortlistService
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
@@ -115,17 +119,21 @@ class SearchSummaryPartialView(View):
         ranked_results = repository.list_results_for_request(
             request_id=request_id, ranking_stage="after_rerank"
         )
-        candidates = tuple(
-            (result.canonical_product_key, result.product_name) for result in ranked_results[:50]
+        products = tuple(
+            SummaryCandidateProduct(
+                canonical_product_key=result.canonical_product_key,
+                item_name=result.product_name,
+            )
+            for result in ranked_results[:50]
         )
-        if not candidates:
+        if not products:
             return render(
                 request,
                 self.template_name,
                 {"summary": None, "summary_items": (), "summary_status": "no_results"},
             )
 
-        resultset_hash = _resultset_hash(candidates)
+        resultset_hash = _resultset_hash(products)
         summary_config_hash = _summary_config_hash(
             template_key=template_key,
             template_version=template_version,
@@ -148,7 +156,7 @@ class SearchSummaryPartialView(View):
             query_signature_hash=query_signature_hash,
             resultset_hash=resultset_hash,
             summary_config_hash=summary_config_hash,
-            candidates=candidates,
+            products=products,
         )
         if cached is not None:
             return render(
@@ -164,7 +172,7 @@ class SearchSummaryPartialView(View):
         execution = SearchSummaryService(repository).generate(
             request_id=request_id,
             query_text=query_text,
-            candidates=candidates,
+            products=products,
             template_key=template_key,
             template_version=template_version,
         )
@@ -948,8 +956,17 @@ def _query_cache_config_hash() -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _resultset_hash(candidates: tuple[tuple[str, str], ...]) -> str:
-    serialized = json.dumps(candidates, sort_keys=True)
+def _resultset_hash(products: tuple[SummaryCandidateProduct, ...]) -> str:
+    serialized = json.dumps(
+        [
+            {
+                "canonical_product_key": product.canonical_product_key,
+                "item_name": product.item_name,
+            }
+            for product in products
+        ],
+        sort_keys=True,
+    )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -973,11 +990,13 @@ def _summary_cache_key(
 
 
 def _sanitize_summary_items(
-    *, parsed: SearchSummaryResponse, candidates: tuple[tuple[str, str], ...]
+    *, parsed: SearchSummaryResponse, products: tuple[SummaryCandidateProduct, ...]
 ) -> SearchSummaryResponse | None:
     """Normalize cached summary items to known candidate IDs and names only."""
 
-    candidate_name_by_key = dict(candidates)
+    candidate_name_by_key = {
+        product.canonical_product_key: product.item_name for product in products
+    }
     items = []
     for item in parsed.items:
         name = candidate_name_by_key.get(item.canonical_product_key)
@@ -1004,7 +1023,7 @@ def _load_cached_summary(
     query_signature_hash: str,
     resultset_hash: str,
     summary_config_hash: str,
-    candidates: tuple[tuple[str, str], ...],
+    products: tuple[SummaryCandidateProduct, ...],
 ) -> SearchSummaryResponse | None:
     """Load cached summary, sanitize candidate IDs/names, and re-cache if normalized."""
 
@@ -1014,7 +1033,7 @@ def _load_cached_summary(
         parsed = SearchSummaryResponse.model_validate_json(summary_json)
     except ValidationError:
         return None
-    sanitized = _sanitize_summary_items(parsed=parsed, candidates=candidates)
+    sanitized = _sanitize_summary_items(parsed=parsed, products=products)
     if sanitized is None:
         return None
     if sanitized.model_dump_json() != summary_json:

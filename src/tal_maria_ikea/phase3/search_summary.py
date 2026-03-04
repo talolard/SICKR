@@ -45,6 +45,22 @@ class SearchSummaryExecution:
     response: SearchSummaryResponse
 
 
+@dataclass(frozen=True, slots=True)
+class SummaryCandidateProduct:
+    """One product candidate used to build summary model requests."""
+
+    canonical_product_key: str
+    item_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryModelRequest:
+    """Normalized payload passed to generation with explicit system/user prompts."""
+
+    system_prompt: str
+    user_prompt: str
+
+
 class SearchSummaryService:
     """Generate one summary for a search request and persist run telemetry."""
 
@@ -57,7 +73,7 @@ class SearchSummaryService:
         *,
         request_id: str,
         query_text: str,
-        candidates: tuple[tuple[str, str], ...],
+        products: tuple[SummaryCandidateProduct, ...],
         template_key: str,
         template_version: str,
     ) -> SearchSummaryExecution:
@@ -66,8 +82,11 @@ class SearchSummaryService:
         context: dict[str, object] = {
             "user_query": query_text,
             "candidate_items": [
-                {"canonical_product_key": key, "item_name": item_name}
-                for key, item_name in candidates
+                {
+                    "canonical_product_key": product.canonical_product_key,
+                    "item_name": product.item_name,
+                }
+                for product in products
             ],
         }
         rendered_system_prompt = self._render_template(
@@ -75,8 +94,13 @@ class SearchSummaryService:
             template_version=template_version,
             context=context,
         )
+        summary_request = build_summary_request(
+            system_prompt=rendered_system_prompt,
+            user_query=query_text,
+            products=products,
+        )
         generation_config = _search_summary_generation_config(
-            system_instruction=rendered_system_prompt
+            system_instruction=summary_request.system_prompt
         )
         generation_config_json = json.dumps(generation_config, sort_keys=True)
         prompt_hash = hashlib.sha256(rendered_system_prompt.encode("utf-8")).hexdigest()
@@ -87,7 +111,8 @@ class SearchSummaryService:
         prompt_run_id = str(uuid4())
         response = self._generate_response(
             query_text=query_text,
-            candidates=candidates,
+            request=summary_request,
+            products=products,
             generation_config=generation_config,
         )
 
@@ -99,7 +124,7 @@ class SearchSummaryService:
                 variant_version=template_version,
                 rendered_system_prompt=rendered_system_prompt,
                 rendered_prompt_hash=prompt_hash,
-                user_prompt=query_text,
+                user_prompt=summary_request.user_prompt,
                 context_payload_hash=payload_hash,
                 model_name=self._settings.gemini_generation_model,
                 status="ok",
@@ -160,10 +185,11 @@ class SearchSummaryService:
         self,
         *,
         query_text: str,
-        candidates: tuple[tuple[str, str], ...],
+        request: SummaryModelRequest,
+        products: tuple[SummaryCandidateProduct, ...],
         generation_config: genai_types.GenerateContentConfigDict,
     ) -> SearchSummaryResponse:
-        fallback = _fallback_summary(query_text=query_text, candidates=candidates)
+        fallback = _fallback_summary(query_text=query_text, products=products)
         if self._settings.gemini_api_key is None:
             return fallback
 
@@ -177,7 +203,7 @@ class SearchSummaryService:
         )
         response = client.models.generate_content(
             model=self._settings.gemini_generation_model,
-            contents=query_text,
+            contents=request.user_prompt,
             config=generation_config,
         )
         if response.text is None:
@@ -186,7 +212,7 @@ class SearchSummaryService:
             parsed = SearchSummaryResponse.model_validate_json(response.text)
         except ValidationError:
             return fallback
-        sanitized = _sanitize_summary_response(parsed=parsed, candidates=candidates)
+        sanitized = _sanitize_summary_response(parsed=parsed, products=products)
         return sanitized if sanitized is not None else fallback
 
 
@@ -203,11 +229,11 @@ def _search_summary_generation_config(
 
 
 def _fallback_summary(
-    *, query_text: str, candidates: tuple[tuple[str, str], ...]
+    *, query_text: str, products: tuple[SummaryCandidateProduct, ...]
 ) -> SearchSummaryResponse:
     """Return deterministic fallback summary with item IDs and names."""
 
-    top_candidates = candidates[:3]
+    top_candidates = products[:3]
     return SearchSummaryResponse(
         summary=(
             f"Top matches for '{query_text}' are ready. "
@@ -215,21 +241,23 @@ def _fallback_summary(
         ),
         items=[
             SearchSummaryItem(
-                canonical_product_key=key,
-                item_name=item_name,
+                canonical_product_key=product.canonical_product_key,
+                item_name=product.item_name,
                 why="High relevance in reranked results.",
             )
-            for key, item_name in top_candidates
+            for product in top_candidates
         ],
     )
 
 
 def _sanitize_summary_response(
-    *, parsed: SearchSummaryResponse, candidates: tuple[tuple[str, str], ...]
+    *, parsed: SearchSummaryResponse, products: tuple[SummaryCandidateProduct, ...]
 ) -> SearchSummaryResponse | None:
     """Normalize model output to known candidate IDs and names only."""
 
-    candidate_name_by_key = dict(candidates)
+    candidate_name_by_key = {
+        product.canonical_product_key: product.item_name for product in products
+    }
     sanitized_items: list[SearchSummaryItem] = []
     for item in parsed.items:
         expected_name = candidate_name_by_key.get(item.canonical_product_key)
@@ -245,3 +273,26 @@ def _sanitize_summary_response(
     if not sanitized_items:
         return None
     return SearchSummaryResponse(summary=parsed.summary, items=sanitized_items)
+
+
+def build_summary_request(
+    *,
+    system_prompt: str,
+    user_query: str,
+    products: tuple[SummaryCandidateProduct, ...],
+) -> SummaryModelRequest:
+    """Build a strongly typed summary request where products are embedded in user prompt."""
+
+    candidate_lines = [
+        f"- {product.canonical_product_key} | {product.item_name}" for product in products
+    ]
+    user_prompt_lines = [
+        "Candidate products (ID | name):",
+        *candidate_lines,
+        "",
+        f"User query: {user_query}",
+    ]
+    return SummaryModelRequest(
+        system_prompt=system_prompt,
+        user_prompt="\n".join(user_prompt_lines),
+    )
