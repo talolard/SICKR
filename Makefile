@@ -64,7 +64,7 @@ index:
 	uv run python -m tal_maria_ikea.ingest.index $(if $(INDEX_LIMIT),--subset-limit $(INDEX_LIMIT),) $(INDEX_FLAGS)
 
 chat:
-	uv run python -m tal_maria_ikea.chat_app.runserver --host $(HOST) --port $(PORT)
+	uv run uvicorn tal_maria_ikea.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
 
 eval:
 	uv run python -m tal_maria_ikea.eval.run --index-run-id $(EVAL_RUN_ID) --k $(EVAL_K)
