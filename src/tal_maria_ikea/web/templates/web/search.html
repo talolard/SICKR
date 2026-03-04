@@ -108,6 +108,9 @@
     {% if expansion_applied and show_without_expansion_url %}
       <p class="muted"><a href="{{ show_without_expansion_url }}">Show without filters</a></p>
     {% endif %}
+    {% if rerank_diff_url %}
+      <p class="muted"><a href="{{ rerank_diff_url }}">View rerank diff</a></p>
+    {% endif %}
   </section>
 
   {% if low_confidence %}

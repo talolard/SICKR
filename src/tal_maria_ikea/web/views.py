@@ -12,7 +12,12 @@ from django.views.generic import TemplateView
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
-from tal_maria_ikea.phase3.repository import Phase3Repository, SearchRequestEvent
+from tal_maria_ikea.phase3.repository import (
+    Phase3Repository,
+    SearchRequestEvent,
+    SearchResultSnapshotRow,
+)
+from tal_maria_ikea.phase3.reranker import RerankerService
 from tal_maria_ikea.retrieval.service import RetrievalService
 from tal_maria_ikea.retrieval.shortlist_service import ShortlistService
 from tal_maria_ikea.shared.db import connect_db, run_sql_file
@@ -53,6 +58,7 @@ class SearchView(TemplateView):
                 "expansion_chips": (),
                 "expansion_applied": False,
                 "show_without_expansion_url": None,
+                "rerank_diff_url": None,
             }
         )
 
@@ -79,7 +85,11 @@ class SearchView(TemplateView):
             )
             service = RetrievalService()
             execution = service.retrieve_with_trace(request)
-            results = execution.results
+            reranked_items = RerankerService().rerank(
+                query_text=form.cleaned_data["query_text"],
+                results=execution.results,
+            )
+            results = [item.result for item in reranked_items]
             paginator = Paginator(results, settings.default_query_limit)
             page_obj = paginator.get_page(page)
             context["results"] = list(page_obj.object_list)
@@ -94,6 +104,7 @@ class SearchView(TemplateView):
                 expansion_outcome.applied and not suppress_expansion
             )
             context["show_without_expansion_url"] = _show_without_expansion_url(self.request)
+            context["rerank_diff_url"] = _rerank_diff_url(execution.request_id)
             context["low_confidence"] = _is_low_confidence(
                 results,
                 threshold=settings.retrieval_low_confidence_threshold,
@@ -108,9 +119,28 @@ class SearchView(TemplateView):
                     expansion_mode=expansion_mode,
                     expansion_applied=bool(expansion_outcome.applied and not suppress_expansion),
                     filter_timing_mode="embed_then_filter",
-                    rerank_enabled=False,
+                    rerank_enabled=True,
                     request_source="web",
                     latency_ms=execution.latency_ms,
+                )
+            )
+            phase3_repository.insert_result_snapshots(
+                _snapshot_rows_from_results(
+                    request_id=execution.request_id,
+                    ranking_stage="semantic_before_rerank",
+                    results=execution.results,
+                    rerank_scores={},
+                )
+            )
+            phase3_repository.insert_result_snapshots(
+                _snapshot_rows_from_results(
+                    request_id=execution.request_id,
+                    ranking_stage="after_rerank",
+                    results=results,
+                    rerank_scores={
+                        item.result.canonical_product_key: item.rerank_score
+                        for item in reranked_items
+                    },
                 )
             )
             phase3_repository.insert_expansion_event(
@@ -153,6 +183,22 @@ class StatsView(TemplateView):
 
         context["total_items"] = int(total_items_row[0]) if total_items_row is not None else 0
         context["total_vectors"] = int(total_vectors_row[0]) if total_vectors_row is not None else 0
+        return context
+
+
+class RerankDiffView(TemplateView):
+    """Render before/after ranking diff for a query request ID."""
+
+    template_name = "web/rerank_diff.html"
+
+    def get_context_data(self, **kwargs: object) -> dict[str, object]:
+        """Load and expose rank-diff rows for one request."""
+
+        context = super().get_context_data(**kwargs)
+        request_id = str(kwargs["request_id"])
+        rows = _phase3_repository().list_result_diff(request_id=request_id)
+        context["request_id"] = request_id
+        context["rows"] = rows
         return context
 
 
@@ -422,3 +468,29 @@ def _session_ref(request: HttpRequest) -> str:
         return str(key)
     session.save()
     return str(session.session_key)
+
+
+def _snapshot_rows_from_results(
+    *,
+    request_id: str,
+    ranking_stage: str,
+    results: list[RetrievalResult],
+    rerank_scores: dict[str, float],
+) -> tuple[SearchResultSnapshotRow, ...]:
+    return tuple(
+        SearchResultSnapshotRow(
+            snapshot_id=str(uuid4()),
+            request_id=request_id,
+            ranking_stage=ranking_stage,
+            rank_position=index + 1,
+            canonical_product_key=result.canonical_product_key,
+            semantic_score=result.semantic_score,
+            rerank_score=rerank_scores.get(result.canonical_product_key),
+            score_explanation=result.rank_explanation,
+        )
+        for index, result in enumerate(results)
+    )
+
+
+def _rerank_diff_url(request_id: str) -> str:
+    return f"/analysis/rerank-diff/{request_id}"

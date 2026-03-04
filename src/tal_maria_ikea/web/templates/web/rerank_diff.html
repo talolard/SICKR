@@ -1,0 +1,48 @@
+{% extends "web/base.html" %}
+
+{% block title %}Rerank Diff{% endblock %}
+
+{% block content %}
+  <h1>Rerank Diff</h1>
+  <p class="muted">Request ID: {{ request_id }}</p>
+
+  <section class="card">
+    {% if rows %}
+      <table class="uk-table uk-table-divider uk-table-small">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Rank Before</th>
+            <th>Rank After</th>
+            <th>Delta</th>
+            <th>Semantic Score</th>
+            <th>Rerank Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.0 }}</td>
+              <td>{{ row.1 }}</td>
+              <td>{{ row.2 }}</td>
+              <td>
+                {% if row.5 > 0 %}
+                  <span style="color:#166534;">▲ {{ row.5 }}</span>
+                {% elif row.5 < 0 %}
+                  <span style="color:#991b1b;">▼ {{ row.5|add:"0" }}</span>
+                {% else %}
+                  <span class="muted">0</span>
+                {% endif %}
+              </td>
+              <td>{{ row.3|default:"-" }}</td>
+              <td>{{ row.4|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No snapshot rows found for this request.</p>
+    {% endif %}
+  </section>
+{% endblock %}
+
