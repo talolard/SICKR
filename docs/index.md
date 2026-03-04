@@ -15,6 +15,10 @@ Current phase is infrastructure and workflow setup only.
 - [Web Runbook](web.md)
 - [Eval Runbook](eval.md)
 
+## Phase 3 Planning
+- Architecture snapshot: `spec/phase3/current_architecture.md`
+- Implementation plan: `spec/phase3/phase3_implementation_plan.md`
+
 ## Data Documentation
 - [Data Model and Schema](data/index.md)
 - [Data Patterns](data/data_patterns.md)
