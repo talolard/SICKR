@@ -120,14 +120,10 @@
     {% if expansion_applied and show_without_expansion_url %}
       <p class="muted"><a href="{{ show_without_expansion_url }}">Show without filters</a></p>
     {% endif %}
-    {% if rerank_diff_url %}
-      <p class="muted"><a href="{{ rerank_diff_url }}">View rerank diff</a></p>
-    {% endif %}
     {% if prompt_lab_url %}
       <div class="actions">
         <a class="btn btn-secondary" href="{{ prompt_lab_url }}">See AI summary</a>
       </div>
-      <p class="muted"><a href="{{ prompt_lab_url }}">Compare prompt variants</a></p>
     {% endif %}
   </section>
 

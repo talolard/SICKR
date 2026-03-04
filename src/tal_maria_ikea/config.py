@@ -48,7 +48,7 @@ class AppSettings(BaseSettings):
     vss_metric: str = Field(default="cosine")
     retrieval_low_confidence_threshold: float = Field(default=0.15)
     rerank_enabled: bool = Field(default=True)
-    rerank_backend: str = Field(default="lexical")
+    rerank_backend: str = Field(default="transformer")
     rerank_candidate_limit: int = Field(default=100, ge=10, le=500)
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     django_secret_key: str = Field(default="dev-only-secret")
