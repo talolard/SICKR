@@ -7,11 +7,12 @@
   <p class="muted">Request ID: {{ request_id }}</p>
 
   <section class="card">
-    {% if rows %}
+    {% if rows or unchanged_count > 0 %}
       <table class="uk-table uk-table-divider uk-table-small">
         <thead>
           <tr>
             <th>Product</th>
+            <th>Description</th>
             <th>Rank Before</th>
             <th>Rank After</th>
             <th>Delta</th>
@@ -22,22 +23,31 @@
         <tbody>
           {% for row in rows %}
             <tr>
-              <td>{{ row.0 }}</td>
-              <td>{{ row.1 }}</td>
-              <td>{{ row.2 }}</td>
               <td>
-                {% if row.5 > 0 %}
-                  <span style="color:#166534;">▲ {{ row.5 }}</span>
-                {% elif row.5 < 0 %}
-                  <span style="color:#991b1b;">▼ {{ row.5|add:"0" }}</span>
+                <div><strong>{{ row.product_name|default:"(unknown product)" }}</strong></div>
+                <div class="muted">{{ row.canonical_product_key }}</div>
+              </td>
+              <td>{{ row.description_text|default:"-" }}</td>
+              <td>{{ row.rank_before }}</td>
+              <td>{{ row.rank_after }}</td>
+              <td>
+                {% if row.rank_delta > 0 %}
+                  <span style="color:#166534;">▲ {{ row.rank_delta }}</span>
+                {% elif row.rank_delta < 0 %}
+                  <span style="color:#991b1b;">▼ {{ row.rank_delta|add:"0" }}</span>
                 {% else %}
                   <span class="muted">0</span>
                 {% endif %}
               </td>
-              <td>{{ row.3|default:"-" }}</td>
-              <td>{{ row.4|default:"-" }}</td>
+              <td>{{ row.semantic_score|floatformat:4|default:"-" }}</td>
+              <td>{{ row.rerank_score|floatformat:4|default:"-" }}</td>
             </tr>
           {% endfor %}
+          {% if unchanged_count > 0 %}
+            <tr>
+              <td colspan="7" class="muted">{{ unchanged_count }} items unchanged</td>
+            </tr>
+          {% endif %}
         </tbody>
       </table>
     {% else %}
@@ -45,4 +55,3 @@
     {% endif %}
   </section>
 {% endblock %}
-

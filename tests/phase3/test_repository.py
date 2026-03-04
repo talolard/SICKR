@@ -11,6 +11,7 @@ from tal_maria_ikea.phase3.repository import (
     Phase3Repository,
     PromptRunEvent,
     PromptTurnEvent,
+    ResultDiffRow,
     SearchRequestEvent,
     SearchResultSnapshotRow,
     TurnRatingEvent,
@@ -78,6 +79,19 @@ def test_result_snapshots_and_diff_view() -> None:
     connection = duckdb.connect(":memory:")
     _setup_schema(connection)
     repository = Phase3Repository(connection)
+    connection.execute(
+        """
+        INSERT INTO app.products_canonical (
+            canonical_product_key,
+            product_id,
+            unique_id,
+            country,
+            product_name,
+            product_type,
+            description_text
+        ) VALUES ('1-DE', 1, 'uid-1', 'Germany', 'Lamp', 'Floor lamp', 'Warm light')
+        """
+    )
 
     repository.insert_result_snapshots(
         [
@@ -105,7 +119,18 @@ def test_result_snapshots_and_diff_view() -> None:
     )
 
     diff_rows = repository.list_result_diff("req-2")
-    assert diff_rows == [("1-DE", 1, 2, 0.88, 0.42, -1)]
+    assert diff_rows == (
+        ResultDiffRow(
+            canonical_product_key="1-DE",
+            product_name="Lamp",
+            description_text="Warm light",
+            rank_before=1,
+            rank_after=2,
+            semantic_score=0.88,
+            rerank_score=0.42,
+            rank_delta=-1,
+        ),
+    )
     assert repository.list_result_keys_for_request("req-2", limit=5) == ("1-DE",)
 
 

@@ -18,6 +18,7 @@ from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
 from tal_maria_ikea.phase3.repository import (
     ItemRatingEvent,
     Phase3Repository,
+    ResultDiffRow,
     SearchRequestEvent,
     SearchResultSnapshotRow,
     TurnRatingEvent,
@@ -216,8 +217,10 @@ class RerankDiffView(TemplateView):
         context = super().get_context_data(**kwargs)
         request_id = str(kwargs["request_id"])
         rows = _phase3_repository().list_result_diff(request_id=request_id)
+        changed_rows, unchanged_count = _split_changed_and_unchanged(rows)
         context["request_id"] = request_id
-        context["rows"] = rows
+        context["rows"] = changed_rows
+        context["unchanged_count"] = unchanged_count
         return context
 
 
@@ -649,3 +652,11 @@ def _prompt_lab_redirect(request: HttpRequest) -> str:
     request_id = _to_optional_str(request.POST.get("request_id")) or ""
     query_text = _to_optional_str(request.POST.get("query_text")) or ""
     return _prompt_lab_url(request_id=request_id, query_text=query_text)
+
+
+def _split_changed_and_unchanged(
+    rows: tuple[ResultDiffRow, ...],
+) -> tuple[tuple[ResultDiffRow, ...], int]:
+    changed_rows = tuple(row for row in rows if row.rank_delta != 0)
+    unchanged_count = len(rows) - len(changed_rows)
+    return changed_rows, unchanged_count

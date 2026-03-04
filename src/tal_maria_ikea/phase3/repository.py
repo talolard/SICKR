@@ -144,6 +144,20 @@ class ItemRatingEvent:
     session_ref: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ResultDiffRow:
+    """Read model for one before/after rerank delta row."""
+
+    canonical_product_key: str
+    product_name: str | None
+    description_text: str | None
+    rank_before: int
+    rank_after: int
+    semantic_score: float | None
+    rerank_score: float | None
+    rank_delta: int
+
+
 class Phase3Repository:
     """Persistence operations for Phase 3 event and conversation tables."""
 
@@ -436,38 +450,43 @@ class Phase3Repository:
             ],
         )
 
-    def list_result_diff(
-        self, request_id: str
-    ) -> list[tuple[str, int, int, float | None, float | None, int]]:
+    def list_result_diff(self, request_id: str) -> tuple[ResultDiffRow, ...]:
         """Return before/after ranking deltas for one request ID."""
 
         rows = self._connection.execute(
             """
             SELECT
-                canonical_product_key,
-                rank_before,
-                rank_after,
-                semantic_score,
-                rerank_score,
-                rank_delta
-            FROM app.search_result_diff
-            WHERE request_id = ?
-            ORDER BY rank_after ASC, canonical_product_key ASC
+                diff.canonical_product_key,
+                product.product_name,
+                product.description_text,
+                diff.rank_before,
+                diff.rank_after,
+                diff.semantic_score,
+                diff.rerank_score,
+                diff.rank_delta
+            FROM app.search_result_diff AS diff
+            LEFT JOIN app.products_canonical AS product
+              ON product.canonical_product_key = diff.canonical_product_key
+             AND product.country = 'Germany'
+            WHERE diff.request_id = ?
+            ORDER BY diff.rank_after ASC, diff.canonical_product_key ASC
             """,
             [request_id],
         ).fetchall()
 
-        return [
-            (
-                str(row[0]),
-                int(row[1]),
-                int(row[2]),
-                _float_or_none(row[3]),
-                _float_or_none(row[4]),
-                int(row[5]),
+        return tuple(
+            ResultDiffRow(
+                canonical_product_key=str(row[0]),
+                product_name=_str_or_none(row[1]),
+                description_text=_str_or_none(row[2]),
+                rank_before=int(row[3]),
+                rank_after=int(row[4]),
+                semantic_score=_float_or_none(row[5]),
+                rerank_score=_float_or_none(row[6]),
+                rank_delta=int(row[7]),
             )
             for row in rows
-        ]
+        )
 
     def list_result_keys_for_request(self, request_id: str, limit: int = 10) -> tuple[str, ...]:
         """Return top product keys from reranked snapshot rows for one request."""

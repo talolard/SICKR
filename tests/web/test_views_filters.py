@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import HttpRequest, QueryDict
 
+from tal_maria_ikea.phase3.repository import ResultDiffRow
 from tal_maria_ikea.shared.types import RetrievalResult
 from tal_maria_ikea.web.views import (
     _apply_expanded_filters,
@@ -11,6 +12,7 @@ from tal_maria_ikea.web.views import (
     _build_pagination_context,
     _is_low_confidence,
     _parse_reason_tags,
+    _split_changed_and_unchanged,
 )
 
 
@@ -151,3 +153,33 @@ def test_apply_expanded_filters_prefers_user_inputs_when_present() -> None:
 def test_parse_reason_tags_handles_empty_and_commas() -> None:
     assert _parse_reason_tags("") == ()
     assert _parse_reason_tags("helpful, clear,  ") == ("helpful", "clear")
+
+
+def test_split_changed_and_unchanged_collapses_zero_delta_rows() -> None:
+    rows = (
+        ResultDiffRow(
+            canonical_product_key="1-DE",
+            product_name="Lamp",
+            description_text="desc",
+            rank_before=2,
+            rank_after=1,
+            semantic_score=0.9,
+            rerank_score=0.8,
+            rank_delta=1,
+        ),
+        ResultDiffRow(
+            canonical_product_key="2-DE",
+            product_name="Sofa",
+            description_text="desc",
+            rank_before=5,
+            rank_after=5,
+            semantic_score=0.5,
+            rerank_score=0.5,
+            rank_delta=0,
+        ),
+    )
+
+    changed_rows, unchanged_count = _split_changed_and_unchanged(rows)
+
+    assert [row.canonical_product_key for row in changed_rows] == ["1-DE"]
+    assert unchanged_count == 1
