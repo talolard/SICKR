@@ -267,7 +267,7 @@ def _is_low_confidence(results: list[RetrievalResult], threshold: float | None =
 
 
 def _build_pagination_context(
-    request: HttpRequest, page_obj: Page[RetrievalResult]
+    request: HttpRequest, page_obj: Page
 ) -> dict[str, bool | tuple[dict[str, int | str | bool], ...]]:
     has_pagination = bool(page_obj.paginator.num_pages > 1)
     page_links = tuple(

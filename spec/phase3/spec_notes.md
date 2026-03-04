@@ -1,0 +1,19 @@
+- Add a reranker for the user query screen. Something from hf that easily runs on an m1.
+  - Choose a small model from hf that is easy to run locally and relatively quick to download.
+  - Record the before and after rankings in a table with the query, and make a page that visualizes the difference
+  - while planning this, describe the layout of the page, the visual features that will help the user do the comparison.
+  -  
+- Add a gemini generated summary :
+  - When working on prompts, read `external_docs/gemini_prompting_guide.md`
+  - We maintain a db table with a set of systems prompts (Manageable via django admin)
+  - User provides a search query like "Lamps that make a long hallway nice" or "Curtains, rails hangers and anything else to darken my 200x20 window and make it look nice"
+  - The user and system prompt get sent to gemini which returns a structured response with a summary and a list of items, saying why and how they relate
+  - User can respond to that with a follow up question or ask for a more detailed explanation of why a specific item was recommended. Gemini would get the previous context and the follow up question and return a more detailed explanation.
+  - Persist summaries and conversations / show a sidebar linking to them in the ui so users can navigate to them
+  - when you work on this, generate a few system prompt templates, use django templating language, set them up to be able to take data examples from the db (both the user and system prompt). recall we would call gemini with the system prompt, user query and results from the search .
+  - Have a ui way to send the same request using a few different systems prompts so we can compare them and iterate on them., this can be a seperate screen but should be navigable. 
+- Add query expansion (that the user can opt in or out of) so that if a user searches for "Couch 100cm wide less than 100 euro" we populate the relevant filters. Important that in the response the url and the ui show the active filtes as well as a "Show without filters". 
+  - Implement query expansion using gemini, store the system prompt templates in the db as well and send the user query , and make sure to persist the expanded queries and the filters they triggered so we can analyze them later. 
+  - Note that when fetching results, we would get embeddings first and then apply filters, make it configurable whether filters are applied before or after fetching results.
+
+- Before planning, review the current code, write an current_architecture.md file in spec/phase3 and build on top. Where possible, use external packages for common functionality instead of building from scrath .
