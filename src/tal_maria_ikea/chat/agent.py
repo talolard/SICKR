@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
 
 from tal_maria_ikea.chat.graph import (
     ChatGraphDeps,
@@ -22,8 +26,12 @@ def build_chat_agent() -> Agent[ChatGraphDeps, str]:
     """Build the web-chat agent that proxies user requests into the graph."""
 
     settings = get_settings()
+    api_key = settings.gemini_api_key or os.getenv("GOOGLE_API_KEY")
+    model = GoogleModel(
+        settings.gemini_generation_model, provider=GoogleProvider(api_key=api_key)
+    )
     agent = Agent[ChatGraphDeps, str](
-        model=f"google-gla:{settings.gemini_generation_model}",
+        model=model,
         deps_type=ChatGraphDeps,
         instructions=CHAT_AGENT_INSTRUCTIONS,
         output_type=str,
