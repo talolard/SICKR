@@ -197,3 +197,7 @@ def test_prompt_conversation_and_ratings_roundtrip() -> None:
         """
     ).fetchone()
     assert counts == (1, 1, 1, 1, 1)
+    threads = repository.list_conversation_threads(limit=10)
+    assert len(threads) == 1
+    messages = repository.list_conversation_messages(conversation_id="conv-1", limit=10)
+    assert len(messages) == 1

@@ -88,3 +88,10 @@ class ShortlistNoteForm(forms.Form):
     """Optional note when adding shortlist items."""
 
     note = forms.CharField(max_length=300, required=False)
+
+
+class FollowUpForm(forms.Form):
+    """Conversation follow-up question payload."""
+
+    prompt_run_id = forms.CharField(max_length=64, required=False, widget=forms.HiddenInput())
+    user_message = forms.CharField(max_length=500, required=True)

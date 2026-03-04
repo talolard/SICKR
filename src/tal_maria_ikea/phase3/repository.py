@@ -92,6 +92,28 @@ class ConversationMessageEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class ConversationThreadRow:
+    """Read model for one conversation thread listing row."""
+
+    conversation_id: str
+    request_id: str
+    title: str | None
+    updated_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationMessageRow:
+    """Read model for one conversation message row."""
+
+    message_id: str
+    conversation_id: str
+    role: str
+    content_text: str
+    prompt_run_id: str | None
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class TurnRatingEvent:
     """One turn-level feedback payload."""
 
@@ -463,6 +485,64 @@ class Phase3Repository:
         ).fetchall()
         return tuple(str(row[0]) for row in rows)
 
+    def list_conversation_threads(self, limit: int = 50) -> tuple[ConversationThreadRow, ...]:
+        """Return recent active conversation threads for sidebar navigation."""
+
+        rows = self._connection.execute(
+            """
+            SELECT conversation_id, request_id, title, updated_at
+            FROM app.conversation_thread
+            WHERE is_active = true
+            ORDER BY updated_at DESC, conversation_id ASC
+            LIMIT ?
+            """,
+            [limit],
+        ).fetchall()
+        return tuple(
+            ConversationThreadRow(
+                conversation_id=str(row[0]),
+                request_id=str(row[1]),
+                title=_str_or_none(row[2]),
+                updated_at=str(row[3]),
+            )
+            for row in rows
+        )
+
+    def list_conversation_messages(
+        self, conversation_id: str, limit: int = 200
+    ) -> tuple[ConversationMessageRow, ...]:
+        """Return ordered messages for one conversation thread."""
+
+        rows = self._connection.execute(
+            """
+            SELECT message_id, conversation_id, role, content_text, prompt_run_id, created_at
+            FROM app.conversation_message
+            WHERE conversation_id = ?
+            ORDER BY created_at ASC, message_id ASC
+            LIMIT ?
+            """,
+            [conversation_id, limit],
+        ).fetchall()
+        return tuple(
+            ConversationMessageRow(
+                message_id=str(row[0]),
+                conversation_id=str(row[1]),
+                role=str(row[2]),
+                content_text=str(row[3]),
+                prompt_run_id=_str_or_none(row[4]),
+                created_at=str(row[5]),
+            )
+            for row in rows
+        )
+
+    def touch_conversation_thread(self, conversation_id: str) -> None:
+        """Update thread timestamp after message append."""
+
+        self._connection.execute(
+            "UPDATE app.conversation_thread SET updated_at = now() WHERE conversation_id = ?",
+            [conversation_id],
+        )
+
 
 def _float_or_none(value: object) -> float | None:
     if value is None:
@@ -472,3 +552,9 @@ def _float_or_none(value: object) -> float | None:
     if isinstance(value, str):
         return float(value)
     return None
+
+
+def _str_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)

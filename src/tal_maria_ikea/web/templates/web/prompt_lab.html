@@ -25,6 +25,9 @@
               <p class="muted">No items returned.</p>
             {% endif %}
             <p class="muted">Prompt run id: {{ result.prompt_run_id }}</p>
+            {% if conversation_id %}
+              <p><a href="{% url 'web:conversation' conversation_id=conversation_id %}">Open conversation</a></p>
+            {% endif %}
           </article>
         {% endfor %}
       </div>
@@ -35,4 +38,3 @@
     </section>
   {% endif %}
 {% endblock %}
-

@@ -7,11 +7,12 @@ from uuid import uuid4
 
 from django.core.paginator import Page, Paginator
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.views import View
 from django.views.generic import TemplateView
 
 from tal_maria_ikea.config import get_settings
+from tal_maria_ikea.phase3.conversation import ConversationService
 from tal_maria_ikea.phase3.prompt_lab import PromptLabService
 from tal_maria_ikea.phase3.query_expansion import QueryExpansionService
 from tal_maria_ikea.phase3.repository import (
@@ -33,7 +34,7 @@ from tal_maria_ikea.shared.types import (
     RetrievalResult,
     SortMode,
 )
-from tal_maria_ikea.web.forms import SearchForm, ShortlistNoteForm
+from tal_maria_ikea.web.forms import FollowUpForm, SearchForm, ShortlistNoteForm
 
 
 class SearchView(TemplateView):
@@ -222,6 +223,7 @@ class PromptLabView(TemplateView):
         query_text = str(self.request.GET.get("query_text", "")).strip()
         context["request_id"] = request_id
         context["query_text"] = query_text
+        context["conversation_id"] = f"compare-{request_id}" if request_id else ""
         context["results"] = ()
         if not request_id or not query_text:
             return context
@@ -235,6 +237,42 @@ class PromptLabView(TemplateView):
         )
         context["results"] = results
         return context
+
+
+class ConversationView(View):
+    """Render one conversation thread and handle follow-up posts."""
+
+    template_name = "web/conversation.html"
+
+    def get(self, request: HttpRequest, conversation_id: str) -> HttpResponse:
+        """Render one conversation thread page."""
+
+        repository = _phase3_repository()
+        return render(
+            request,
+            self.template_name,
+            {
+                "conversation_id": conversation_id,
+                "threads": repository.list_conversation_threads(limit=50),
+                "messages": repository.list_conversation_messages(
+                    conversation_id=conversation_id,
+                    limit=200,
+                ),
+                "form": FollowUpForm(),
+            },
+        )
+
+    def post(self, request: HttpRequest, conversation_id: str) -> HttpResponse:
+        """Persist follow-up message and assistant response, then redirect."""
+
+        form = FollowUpForm(request.POST)
+        if form.is_valid():
+            ConversationService(_phase3_repository()).append_follow_up(
+                conversation_id=conversation_id,
+                prompt_run_id=_to_optional_str(form.cleaned_data.get("prompt_run_id")),
+                user_message=str(form.cleaned_data["user_message"]),
+            )
+        return redirect(_conversation_url(conversation_id))
 
 
 class ShortlistAddView(View):
@@ -534,3 +572,7 @@ def _rerank_diff_url(request_id: str) -> str:
 def _prompt_lab_url(request_id: str, query_text: str) -> str:
     query = urlencode({"request_id": request_id, "query_text": query_text})
     return f"/prompt-lab?{query}"
+
+
+def _conversation_url(conversation_id: str) -> str:
+    return f"/conversations/{conversation_id}"

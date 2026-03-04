@@ -16,7 +16,12 @@ from tal_maria_ikea.phase3.prompt_lab import (
     SummaryItem,
     SummaryResponse,
 )
-from tal_maria_ikea.phase3.repository import PromptRunEvent, PromptTurnEvent
+from tal_maria_ikea.phase3.repository import (
+    ConversationMessageEvent,
+    ConversationThreadEvent,
+    PromptRunEvent,
+    PromptTurnEvent,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,12 +36,20 @@ class _RepoStub:
     def __init__(self) -> None:
         self.prompt_runs = 0
         self.prompt_turns = 0
+        self.threads = 0
+        self.messages = 0
 
     def insert_prompt_run(self, _event: PromptRunEvent) -> None:
         self.prompt_runs += 1
 
     def insert_prompt_turn(self, _event: PromptTurnEvent) -> None:
         self.prompt_turns += 1
+
+    def upsert_conversation_thread(self, _event: ConversationThreadEvent) -> None:
+        self.threads += 1
+
+    def insert_conversation_message(self, _event: ConversationMessageEvent) -> None:
+        self.messages += 1
 
 
 class _ServiceUnderTest(PromptLabService):
@@ -74,6 +87,8 @@ def test_prompt_lab_runs_variants_in_parallel_and_persists_events() -> None:
     assert len(results) == 2
     assert repository.prompt_runs == 2
     assert repository.prompt_turns == 2
+    assert repository.threads == 1
+    assert repository.messages == 2
     assert all(result.status == "ok" for result in results)
 
 
@@ -97,3 +112,4 @@ def test_prompt_lab_partial_failure_is_isolated_per_variant() -> None:
     assert by_version["v2"].status == "error"
     assert repository.prompt_runs == 2
     assert repository.prompt_turns == 2
+    assert repository.threads == 1

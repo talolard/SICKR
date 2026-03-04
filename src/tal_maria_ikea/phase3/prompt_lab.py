@@ -16,7 +16,12 @@ from pydantic import BaseModel, Field
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.ingest.embedding_client import EmbeddingClientConfig, build_generation_client
-from tal_maria_ikea.phase3.repository import PromptRunEvent, PromptTurnEvent
+from tal_maria_ikea.phase3.repository import (
+    ConversationMessageEvent,
+    ConversationThreadEvent,
+    PromptRunEvent,
+    PromptTurnEvent,
+)
 from tal_maria_ikea.web.models import SystemPromptTemplate
 
 
@@ -66,6 +71,12 @@ class PromptLabRepository(Protocol):
     def insert_prompt_turn(self, event: PromptTurnEvent) -> None:
         """Persist one assistant turn response row."""
 
+    def upsert_conversation_thread(self, event: ConversationThreadEvent) -> None:
+        """Create or update one conversation thread row."""
+
+    def insert_conversation_message(self, event: ConversationMessageEvent) -> None:
+        """Persist one conversation message row."""
+
 
 class PromptLabService:
     """Execute prompt variants in parallel and persist run lineage."""
@@ -93,6 +104,17 @@ class PromptLabService:
             templates = template_rows[:max_variants]
         if not templates:
             return ()
+        conversation_id = f"compare-{request_id}"
+        self._repository.upsert_conversation_thread(
+            ConversationThreadEvent(
+                conversation_id=conversation_id,
+                request_id=request_id,
+                user_ref=None,
+                session_ref=None,
+                title=f"Prompt compare for {user_query[:40]}",
+                is_active=True,
+            )
+        )
 
         with ThreadPoolExecutor(max_workers=max(1, min(max_variants, len(templates)))) as executor:
             futures = [
@@ -174,6 +196,15 @@ class PromptLabService:
                 conversation_id=f"compare-{request_id}",
                 summary_text=response.summary,
                 response_json=response.model_dump(),
+            )
+        )
+        self._repository.insert_conversation_message(
+            ConversationMessageEvent(
+                message_id=str(uuid4()),
+                conversation_id=f"compare-{request_id}",
+                role="assistant",
+                content_text=response.summary,
+                prompt_run_id=prompt_run_id,
             )
         )
         return VariantRunResult(
