@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.ingest.embedding_client import EmbeddingClientConfig, build_generation_client
+from tal_maria_ikea.phase3.config_repository import ChatConfigRepository
 from tal_maria_ikea.shared.types import QueryExpansionMode
 
 _WIDTH_PATTERNS = (
@@ -66,8 +67,9 @@ class ExpansionOutcome:
 class QueryExpansionService:
     """Infer structured filters from query text for `auto|on|off` expansion modes."""
 
-    def __init__(self) -> None:
+    def __init__(self, config_repository: ChatConfigRepository | None = None) -> None:
         self._settings = get_settings()
+        self._config_repository = config_repository
 
     def expand(self, query_text: str, mode: QueryExpansionMode) -> ExpansionOutcome:
         """Return expansion proposal and whether filters should be applied."""
@@ -87,6 +89,7 @@ class QueryExpansionService:
         heuristic_reason = (
             "heuristic_constraints_detected" if signal_count > 0 else "no_constraints_detected"
         )
+        min_confidence = self._auto_min_confidence()
 
         if mode == "auto" and signal_count == 0:
             return ExpansionOutcome(
@@ -114,7 +117,7 @@ class QueryExpansionService:
         gemini_filters = _filters_from_gemini(gemini_output)
         merged_filters.update(gemini_filters)
         applied = bool(
-            mode == "on" or signal_count > 0 or gemini_output.confidence >= _AUTO_MIN_CONFIDENCE
+            mode == "on" or signal_count > 0 or gemini_output.confidence >= min_confidence
         )
         return ExpansionOutcome(
             expanded_query_text=gemini_output.expanded_query_text,
@@ -124,6 +127,16 @@ class QueryExpansionService:
             applied=applied and bool(merged_filters),
             provider="gemini",
         )
+
+    def _auto_min_confidence(self) -> float:
+        policy = (
+            None
+            if self._config_repository is None
+            else self._config_repository.get_active_expansion_policy()
+        )
+        if policy is None:
+            return _AUTO_MIN_CONFIDENCE
+        return policy.min_confidence
 
     def _maybe_gemini_expand(self, query_text: str) -> GeminiExpansionOutput | None:
         if not _gemini_available():

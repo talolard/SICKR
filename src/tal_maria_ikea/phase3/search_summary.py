@@ -5,18 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
 from uuid import uuid4
 
-from django.db.utils import OperationalError, ProgrammingError
-from django.template import Context, Template
 from google.genai import types as genai_types
 from pydantic import BaseModel, Field, ValidationError
 
 from tal_maria_ikea.config import get_settings
 from tal_maria_ikea.ingest.embedding_client import EmbeddingClientConfig, build_generation_client
+from tal_maria_ikea.phase3.config_repository import ChatConfigRepository
 from tal_maria_ikea.phase3.repository import Phase3Repository, PromptRunEvent, PromptTurnEvent
-from tal_maria_ikea.web.models import SystemPromptTemplate
 
 
 class SearchSummaryItem(BaseModel):
@@ -64,9 +61,12 @@ class SummaryModelRequest:
 class SearchSummaryService:
     """Generate one summary for a search request and persist run telemetry."""
 
-    def __init__(self, repository: Phase3Repository) -> None:
+    def __init__(
+        self, repository: Phase3Repository, config_repository: ChatConfigRepository | None = None
+    ) -> None:
         self._repository = repository
         self._settings = get_settings()
+        self._config_repository = config_repository
 
     def generate(
         self,
@@ -154,32 +154,28 @@ class SearchSummaryService:
     def _render_template(
         self, *, template_key: str, template_version: str, context: dict[str, object]
     ) -> str:
-        try:
-            manager: Any = SystemPromptTemplate.objects  # pyrefly: ignore[missing-attribute]
-            template_row = manager.filter(
+        template_text = _default_template_text()
+        if self._config_repository is not None:
+            template_row = self._config_repository.get_prompt_template(
                 key=template_key,
                 version=template_version,
-                is_active=True,
-            ).first()
-        except (OperationalError, ProgrammingError):
-            template_row = None
-        template_text = (
-            str(template_row.template_text)
-            if template_row is not None
-            else (
-                "You are an IKEA shopping assistant.\n"
-                "Return JSON matching the provided schema.\n"
-                "Each item must include canonical_product_key and item_name exactly as provided.\n"
-                "Use only candidate IDs and names and be concise.\n"
-                "User query: {{ user_query }}\n"
-                "Candidates (ID | name):\n"
-                "{% for item in candidate_items %}"
-                "- {{ item.canonical_product_key }} | {{ item.item_name }}\n"
-                "{% endfor %}"
-                "Return JSON only."
             )
+            if template_row is not None:
+                template_text = template_row.template_text
+
+        user_query = str(context.get("user_query", ""))
+        candidates = context.get("candidate_items", [])
+        candidate_lines = "\n".join(
+            [
+                f"- {item.get('canonical_product_key', '')} | {item.get('item_name', '')}"
+                for item in candidates
+                if isinstance(item, dict)
+            ]
         )
-        return Template(template_text).render(Context(context))
+        return template_text.format(
+            user_query=user_query,
+            candidate_lines=candidate_lines,
+        )
 
     def _generate_response(
         self,
@@ -295,4 +291,19 @@ def build_summary_request(
     return SummaryModelRequest(
         system_prompt=system_prompt,
         user_prompt="\n".join(user_prompt_lines),
+    )
+
+
+def _default_template_text() -> str:
+    """Return built-in fallback summary template text."""
+
+    return (
+        "You are an IKEA shopping assistant.\n"
+        "Return JSON matching the provided schema.\n"
+        "Each item must include canonical_product_key and item_name exactly as provided.\n"
+        "Use only candidate IDs and names and be concise.\n"
+        "User query: {user_query}\n"
+        "Candidates (ID | name):\n"
+        "{candidate_lines}\n"
+        "Return JSON only."
     )

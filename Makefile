@@ -1,4 +1,4 @@
-.PHONY: deps init db-init db-load db-reset index vss-index web eval eval-generate eval-labels demo \
+.PHONY: deps init db-init db-load db-reset index vss-index web chat eval eval-generate eval-labels demo \
 	lint format format-check format-all typecheck test tidy preflight
 
 DB_PATH ?= data/ikea.duckdb
@@ -65,6 +65,9 @@ index:
 
 web:
 	uv run python -m tal_maria_ikea.web.runserver --host $(HOST) --port $(PORT)
+
+chat:
+	uv run python -m tal_maria_ikea.chat_app.runserver --host $(HOST) --port $(PORT)
 
 eval:
 	uv run python -m tal_maria_ikea.eval.run --index-run-id $(EVAL_RUN_ID) --k $(EVAL_K)
