@@ -1,0 +1,18 @@
+plan_name: "Invalid Open Polygon"
+walls:
+  - id: "w1"
+    start: { x_m: 0.0, y_m: 0.0 }
+    end: { x_m: 3.0, y_m: 0.0 }
+    thickness_m: 0.1
+  - id: "w2"
+    start: { x_m: 3.0, y_m: 0.0 }
+    end: { x_m: 3.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "w3"
+    start: { x_m: 3.0, y_m: 2.0 }
+    end: { x_m: 0.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "w4"
+    start: { x_m: 0.0, y_m: 2.0 }
+    end: { x_m: 0.5, y_m: 0.2 }
+    thickness_m: 0.1

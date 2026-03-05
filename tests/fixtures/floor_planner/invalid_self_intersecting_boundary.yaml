@@ -1,0 +1,18 @@
+plan_name: "Invalid Bowtie"
+walls:
+  - id: "a"
+    start: { x_m: 0.0, y_m: 0.0 }
+    end: { x_m: 2.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "b"
+    start: { x_m: 2.0, y_m: 2.0 }
+    end: { x_m: 0.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "c"
+    start: { x_m: 0.0, y_m: 2.0 }
+    end: { x_m: 2.0, y_m: 0.0 }
+    thickness_m: 0.1
+  - id: "d"
+    start: { x_m: 2.0, y_m: 0.0 }
+    end: { x_m: 0.0, y_m: 0.0 }
+    thickness_m: 0.1

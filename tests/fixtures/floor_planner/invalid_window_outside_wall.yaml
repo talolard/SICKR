@@ -1,0 +1,25 @@
+plan_name: "Invalid Window Offset"
+walls:
+  - id: "w1"
+    start: { x_m: 0.0, y_m: 0.0 }
+    end: { x_m: 3.0, y_m: 0.0 }
+    thickness_m: 0.1
+  - id: "w2"
+    start: { x_m: 3.0, y_m: 0.0 }
+    end: { x_m: 3.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "w3"
+    start: { x_m: 3.0, y_m: 2.0 }
+    end: { x_m: 0.0, y_m: 2.0 }
+    thickness_m: 0.1
+  - id: "w4"
+    start: { x_m: 0.0, y_m: 2.0 }
+    end: { x_m: 0.0, y_m: 0.0 }
+    thickness_m: 0.1
+windows:
+  - id: "bad_window"
+    wall_id: "w2"
+    offset_from_wall_start_m: 1.5
+    length_m: 1.0
+    overall_thickness_m: 0.1
+    single_line_thickness_m: 0.03
