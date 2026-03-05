@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import duckdb
 from pydantic_ai import Embedder
@@ -15,6 +16,36 @@ from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db import connect_db
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
+
+GoogleEmbeddingTaskType = Literal[
+    "TASK_TYPE_UNSPECIFIED",
+    "RETRIEVAL_QUERY",
+    "RETRIEVAL_DOCUMENT",
+    "SEMANTIC_SIMILARITY",
+    "CLASSIFICATION",
+    "CLUSTERING",
+    "QUESTION_ANSWERING",
+    "FACT_VERIFICATION",
+]
+
+
+try:
+    from pydantic_ai.embeddings.google import GoogleEmbeddingSettings
+except ImportError:
+
+    class GoogleEmbeddingSettings(EmbeddingSettings, total=False):
+        """Google embedding-specific runtime settings."""
+
+        google_task_type: GoogleEmbeddingTaskType
+
+
+def build_google_embedding_settings(*, dimensions: int) -> GoogleEmbeddingSettings:
+    """Build Google embedding settings optimized for retrieval queries."""
+
+    return GoogleEmbeddingSettings(
+        dimensions=dimensions,
+        google_task_type="RETRIEVAL_QUERY",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +98,10 @@ def build_chat_runtime() -> ChatRuntime:
     connection = connect_db(settings.duckdb_path)
     ensure_runtime_schema(connection)
 
+    embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)
     embedder = Embedder(
         settings.embedding_model_uri,
-        settings=EmbeddingSettings(dimensions=settings.embedding_dimensions),
+        settings=embedding_settings,
     )
     milvus_service = MilvusAccessService(settings)
     milvus_service.ensure_collection()

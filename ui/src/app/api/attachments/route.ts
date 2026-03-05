@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui";
+const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 const uploadUrl = new URL("../attachments", agUiUrl).toString();
 
 export const POST = async (request: NextRequest): Promise<Response> => {

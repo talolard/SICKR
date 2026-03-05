@@ -1,12 +1,12 @@
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
 	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
-	dev-all dev-all-mock
+	dev-all dev-all-mock reset
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
 UI_DIR ?= ui
 UI_PORT ?= 3000
-PY_AG_UI_URL ?= http://127.0.0.1:8000/ag-ui
+PY_AG_UI_URL ?= http://127.0.0.1:8000/ag-ui/
 
 deps:
 	uv sync --all-groups
@@ -71,6 +71,14 @@ dev-all-mock:
 	trap 'kill 0' INT TERM EXIT; \
 	$(MAKE) ui-dev-mock & \
 	wait
+
+reset:
+	@pkill -f "next dev --port $(UI_PORT)" || true
+	@pkill -f "uvicorn ikea_agent.chat_app.main:create_app" || true
+	@lsof -tiTCP:$(UI_PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
+	@lsof -tiTCP:$(PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
+	@rm -rf $(UI_DIR)/.next
+	@echo "Stopped dev servers on :$(UI_PORT)/:$(PORT) and cleared $(UI_DIR)/.next"
 
 # One command before commit.
 tidy: format

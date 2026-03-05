@@ -7,6 +7,12 @@ type ThreadSnapshot = {
   assistantText: string;
   toolCallsById: Record<string, ToolCallEntry>;
   attachments: PendingAttachment[];
+  messages?: Array<{
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+    toolCallIds: string[];
+  }>;
 };
 
 const ACTIVE_THREAD_KEY = "copilotkit_ui_active_thread";

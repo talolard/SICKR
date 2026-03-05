@@ -10,7 +10,7 @@ test.describe("real backend smoke", () => {
 
   test("streams assistant response from mounted Python AG-UI endpoint", async () => {
     test.setTimeout(90_000);
-    const agUiUrl = process.env.PY_AG_UI_URL ?? "http://127.0.0.1:8000/ag-ui";
+    const agUiUrl = process.env.PY_AG_UI_URL ?? "http://127.0.0.1:8000/ag-ui/";
     const agent = new HttpAgent({ url: agUiUrl });
     agent.addMessage({
       id: crypto.randomUUID(),

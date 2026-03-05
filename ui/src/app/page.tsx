@@ -19,6 +19,12 @@ import {
 } from "@/lib/threadStore";
 
 type Scenario = "success" | "disconnect" | "send_fail_once" | "long_running";
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  toolCallIds: string[];
+};
 
 type Product = {
   id: string;
@@ -114,8 +120,10 @@ export default function Home(): ReactElement {
     Record<string, { percent: number; label: string }>
   >({});
   const [threadId, setThreadId] = useState<string>("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const attachmentFilesRef = useRef<Record<string, File>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -130,6 +138,7 @@ export default function Home(): ReactElement {
       setAssistantText(snapshot.assistantText);
       setToolCallsById(snapshot.toolCallsById);
       setAttachments(snapshot.attachments);
+      setMessages(snapshot.messages ?? []);
     }
     url.searchParams.set("thread", resolvedThreadId);
     window.history.replaceState({}, "", url.toString());
@@ -145,10 +154,25 @@ export default function Home(): ReactElement {
       assistantText,
       toolCallsById,
       attachments,
+      messages,
     });
-  }, [assistantText, attachments, prompt, threadId, toolCallsById]);
+  }, [assistantText, attachments, messages, prompt, threadId, toolCallsById]);
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
+
+  const attachToolCallToActiveAssistant = (toolCallId: string): void => {
+    const activeId = activeAssistantMessageIdRef.current;
+    if (!activeId) {
+      return;
+    }
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === activeId && !message.toolCallIds.includes(toolCallId)
+          ? { ...message, toolCallIds: [...message.toolCallIds, toolCallId] }
+          : message,
+      ),
+    );
+  };
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
     setAttachments((current) =>
@@ -262,7 +286,6 @@ export default function Home(): ReactElement {
 
   const runStream = async (nextScenario: Scenario, sendKey: string): Promise<void> => {
     setAssistantText("");
-    setToolCallsById({});
     setError("");
     setIsRunning(true);
     setToolProgressById({});
@@ -315,6 +338,16 @@ export default function Home(): ReactElement {
             const textValue = message.data.text;
             if (typeof textValue === "string") {
               setAssistantText((previous) => previous + textValue);
+              const activeAssistantId = activeAssistantMessageIdRef.current;
+              if (activeAssistantId) {
+                setMessages((current) =>
+                  current.map((messageEntry) =>
+                    messageEntry.id === activeAssistantId
+                      ? { ...messageEntry, text: `${messageEntry.text}${textValue}` }
+                      : messageEntry,
+                  ),
+                );
+              }
             }
           }
           if (message.event === "tool_status") {
@@ -329,6 +362,7 @@ export default function Home(): ReactElement {
                 status === "complete" ||
                 status === "failed")
             ) {
+              attachToolCallToActiveAssistant(toolCallId);
               setToolCallsById((current) =>
                 upsertToolCall(current, {
                   tool_call_id: toolCallId,
@@ -346,6 +380,7 @@ export default function Home(): ReactElement {
           if (message.event === "tool_result") {
             const toolCallId = message.data.tool_call_id;
             if (typeof toolCallId === "string") {
+              attachToolCallToActiveAssistant(toolCallId);
               setToolCallsById((current) => {
                 const existing = current[toolCallId];
                 if (!existing) {
@@ -401,6 +436,7 @@ export default function Home(): ReactElement {
       setError(message);
     } finally {
       abortControllerRef.current = null;
+      activeAssistantMessageIdRef.current = null;
       setIsRunning(false);
     }
   };
@@ -415,9 +451,11 @@ export default function Home(): ReactElement {
     setPrompt("Find me storage for a small bedroom");
     setAssistantText("");
     setToolCallsById({});
+    setMessages([]);
     setAttachments([]);
     setError("");
     setToolProgressById({});
+    activeAssistantMessageIdRef.current = null;
     saveActiveThreadId(nextThreadId);
     const url = new URL(window.location.href);
     url.searchParams.set("thread", nextThreadId);
@@ -430,6 +468,23 @@ export default function Home(): ReactElement {
       setError("Finish uploading or remove attachments to send.");
       return;
     }
+    const assistantMessageId = crypto.randomUUID();
+    activeAssistantMessageIdRef.current = assistantMessageId;
+    setMessages((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        text: prompt,
+        toolCallIds: [],
+      },
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        text: "",
+        toolCallIds: [],
+      },
+    ]);
     const sendKey = crypto.randomUUID();
     setLastSendKey(sendKey);
     await runStream(scenario, sendKey);
@@ -439,18 +494,98 @@ export default function Home(): ReactElement {
     if (!lastSendKey) {
       return;
     }
+    const assistantMessageId = crypto.randomUUID();
+    activeAssistantMessageIdRef.current = assistantMessageId;
+    setMessages((current) => [
+      ...current,
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        text: "",
+        toolCallIds: [],
+      },
+    ]);
     const retryScenario =
       useMockAgent && scenario === "disconnect" ? "success" : scenario;
     await runStream(retryScenario, lastSendKey);
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-8">
-      <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
+    <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-4 p-6">
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
+        <span
+          className={`rounded px-2 py-1 text-xs font-semibold ${
+            useMockAgent ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+          }`}
+          data-testid="mode-badge"
+        >
+          {useMockAgent ? "MOCK MODE" : "REAL MODE"}
+        </span>
+      </div>
       {threadId ? (
         <ThreadContainer onNewThread={handleNewThread} threadId={threadId} />
       ) : null}
-      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+      <section className="flex min-h-[360px] flex-col gap-4 rounded border bg-white p-4">
+        <h2 className="text-sm font-medium text-gray-700">Chat</h2>
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded border bg-gray-50 p-3">
+          {messages.length === 0 ? (
+            <p className="text-sm text-gray-500">Start by sending a message.</p>
+          ) : null}
+          {messages.map((message) => (
+            <article
+              className={`max-w-[85%] rounded px-3 py-2 ${
+                message.role === "user"
+                  ? "ml-auto bg-black text-white"
+                  : "mr-auto border bg-white text-black"
+              }`}
+              key={message.id}
+            >
+              <p className="text-xs opacity-70">{message.role === "user" ? "You" : "Assistant"}</p>
+              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+              {message.role === "assistant" ? (
+                <div className="mt-2 space-y-2">
+                  {message.toolCallIds.map((toolCallId) => {
+                    const toolCall = toolCallsById[toolCallId];
+                    if (!toolCall) {
+                      return null;
+                    }
+                    return (
+                      <div className="rounded border p-2" key={toolCall.id}>
+                        <DefaultToolCallRenderer
+                          name={toolCall.name}
+                          status={toolCall.status}
+                          result={toolCall.result}
+                          errorMessage={toolCall.errorMessage}
+                        />
+                        {toolCall.name === "run_search_graph" &&
+                        toolCall.status === "complete" ? (
+                          <ProductResultsToolRenderer
+                            products={parseProducts(toolCall.result) ?? []}
+                          />
+                        ) : null}
+                        {toolCall.name === "generate_floor_plan_preview" &&
+                        toolCall.status === "complete" ? (
+                          (() => {
+                            const imageOutput = parseImageToolOutput(toolCall.result);
+                            return imageOutput ? (
+                              <ImageToolOutputRenderer
+                                caption={imageOutput.caption}
+                                images={imageOutput.images}
+                              />
+                            ) : null;
+                          })()
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
+      <form className="flex flex-col gap-3 rounded border bg-white p-4" onSubmit={handleSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           Prompt
           <input
@@ -480,23 +615,25 @@ export default function Home(): ReactElement {
             </p>
           )}
         </label>
-        <button
-          data-testid="send-button"
-          className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-60"
-          disabled={isRunning || pendingUploads}
-          type="submit"
-        >
-          Send
-        </button>
-        <button
-          className="w-fit rounded border px-4 py-2 disabled:opacity-60"
-          data-testid="cancel-button"
-          disabled={!isRunning}
-          onClick={handleCancelRun}
-          type="button"
-        >
-          Cancel run
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="send-button"
+            className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-60"
+            disabled={isRunning || pendingUploads}
+            type="submit"
+          >
+            Send
+          </button>
+          <button
+            className="w-fit rounded border px-4 py-2 disabled:opacity-60"
+            data-testid="cancel-button"
+            disabled={!isRunning}
+            onClick={handleCancelRun}
+            type="button"
+          >
+            Cancel run
+          </button>
+        </div>
       </form>
       <RunStatusContainer
         isRunning={isRunning}
@@ -517,45 +654,16 @@ export default function Home(): ReactElement {
           Finish uploading or remove attachments to send.
         </p>
       ) : null}
-      <section className="rounded border p-3">
-        <h2 className="text-sm font-medium">Assistant Stream</h2>
-        <p data-testid="assistant-text">{assistantText}</p>
-        <p data-testid="tool-status">
-          Tool status:{" "}
-          {Object.values(toolCallsById)
-            .map((toolCall) => toolCall.status)
-            .join(", ") || "idle"}
-        </p>
-        <div className="mt-2 space-y-2" data-testid="tool-calls">
-          {Object.values(toolCallsById).map((toolCall) => (
-            <div className="rounded border p-2" key={toolCall.id}>
-              <DefaultToolCallRenderer
-                name={toolCall.name}
-                status={toolCall.status}
-                result={toolCall.result}
-                errorMessage={toolCall.errorMessage}
-              />
-              {toolCall.name === "run_search_graph" && toolCall.status === "complete" ? (
-                <ProductResultsToolRenderer
-                  products={parseProducts(toolCall.result) ?? []}
-                />
-              ) : null}
-              {toolCall.name === "generate_floor_plan_preview" &&
-              toolCall.status === "complete" ? (
-                (() => {
-                  const imageOutput = parseImageToolOutput(toolCall.result);
-                  return imageOutput ? (
-                    <ImageToolOutputRenderer
-                      caption={imageOutput.caption}
-                      images={imageOutput.images}
-                    />
-                  ) : null;
-                })()
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </section>
+      <p className="hidden" data-testid="assistant-text">
+        {assistantText}
+      </p>
+      <p className="hidden" data-testid="tool-status">
+        Tool status:{" "}
+        {Object.values(toolCallsById)
+          .map((toolCall) => toolCall.status)
+          .join(", ") || "idle"}
+      </p>
+      <div className="hidden" data-testid="tool-calls" />
       {error ? (
         <section className="rounded border border-red-500 bg-red-50 p-3">
           <p data-testid="stream-error">Stream error: {error}</p>

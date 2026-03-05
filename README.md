@@ -28,7 +28,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 
 ## Prerequisites
 
-- Python `3.12`
+- Python `3.13`
 - `uv` for Python dependency management
 - Node `20` + `pnpm` (via `corepack`) for the UI workspace
 - Optional: `GEMINI_API_KEY`/`GOOGLE_API_KEY` for real model-backed agent runs
@@ -48,12 +48,13 @@ Typed IKEA assistant runtime and UI integration project built around:
 2. Start mock UI: `make ui-dev-mock`
 3. Start UI against real backend: `make ui-dev-real`
 
-By default, real UI mode targets `http://127.0.0.1:8000/ag-ui` via `PY_AG_UI_URL`.
+By default, real UI mode targets `http://127.0.0.1:8000/ag-ui/` via `PY_AG_UI_URL`.
 
 ### Start everything
 
 - Real backend + UI together: `make dev-all`
 - Mock UI only: `make dev-all-mock`
+- Reset local UI/backend dev processes and Next cache: `make reset`
 
 ## Architecture (request flow)
 
@@ -80,6 +81,7 @@ flowchart LR
   - `make ui-dev-real`
   - `make ui-dev-mock`
   - `make dev-all`
+  - `make reset`
 - Backend tests: `make test`
 - UI unit tests: `make ui-test`
 - UI mock E2E: `make ui-test-e2e`

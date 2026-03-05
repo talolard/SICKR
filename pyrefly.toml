@@ -18,7 +18,7 @@ disable-search-path-heuristics = true
 use-ignore-files = true
 
 # Align with repository runtime target.
-python-version = "3.12"
+python-version = "3.13"
 
 # Keep typing strict and explicit for future agents and modules.
 untyped-def-behavior = "check-and-infer-return-type"

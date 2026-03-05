@@ -7,16 +7,17 @@ name = "ikea-agent"
 version = "0.1.0"
 description = "Simplified IKEA agent runtime with PydanticAI + Pydantic Graph."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
   "duckdb>=1.4.0",
   "fastapi>=0.127.1",
   "milvus-lite>=2.4.11",
-  "pymilvus>=2.6.0",
-  "pydantic-ai>=1.39.0",
+  "pymilvus[milvus-lite]>=2.6.0",
+  "pydantic-ai-slim[ag-ui,google,vertexai]>=1.66.0",
   "pydantic-settings>=2.10.1",
   "python-dotenv>=1.1.1",
   "renovation>=0.1.1",
+  "setuptools<81",
   "structlog>=25.4.0",
   "uvicorn>=0.40.0",
 ]
@@ -36,6 +37,10 @@ packages = ["src/ikea_agent"]
 [[tool.uv.index]]
 url = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/"
 
+[tool.uv]
+environments = ["sys_platform != 'emscripten'"]
+index-strategy = "unsafe-best-match"
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
@@ -43,7 +48,7 @@ pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 src = ["src", "tests"]
 extend-exclude = ["legacy"]
 

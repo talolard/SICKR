@@ -2,7 +2,11 @@ import { expect, test } from "@playwright/test";
 
 test("streams assistant text from mock AG-UI route", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "AG-UI Streaming Harness" })).toBeVisible();
+  await expect(page.getByText("Chat")).toBeVisible();
   await page.getByTestId("send-button").click();
+  await expect(page.getByText("You")).toBeVisible();
+  await expect(page.getByText("Assistant")).toBeVisible();
   await expect(page.getByTestId("assistant-text")).toContainText("Analyzing request...");
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",

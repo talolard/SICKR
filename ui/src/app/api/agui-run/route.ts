@@ -2,7 +2,8 @@ import { HttpAgent } from "@ag-ui/client";
 import { NextRequest } from "next/server";
 
 const encoder = new TextEncoder();
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://127.0.0.1:8000/ag-ui";
+const baseAgUiUrl = process.env.PY_AG_UI_URL ?? "http://127.0.0.1:8000/ag-ui/";
+const agUiUrl = baseAgUiUrl.endsWith("/") ? baseAgUiUrl : `${baseAgUiUrl}/`;
 
 type RunRequest = {
   prompt: string;
