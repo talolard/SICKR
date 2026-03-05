@@ -11,7 +11,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 
 - Runs a chat-first IKEA assistant that can retrieve products, render tool activity, and stream responses.
 - Exposes AG-UI-compatible backend routes for CopilotKit-style frontends.
-- Supports image attachments and generated image artifacts (floor plan preview path currently scaffolded).
+- Supports image attachments plus fal.ai-backed image analysis tools (object detection, depth estimation, segmentation).
 - Provides a deterministic mock UI mode for fast frontend iteration and E2E testing.
 
 ## Repository structure
@@ -88,3 +88,15 @@ flowchart LR
 - UI real-backend smoke E2E: `make ui-test-e2e-real`
 - Lint/format/typecheck pipeline: `make format-all`
 - Pre-commit quality gate: `make tidy`
+
+## Image analysis setup
+
+- Add `FAI_AI_API_KEY=...` to `.env` (or `FAL_KEY=...`).
+- Start backend (`make chat`) and UI (`make ui-dev-real`).
+- Upload a room photo in chat and call one of:
+  - `analyze_room_photo`
+  - `detect_objects_in_image`
+  - `estimate_depth_map`
+  - `segment_image_with_prompt`
+
+See [docs/tools/image_analysis.md](docs/tools/image_analysis.md) for tool contracts and runtime behavior.
