@@ -10,6 +10,40 @@ type RunRequest = {
   attachments?: Array<{ attachment_id: string; uri: string }>;
 };
 
+type TextDeltaEventParams = {
+  event: { delta: string };
+};
+
+type ToolCallStartEventParams = {
+  event: {
+    toolCallId: string;
+    toolCallName: string;
+    toolCallArgs?: unknown;
+  };
+  toolCallArgs?: unknown;
+};
+
+type ToolCallResultEventParams = {
+  event: {
+    toolCallId: string;
+    result?: unknown;
+    content?: unknown;
+  };
+};
+
+type ToolCallEndEventParams = {
+  event: {
+    toolCallId: string;
+    toolCallArgs?: unknown;
+  };
+  toolCallName?: string;
+  toolCallArgs?: unknown;
+};
+
+type RunErrorEventParams = {
+  event: { message: string };
+};
+
 function formatEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
@@ -30,10 +64,10 @@ export const POST = async (request: NextRequest): Promise<Response> => {
           content: body.prompt,
         });
         await agent.runAgent(undefined, {
-          onTextMessageContentEvent: (params: any) => {
+          onTextMessageContentEvent: (params: TextDeltaEventParams) => {
             push("assistant_delta", { text: params.event.delta });
           },
-          onToolCallStartEvent: (params: any) => {
+          onToolCallStartEvent: (params: ToolCallStartEventParams) => {
             push("tool_status", {
               tool_call_id: params.event.toolCallId,
               tool: params.event.toolCallName,
@@ -41,21 +75,21 @@ export const POST = async (request: NextRequest): Promise<Response> => {
               args: params.event.toolCallArgs ?? params.toolCallArgs,
             });
           },
-          onToolCallResultEvent: (params: any) => {
+          onToolCallResultEvent: (params: ToolCallResultEventParams) => {
             push("tool_result", {
               tool_call_id: params.event.toolCallId,
               result: params.event.result ?? params.event.content,
             });
           },
-          onToolCallEndEvent: (params: any) => {
+          onToolCallEndEvent: (params: ToolCallEndEventParams) => {
             push("tool_status", {
               tool_call_id: params.event.toolCallId,
-              tool: params.toolCallName,
+              tool: params.toolCallName ?? "unknown_tool",
               status: "complete",
               args: params.event.toolCallArgs ?? params.toolCallArgs,
             });
           },
-          onRunErrorEvent: (params: any) => {
+          onRunErrorEvent: (params: RunErrorEventParams) => {
             push("error", { message: params.event.message });
           },
         });

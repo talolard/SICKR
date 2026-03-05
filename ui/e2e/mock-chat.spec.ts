@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("streams assistant text from mock AG-UI route", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await expect(page.getByRole("heading", { name: "AG-UI Streaming Harness" })).toBeVisible();
   await expect(page.getByText("Chat")).toBeVisible();
   await page.getByTestId("send-button").click();
@@ -20,13 +20,13 @@ test("streams assistant text from mock AG-UI route", async ({ page }) => {
 });
 
 test("renders tool status transitions executing -> complete", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("tool-status")).toContainText("complete");
 });
 
 test("shows retry UI when stream disconnects and retry succeeds", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("scenario-select").selectOption("disconnect");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("stream-error")).toContainText(
@@ -41,7 +41,7 @@ test("shows retry UI when stream disconnects and retry succeeds", async ({ page 
 test("blocks send while attachment upload is pending and unblocks when done", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("attachment-input").setInputFiles({
     name: "room.png",
     mimeType: "image/png",
@@ -55,7 +55,7 @@ test("blocks send while attachment upload is pending and unblocks when done", as
 });
 
 test("retries failed send without re-uploading attachments", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("attachment-input").setInputFiles({
     name: "room.png",
     mimeType: "image/png",
@@ -77,7 +77,7 @@ test("retries failed send without re-uploading attachments", async ({ page }) =>
 });
 
 test("renders generated image output and opens viewer modal", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("image-tool-output")).toBeVisible();
   await page.getByTestId("image-thumb-generated-1").click();
@@ -87,7 +87,7 @@ test("renders generated image output and opens viewer modal", async ({ page }) =
 });
 
 test("shows progress updates for long-running tool calls", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("scenario-select").selectOption("long_running");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("run-status-container")).toContainText("Working...");
@@ -100,7 +100,7 @@ test("shows progress updates for long-running tool calls", async ({ page }) => {
 });
 
 test("cancels long-running run locally and notifies user", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("scenario-select").selectOption("long_running");
   await page.getByTestId("send-button").click();
   await page.getByTestId("cancel-button").click();
@@ -108,7 +108,7 @@ test("cancels long-running run locally and notifies user", async ({ page }) => {
 });
 
 test("persists thread history across refresh", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",
@@ -122,7 +122,7 @@ test("persists thread history across refresh", async ({ page }) => {
 });
 
 test("isolates thread history when switching to a new thread", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/debug/agui-harness");
   await page.getByTestId("send-button").click();
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",
@@ -131,7 +131,7 @@ test("isolates thread history when switching to a new thread", async ({ page }) 
   await page.getByTestId("new-thread-button").click();
   await expect(page.getByTestId("assistant-text")).toHaveText("");
   await expect(page.getByTestId("thread-id")).not.toContainText(previousThreadId);
-  await page.goto(`/?thread=${previousThreadId}`);
+  await page.goto(`/debug/agui-harness?thread=${previousThreadId}`);
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",
   );

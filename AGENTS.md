@@ -18,11 +18,11 @@ Repository-local collaboration and implementation rules.
 When using libraries search for documentation in
 
 1. `./external_docs/` for any docs we've already collected on the library
-2. search the context7 mcp for the library docs, store relevent parts in external_docs
+2. search the context7 mcp for the library docs, store relevant parts in external_docs
 
 ## Workflow
 
-- Create/update task plans in `plans/` before substantial changes.
+- Create/update design plans in `plans/` before substantial changes (plans describe *direction*; use beads for *work tracking*).
 - At task completion, add or update relevant docs in `docs/`.
 - Keep changes scoped and incremental; avoid broad refactors during setup.
 - Commit at the end of each implementation subtask.
@@ -32,20 +32,17 @@ When using libraries search for documentation in
 ## Tooling Standards
 
 - Python environment and commands run through UV.
-- Use `make format-all` as the go-to local quality command (no tests).
-- Run `make tidy` before commit.
-- Quality gate for changes:
-  - `make format-all`
-  - `make test`
+- **Pre-commit quality gate: `make tidy`** (runs format → lint-fix → typecheck → test in one command).
+- Use `make format-all` for a quick format+lint pass without running the test suite.
 
 ## Typing and Test Expectations
 
 - Use explicit type annotations in production code and tests.
 - Prefer small composable functions and typed dataclasses/protocols.
-- Add tests for new behavior; Test extensively.
-- Use codecov and maintain 98%+ coverage on all code in `src/`.
-- Keep test files small, prefer paramaterized tests. Make sure tests are fully type annotated.
-- Keep files short and split modules before they become hard to scan.
+- Add tests for new behavior; test extensively.
+- Maintain 98%+ coverage on all code in `src/` (checked by `uv run pytest --cov`).
+- Keep test files small, prefer parameterized tests. Make sure tests are fully type annotated.
+- Prefer files under ~200 lines; split modules at ~300 before they become hard to scan.
 
 ## Chat Runtime Standards
 
@@ -64,6 +61,49 @@ When using libraries search for documentation in
 - Implement new runtime tools under `src/ikea_agent/tools/`.
 - Register tool functions directly in `src/ikea_agent/chat/agent.py` on the active pydantic-ai agent.
 - Prefer Pydantic models for tool inputs/outputs
+
+## Tool Rendering (CopilotKit)
+
+When a tool is intended to be user-visible (progress and/or results), it must have a defined frontend rendering contract.
+
+### Backend Requirements
+
+- Tool names are stable API:
+  - Changing a tool name is a breaking UI change and requires coordinated backend+UI updates.
+- Tool inputs and outputs must be JSON-serializable and versionable:
+  - Prefer Pydantic models (or frozen dataclasses) with explicit fields.
+  - Avoid “stringly typed” JSON blobs.
+- Image output tools must return `ImageToolOutput` with `AttachmentRef` URIs that the browser can resolve.
+
+### Frontend Requirements
+
+- Every user-visible tool has a renderer registered via CopilotKit v2 hooks:
+  - `useRenderTool({ name: "<tool_name>", render })` for named tools.
+  - `useDefaultRenderTool({ render })` as a fallback for any unrecognized tools.
+- Renderer output must be idempotent with respect to retries/replays:
+  - Key progressive UI on `tool_call_id` and tolerate rerenders without duplication.
+- Tool renderers live under `ui/src/components/tooling/` and should be small, typed components.
+
+### “Tool to Renderer” Definition of Done
+
+For a new tool `<tool_name>`:
+
+1. Backend:
+   - Implemented under `src/ikea_agent/tools/...` with typed input/output.
+   - Registered in `src/ikea_agent/chat/agent.py` with a stable name.
+2. UI:
+   - Renderer exists at `ui/src/components/tooling/<ToolName>ToolRenderer.tsx`.
+   - Registered in a single renderer registry (one place) via `useRenderTool`.
+   - Has a unit test (`*.test.tsx`) that covers status transitions and empty/error cases.
+3. Fallback:
+   - A default renderer exists so unexpected tools are still visible in development.
+
+### Shared State (Attachments and Progress)
+
+If the tool depends on UI context (for example attachments), prefer passing it through the agent shared state and keep it typed:
+
+- UI writes state via `agent.setState(...)`
+- Backend tools read it from `ctx.deps.state` (deps must implement the AG-UI `StateHandler` protocol by having a `state` field)
 
 ## Adding Agents (High-Level Recipe)
 
@@ -156,10 +196,7 @@ Target: fast validation coverage plus a small integration smoke that proves the 
 
 ### 7. Finish Strong: Quality Gate + Docs
 
-- Before committing (when the worktree is clean enough to safely auto-fix):
-  - `make format-all`
-  - `make test`
-  - `make tidy`
+- Before committing: `make tidy` (format → lint-fix → typecheck → test).
 - Add a short plan in `plans/` for substantial work.
 - Update `docs/` and `external_docs/` when you introduce new dependencies or protocols.
 
@@ -190,9 +227,7 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 
 ## Legacy Policy
 
-- `legacy/` is reference-only and excluded from active implementation guidance.
-- Do not import `legacy/` modules into active runtime code.
-- When updating docs, prefer linking active docs and avoid routing implementation decisions through legacy files.
+- `legacy/` is reference-only. Do not import from it or route implementation decisions through it.
 
 ## Logging
 
@@ -225,14 +260,11 @@ Each task in beads that you add should
 ### When not to use bd / beads
 
 - When the user asks you to plan or research, don't put planning and research in beads just do it.
-- When the user asks for small exploratory work or a check "which file is this function in?" "what does this error mean?" "what are the current embedding strategies we have?" do the work and report back without creating beads for it. If you find something that needs follow up work, then create a bead for the follow up work but not for the initial exploration.
--
+- When the user asks for small exploratory work or a check ("which file is this function in?", "what does this error mean?") do the work and report back without creating beads. If you find something that needs follow-up work, create a bead for the follow-up but not for the initial exploration.
 
 ### Closing a task
 
-- Befoore closing, lint, type check, test, ensure coverage. Write a descriptive commit message and commit. Once all those happened, close the task.
--
--
+- Before closing: run `make tidy`, ensure coverage, write a descriptive commit message, and commit. Then close the task.
 
 ### Why bd?
 

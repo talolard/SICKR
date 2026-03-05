@@ -1,154 +1,47 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
+import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
+
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
-import { RunStatusContainer } from "@/components/containers/RunStatusContainer";
-import { ThreadContainer } from "@/components/containers/ThreadContainer";
-import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
-import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
-import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
+import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
-import { parseProductResults } from "@/lib/productResults";
-import { upsertToolCall } from "@/lib/toolEvents";
-import type { ToolCallEntry } from "@/lib/toolEvents";
-import {
-  loadActiveThreadId,
-  loadThreadSnapshot,
-  saveActiveThreadId,
-  saveThreadSnapshot,
-} from "@/lib/threadStore";
 
-type Scenario = "success" | "disconnect" | "send_fail_once" | "long_running";
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  toolCallIds: string[];
-};
-
-const useMockAgent = process.env.NEXT_PUBLIC_USE_MOCK_AGENT !== "0";
-
-function parseImageToolOutput(
-  result: unknown,
-): { caption: string; images: AttachmentRef[] } | null {
-  if (typeof result !== "object" || result === null) {
-    return null;
+function resolveAttachmentUri(uri: string): string {
+  if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
+    return uri;
   }
-  if (!("caption" in result) || !("images" in result)) {
-    return null;
+  if (uri.startsWith("/attachments/")) {
+    return uri;
   }
-  const caption = (result as { caption: unknown }).caption;
-  const images = (result as { images: unknown }).images;
-  if (typeof caption !== "string" || !Array.isArray(images)) {
-    return null;
-  }
-  const parsedImages = images.filter((image): image is AttachmentRef => {
-    return (
-      typeof image === "object" &&
-      image !== null &&
-      "attachment_id" in image &&
-      "mime_type" in image &&
-      "uri" in image &&
-      typeof image.attachment_id === "string" &&
-      typeof image.mime_type === "string" &&
-      typeof image.uri === "string"
-    );
-  });
-  return {
-    caption,
-    images: parsedImages,
-  };
-}
-
-function parseSseChunk(
-  chunk: string,
-): Array<{ event: string; data: Record<string, unknown> }> {
-  const entries = chunk
-    .split("\n\n")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-
-  return entries.map((entry) => {
-    const lines = entry.split("\n");
-    const eventLine = lines.find((line) => line.startsWith("event: "));
-    const dataLine = lines.find((line) => line.startsWith("data: "));
-    return {
-      event: eventLine?.slice("event: ".length) ?? "message",
-      data: JSON.parse(dataLine?.slice("data: ".length) ?? "{}") as Record<
-        string,
-        unknown
-      >,
-    };
-  });
+  return `/attachments/${uri.replace(/^\/+/, "")}`;
 }
 
 export default function Home(): ReactElement {
-  const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
-  const [scenario, setScenario] = useState<Scenario>("success");
-  const [assistantText, setAssistantText] = useState<string>("");
-  const [toolCallsById, setToolCallsById] = useState<Record<string, ToolCallEntry>>({});
+  const { agent } = useAgent({ agentId: "ikea_agent" });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
-  const [lastSendKey, setLastSendKey] = useState<string>("");
-  const [toolProgressById, setToolProgressById] = useState<
-    Record<string, { percent: number; label: string }>
-  >({});
-  const [threadId, setThreadId] = useState<string>("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const attachmentFilesRef = useRef<Record<string, File>>({});
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const activeAssistantMessageIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const threadFromUrl = url.searchParams.get("thread");
-    const resolvedThreadId =
-      threadFromUrl ?? loadActiveThreadId() ?? crypto.randomUUID().slice(0, 8);
-    setThreadId(resolvedThreadId);
-    saveActiveThreadId(resolvedThreadId);
-    const snapshot = loadThreadSnapshot(resolvedThreadId);
-    if (snapshot) {
-      setPrompt(snapshot.prompt);
-      setAssistantText(snapshot.assistantText);
-      setToolCallsById(snapshot.toolCallsById);
-      setAttachments(snapshot.attachments);
-      setMessages(snapshot.messages ?? []);
-    }
-    url.searchParams.set("thread", resolvedThreadId);
-    window.history.replaceState({}, "", url.toString());
-  }, []);
-
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
-    saveThreadSnapshot({
-      threadId,
-      prompt,
-      assistantText,
-      toolCallsById,
-      attachments,
-      messages,
-    });
-  }, [assistantText, attachments, messages, prompt, threadId, toolCallsById]);
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 
-  const attachToolCallToActiveAssistant = (toolCallId: string): void => {
-    const activeId = activeAssistantMessageIdRef.current;
-    if (!activeId) {
-      return;
-    }
-    setMessages((current) =>
-      current.map((message) =>
-        message.id === activeId && !message.toolCallIds.includes(toolCallId)
-          ? { ...message, toolCallIds: [...message.toolCallIds, toolCallId] }
-          : message,
-      ),
-    );
-  };
+  useEffect(() => {
+    const readyAttachments = attachments
+      .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
+      .map((attachment) => attachment.attachmentRef as AttachmentRef)
+      .map((attachment) => ({
+        ...attachment,
+        uri: resolveAttachmentUri(attachment.uri),
+      }));
+    const previousState =
+      typeof agent.state === "object" && agent.state !== null
+        ? (agent.state as Record<string, unknown>)
+        : {};
+    agent.setState({
+      ...previousState,
+      attachments: readyAttachments,
+    });
+  }, [agent, attachments]);
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
     setAttachments((current) =>
@@ -162,7 +55,15 @@ export default function Home(): ReactElement {
     setAttachments((current) =>
       current.map((attachment) =>
         attachment.localId === localId
-          ? { ...attachment, status: "ready", progress: 100, attachmentRef }
+          ? {
+              ...attachment,
+              status: "ready",
+              progress: 100,
+              attachmentRef: {
+                ...attachmentRef,
+                uri: resolveAttachmentUri(attachmentRef.uri),
+              },
+            }
           : attachment,
       ),
     );
@@ -223,11 +124,13 @@ export default function Home(): ReactElement {
       };
     });
     setAttachments((current) => [...current, ...nextAttachments]);
-    nextAttachments.forEach((attachment, index) => {
-      const file = files[index];
-      if (file) {
-        void uploadAttachment(attachment.localId, file);
+    nextAttachments.forEach((pendingAttachment) => {
+      const file = attachmentFilesRef.current[pendingAttachment.localId];
+      if (!file) {
+        setAttachmentError(pendingAttachment.localId, "Missing local file handle.");
+        return;
       }
+      void uploadAttachment(pendingAttachment.localId, file);
     });
   };
 
@@ -247,12 +150,13 @@ export default function Home(): ReactElement {
       current.map((attachment) =>
         attachment.localId === localId
           ? (() => {
-              const { errorMessage: _errorMessage, ...rest } = attachment;
-              return {
-                ...rest,
-                status: "uploading" as const,
+              const nextAttachment: PendingAttachment = {
+                ...attachment,
+                status: "uploading",
                 progress: 0,
               };
+              delete nextAttachment.errorMessage;
+              return nextAttachment;
             })()
           : attachment,
       ),
@@ -260,371 +164,17 @@ export default function Home(): ReactElement {
     void uploadAttachment(localId, file);
   };
 
-  const runStream = async (nextScenario: Scenario, sendKey: string): Promise<void> => {
-    setAssistantText("");
-    setError("");
-    setIsRunning(true);
-    setToolProgressById({});
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    let sawDone = false;
-    try {
-      const readyAttachments = attachments
-        .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
-        .map((attachment) => attachment.attachmentRef as AttachmentRef);
-      const endpoint = useMockAgent
-        ? `/api/mock-agui?scenario=${nextScenario}`
-        : "/api/agui-run";
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(useMockAgent ? { "x-send-key": sendKey } : {}),
-        },
-        body: JSON.stringify({
-          prompt,
-          attachments: readyAttachments,
-        }),
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) {
-        const errorBody = await response.text();
-        throw new Error(
-          `Request failed with status ${response.status}: ${errorBody || "No response body."}`,
-        );
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        const messages = parseSseChunk(parts.join("\n\n"));
-        for (const message of messages) {
-          if (message.event === "assistant_delta") {
-            const textValue = message.data.text;
-            if (typeof textValue === "string") {
-              setAssistantText((previous) => previous + textValue);
-              const activeAssistantId = activeAssistantMessageIdRef.current;
-              if (activeAssistantId) {
-                setMessages((current) =>
-                  current.map((messageEntry) =>
-                    messageEntry.id === activeAssistantId
-                      ? { ...messageEntry, text: `${messageEntry.text}${textValue}` }
-                      : messageEntry,
-                  ),
-                );
-              }
-            }
-          }
-          if (message.event === "tool_status") {
-            const toolCallId = message.data.tool_call_id;
-            const toolName = message.data.tool;
-            const status = message.data.status;
-            if (
-              typeof toolCallId === "string" &&
-              typeof toolName === "string" &&
-              (status === "queued" ||
-                status === "executing" ||
-                status === "complete" ||
-                status === "failed")
-            ) {
-              attachToolCallToActiveAssistant(toolCallId);
-              setToolCallsById((current) =>
-                upsertToolCall(current, {
-                  tool_call_id: toolCallId,
-                  tool: toolName,
-                  status,
-                  result: message.data.result,
-                  args: message.data.args,
-                  errorMessage:
-                    typeof message.data.errorMessage === "string"
-                      ? message.data.errorMessage
-                      : undefined,
-                }),
-              );
-            }
-          }
-          if (message.event === "tool_result") {
-            const toolCallId = message.data.tool_call_id;
-            if (typeof toolCallId === "string") {
-              attachToolCallToActiveAssistant(toolCallId);
-              setToolCallsById((current) => {
-                const existing = current[toolCallId];
-                if (!existing) {
-                  return current;
-                }
-                return upsertToolCall(current, {
-                  tool_call_id: toolCallId,
-                  tool: existing.name,
-                  status: existing.status,
-                  result: message.data.result,
-                  args: existing.args,
-                  errorMessage: undefined,
-                });
-              });
-            }
-          }
-          if (message.event === "progress") {
-            const toolCallId = message.data.tool_call_id;
-            const percent = message.data.percent;
-            const label = message.data.label;
-            if (
-              typeof toolCallId === "string" &&
-              typeof percent === "number" &&
-              typeof label === "string"
-            ) {
-              setToolProgressById((current) => ({
-                ...current,
-                [toolCallId]: { percent, label },
-              }));
-            }
-          }
-          if (message.event === "done") {
-            sawDone = true;
-          }
-          if (message.event === "error") {
-            const errorMessage = message.data.message;
-            throw new Error(
-              typeof errorMessage === "string" ? errorMessage : "Streaming failed.",
-            );
-          }
-        }
-      }
-
-      if (!sawDone) {
-        throw new Error("Stream ended unexpectedly before done event.");
-      }
-    } catch (streamError) {
-      const message =
-        streamError instanceof Error && streamError.name === "AbortError"
-          ? "Run canceled locally."
-          : streamError instanceof Error
-            ? streamError.message
-            : "Streaming failed.";
-      setError(message);
-    } finally {
-      abortControllerRef.current = null;
-      activeAssistantMessageIdRef.current = null;
-      setIsRunning(false);
-    }
-  };
-
-  const handleCancelRun = (): void => {
-    abortControllerRef.current?.abort();
-  };
-
-  const handleNewThread = (): void => {
-    const nextThreadId = crypto.randomUUID().slice(0, 8);
-    setThreadId(nextThreadId);
-    setPrompt("Find me storage for a small bedroom");
-    setAssistantText("");
-    setToolCallsById({});
-    setMessages([]);
-    setAttachments([]);
-    setError("");
-    setToolProgressById({});
-    activeAssistantMessageIdRef.current = null;
-    saveActiveThreadId(nextThreadId);
-    const url = new URL(window.location.href);
-    url.searchParams.set("thread", nextThreadId);
-    window.history.replaceState({}, "", url.toString());
-  };
-
-  const handleSubmit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    if (pendingUploads) {
-      setError("Finish uploading or remove attachments to send.");
-      return;
-    }
-    const assistantMessageId = crypto.randomUUID();
-    activeAssistantMessageIdRef.current = assistantMessageId;
-    setMessages((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        role: "user",
-        text: prompt,
-        toolCallIds: [],
-      },
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        text: "",
-        toolCallIds: [],
-      },
-    ]);
-    const sendKey = crypto.randomUUID();
-    setLastSendKey(sendKey);
-    await runStream(scenario, sendKey);
-  };
-
-  const handleRetry = async (): Promise<void> => {
-    if (!lastSendKey) {
-      return;
-    }
-    const assistantMessageId = crypto.randomUUID();
-    activeAssistantMessageIdRef.current = assistantMessageId;
-    setMessages((current) => [
-      ...current,
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        text: "",
-        toolCallIds: [],
-      },
-    ]);
-    const retryScenario =
-      useMockAgent && scenario === "disconnect" ? "success" : scenario;
-    await runStream(retryScenario, lastSendKey);
-  };
-
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-4 p-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
-        <span
-          className={`rounded px-2 py-1 text-xs font-semibold ${
-            useMockAgent ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-          }`}
-          data-testid="mode-badge"
-        >
-          {useMockAgent ? "MOCK MODE" : "REAL MODE"}
-        </span>
-      </div>
-      {threadId ? (
-        <ThreadContainer onNewThread={handleNewThread} threadId={threadId} />
-      ) : null}
-      <section className="flex min-h-[360px] flex-col gap-4 rounded border bg-white p-4">
-        <h2 className="text-sm font-medium text-gray-700">Chat</h2>
-        <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded border bg-gray-50 p-3">
-          {messages.length === 0 ? (
-            <p className="text-sm text-gray-500">Start by sending a message.</p>
-          ) : null}
-          {messages.map((message) => (
-            <article
-              className={`max-w-[85%] rounded px-3 py-2 ${
-                message.role === "user"
-                  ? "ml-auto bg-black text-white"
-                  : "mr-auto border bg-white text-black"
-              }`}
-              key={message.id}
-            >
-              <p className="text-xs opacity-70">{message.role === "user" ? "You" : "Assistant"}</p>
-              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
-              {message.role === "assistant" ? (
-                <div className="mt-2 space-y-2">
-                  {message.toolCallIds.map((toolCallId) => {
-                    const toolCall = toolCallsById[toolCallId];
-                    if (!toolCall) {
-                      return null;
-                    }
-                    return (
-                      <div className="rounded border p-2" key={toolCall.id}>
-                        <DefaultToolCallRenderer
-                          name={toolCall.name}
-                          status={toolCall.status}
-                          result={toolCall.result}
-                          args={toolCall.args}
-                          errorMessage={toolCall.errorMessage}
-                        />
-                        {toolCall.name === "run_search_graph" &&
-                        toolCall.status === "complete" ? (
-                          (() => {
-                            const parsedProducts = parseProductResults(toolCall.result);
-                            return parsedProducts ? (
-                              <ProductResultsToolRenderer products={parsedProducts} />
-                            ) : null;
-                          })()
-                        ) : null}
-                        {toolCall.name === "generate_floor_plan_preview" &&
-                        toolCall.status === "complete" ? (
-                          (() => {
-                            const imageOutput = parseImageToolOutput(toolCall.result);
-                            return imageOutput ? (
-                              <ImageToolOutputRenderer
-                                caption={imageOutput.caption}
-                                images={imageOutput.images}
-                              />
-                            ) : null;
-                          })()
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      </section>
-      <form className="flex flex-col gap-3 rounded border bg-white p-4" onSubmit={handleSubmit}>
-        <label className="flex flex-col gap-1 text-sm">
-          Prompt
-          <input
-            data-testid="prompt-input"
-            className="rounded border p-2"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Scenario
-          {useMockAgent ? (
-            <select
-              data-testid="scenario-select"
-              className="rounded border p-2"
-              value={scenario}
-              onChange={(event) => setScenario(event.target.value as Scenario)}
-            >
-              <option value="success">success</option>
-              <option value="disconnect">disconnect</option>
-              <option value="send_fail_once">send_fail_once</option>
-              <option value="long_running">long_running</option>
-            </select>
-          ) : (
-            <p className="rounded border p-2 text-sm text-gray-700">
-              Real backend mode (`/api/agui-run`)
-            </p>
-          )}
-        </label>
-        <div className="flex items-center gap-2">
-          <button
-            data-testid="send-button"
-            className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-60"
-            disabled={isRunning || pendingUploads}
-            type="submit"
-          >
-            Send
-          </button>
-          <button
-            className="w-fit rounded border px-4 py-2 disabled:opacity-60"
-            data-testid="cancel-button"
-            disabled={!isRunning}
-            onClick={handleCancelRun}
-            type="button"
-          >
-            Cancel run
-          </button>
-        </div>
-      </form>
-      <RunStatusContainer
-        isRunning={isRunning}
-        runningToolCount={
-          Object.values(toolCallsById).filter((toolCall) => toolCall.status === "executing")
-            .length
-        }
-        toolProgressById={toolProgressById}
-      />
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 p-6">
+      <header className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold">IKEA Agent</h1>
+        <p className="text-sm text-gray-600">
+          Chat with the agent. Tool calls render inline.
+        </p>
+        <p className="text-xs text-gray-500">
+          Debug harness: <a className="underline" href="/debug/agui-harness">/debug/agui-harness</a>
+        </p>
+      </header>
       <AttachmentComposer
         attachments={attachments}
         onFilesSelected={handleFilesSelected}
@@ -632,33 +182,10 @@ export default function Home(): ReactElement {
         onRetryAttachment={handleRetryAttachment}
       />
       {pendingUploads ? (
-        <p className="text-sm text-amber-700" data-testid="pending-upload-warning">
-          Finish uploading or remove attachments to send.
-        </p>
+        <p className="text-sm text-amber-700">Finish uploading images before sending.</p>
       ) : null}
-      <p className="hidden" data-testid="assistant-text">
-        {assistantText}
-      </p>
-      <p className="hidden" data-testid="tool-status">
-        Tool status:{" "}
-        {Object.values(toolCallsById)
-          .map((toolCall) => toolCall.status)
-          .join(", ") || "idle"}
-      </p>
-      <div className="hidden" data-testid="tool-calls" />
-      {error ? (
-        <section className="rounded border border-red-500 bg-red-50 p-3">
-          <p data-testid="stream-error">Stream error: {error}</p>
-          <button
-            data-testid="retry-button"
-            className="mt-2 rounded border border-red-500 px-3 py-1"
-            onClick={handleRetry}
-            type="button"
-          >
-            Retry
-          </button>
-        </section>
-      ) : null}
+      <CopilotToolRenderers />
+      <CopilotSidebar />
     </main>
   );
 }
