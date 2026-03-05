@@ -1,65 +1,161 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { FormEvent, useState } from "react";
+import type { ReactElement } from "react";
+
+type Scenario = "success" | "disconnect";
+type ToolState = "idle" | "executing" | "complete" | "failed";
+
+function parseSseChunk(
+  chunk: string,
+): Array<{ event: string; data: Record<string, unknown> }> {
+  const entries = chunk
+    .split("\n\n")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  return entries.map((entry) => {
+    const lines = entry.split("\n");
+    const eventLine = lines.find((line) => line.startsWith("event: "));
+    const dataLine = lines.find((line) => line.startsWith("data: "));
+    return {
+      event: eventLine?.slice("event: ".length) ?? "message",
+      data: JSON.parse(dataLine?.slice("data: ".length) ?? "{}") as Record<
+        string,
+        unknown
+      >,
+    };
+  });
+}
+
+export default function Home(): ReactElement {
+  const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
+  const [scenario, setScenario] = useState<Scenario>("success");
+  const [assistantText, setAssistantText] = useState<string>("");
+  const [toolState, setToolState] = useState<ToolState>("idle");
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+
+  const runStream = async (nextScenario: Scenario): Promise<void> => {
+    setAssistantText("");
+    setToolState("idle");
+    setError("");
+    setIsRunning(true);
+
+    let sawDone = false;
+    try {
+      const response = await fetch(`/api/mock-agui?scenario=${nextScenario}`);
+      if (!response.ok || !response.body) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        const messages = parseSseChunk(parts.join("\n\n"));
+        for (const message of messages) {
+          if (message.event === "assistant_delta") {
+            const textValue = message.data.text;
+            if (typeof textValue === "string") {
+              setAssistantText((previous) => previous + textValue);
+            }
+          }
+          if (message.event === "tool_status") {
+            const status = message.data.status;
+            if (status === "executing" || status === "complete") {
+              setToolState(status);
+            }
+          }
+          if (message.event === "done") {
+            sawDone = true;
+          }
+        }
+      }
+
+      if (!sawDone) {
+        setToolState("failed");
+        throw new Error("Stream ended unexpectedly before done event.");
+      }
+    } catch (streamError) {
+      const message =
+        streamError instanceof Error ? streamError.message : "Streaming failed.";
+      setError(message);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    await runStream(scenario);
+  };
+
+  const handleRetry = async (): Promise<void> => {
+    await runStream("success");
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-8">
+      <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        <label className="flex flex-col gap-1 text-sm">
+          Prompt
+          <input
+            data-testid="prompt-input"
+            className="rounded border p-2"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Scenario
+          <select
+            data-testid="scenario-select"
+            className="rounded border p-2"
+            value={scenario}
+            onChange={(event) => setScenario(event.target.value as Scenario)}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <option value="success">success</option>
+            <option value="disconnect">disconnect</option>
+          </select>
+        </label>
+        <button
+          data-testid="send-button"
+          className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-60"
+          disabled={isRunning}
+          type="submit"
+        >
+          Send
+        </button>
+      </form>
+      <section className="rounded border p-3">
+        <h2 className="text-sm font-medium">Assistant Stream</h2>
+        <p data-testid="assistant-text">{assistantText}</p>
+        <p data-testid="tool-status">Tool status: {toolState}</p>
+      </section>
+      {error ? (
+        <section className="rounded border border-red-500 bg-red-50 p-3">
+          <p data-testid="stream-error">Stream error: {error}</p>
+          <button
+            data-testid="retry-button"
+            className="mt-2 rounded border border-red-500 px-3 py-1"
+            onClick={handleRetry}
+            type="button"
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            Retry
+          </button>
+        </section>
+      ) : null}
+    </main>
   );
 }
