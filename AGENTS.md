@@ -11,8 +11,6 @@ Repository-local collaboration and implementation rules.
 - `plans/`: planning docs that describe direction and sequencing.
 - `docs/`: user/developer docs and runbooks.
 - `legacy/`: reference-only; do not import from active runtime.
-
-Planned (Milestone -1 in `spec/ui/pydanticai_copilotkit_integration.md`):
 - `ui/`: Next.js (App Router) + React + TypeScript CopilotKit UI workspace.
 
 # External Documentation
