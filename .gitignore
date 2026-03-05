@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .pyrefly/
+.hypothesis/
 .coverage
 .coverage.*
 htmlcov/
@@ -33,6 +34,10 @@ venv/
 *.sqlite
 *.sqlite3
 data/*.csv
+data/*.db*
+data/.milvus_*
+artifacts/
+.tmp_untracked/
 
 # Logs
 *.log
