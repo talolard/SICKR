@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
+import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { upsertToolCall } from "@/lib/toolEvents";
@@ -35,6 +36,38 @@ function parseProducts(result: unknown): Product[] | null {
     );
   });
   return parsed;
+}
+
+function parseImageToolOutput(
+  result: unknown,
+): { caption: string; images: AttachmentRef[] } | null {
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+  if (!("caption" in result) || !("images" in result)) {
+    return null;
+  }
+  const caption = (result as { caption: unknown }).caption;
+  const images = (result as { images: unknown }).images;
+  if (typeof caption !== "string" || !Array.isArray(images)) {
+    return null;
+  }
+  const parsedImages = images.filter((image): image is AttachmentRef => {
+    return (
+      typeof image === "object" &&
+      image !== null &&
+      "attachment_id" in image &&
+      "mime_type" in image &&
+      "uri" in image &&
+      typeof image.attachment_id === "string" &&
+      typeof image.mime_type === "string" &&
+      typeof image.uri === "string"
+    );
+  });
+  return {
+    caption,
+    images: parsedImages,
+  };
 }
 
 function parseSseChunk(
@@ -363,6 +396,18 @@ export default function Home(): ReactElement {
                 <ProductResultsToolRenderer
                   products={parseProducts(toolCall.result) ?? []}
                 />
+              ) : null}
+              {toolCall.name === "generate_floor_plan_preview" &&
+              toolCall.status === "complete" ? (
+                (() => {
+                  const imageOutput = parseImageToolOutput(toolCall.result);
+                  return imageOutput ? (
+                    <ImageToolOutputRenderer
+                      caption={imageOutput.caption}
+                      images={imageOutput.images}
+                    />
+                  ) : null;
+                })()
               ) : null}
             </div>
           ))}

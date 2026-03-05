@@ -75,6 +75,8 @@ class AttachmentStore:
             return ".jpg"
         if mime_type == "image/webp":
             return ".webp"
+        if mime_type == "image/svg+xml":
+            return ".svg"
         return ".bin"
 
     @staticmethod
@@ -85,4 +87,6 @@ class AttachmentStore:
             return "image/jpeg"
         if suffix == ".webp":
             return "image/webp"
+        if suffix == ".svg":
+            return "image/svg+xml"
         return "application/octet-stream"

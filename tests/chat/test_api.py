@@ -68,3 +68,19 @@ def test_attachment_upload_rejects_unsupported_type() -> None:
     )
 
     assert upload_response.status_code == 415
+
+
+def test_generated_floor_plan_returns_image_tool_output() -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    response = client.post("/generated-images/floor-plan")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "caption" in payload
+    assert payload["images"]
+    image_ref = payload["images"][0]
+    assert image_ref["mime_type"] == "image/svg+xml"
+
+    image_response = client.get(image_ref["uri"])
+    assert image_response.status_code == 200
+    assert image_response.headers["content-type"].startswith("image/svg+xml")

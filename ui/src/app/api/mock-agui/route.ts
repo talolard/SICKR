@@ -89,6 +89,25 @@ async function handleStreamRequest(
         },
       });
       await sleep(80);
+      push("tool_status", {
+        tool_call_id: "tool-2",
+        tool: "generate_floor_plan_preview",
+        status: "complete",
+        result: {
+          caption: "Draft floor plan preview",
+          images: [
+            {
+              attachment_id: "generated-1",
+              mime_type: "image/svg+xml",
+              uri: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='120'%3E%3Crect width='220' height='120' fill='%23f6f6f6'/%3E%3Crect x='15' y='20' width='70' height='70' fill='%2393c5fd'/%3E%3Crect x='105' y='30' width='95' height='50' fill='%23fdba74'/%3E%3C/svg%3E",
+              width: 220,
+              height: 120,
+              file_name: "floor-plan.svg",
+            },
+          ],
+        },
+      });
+      await sleep(80);
       push("assistant_delta", { text: " Found 3 matching products." });
       push("done", { ok: true });
       controller.close();

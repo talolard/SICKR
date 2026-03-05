@@ -68,3 +68,13 @@ test("retries failed send without re-uploading attachments", async ({ page }) =>
     "Using 1 uploaded image(s).",
   );
 });
+
+test("renders generated image output and opens viewer modal", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("send-button").click();
+  await expect(page.getByTestId("image-tool-output")).toBeVisible();
+  await page.getByTestId("image-thumb-generated-1").click();
+  await expect(page.getByTestId("image-viewer-modal")).toBeVisible();
+  await page.getByText("Close").click();
+  await expect(page.getByTestId("image-viewer-modal")).toBeHidden();
+});
