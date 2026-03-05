@@ -3,10 +3,37 @@
 import { FormEvent, useState } from "react";
 import type { ReactElement } from "react";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
+import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
 
 type Scenario = "success" | "disconnect";
+
+type Product = {
+  id: string;
+  name: string;
+};
+
+function parseProducts(result: unknown): Product[] | null {
+  if (typeof result !== "object" || result === null || !("products" in result)) {
+    return null;
+  }
+  const { products } = result as { products: unknown };
+  if (!Array.isArray(products)) {
+    return null;
+  }
+  const parsed = products.filter((item): item is Product => {
+    return (
+      typeof item === "object" &&
+      item !== null &&
+      "id" in item &&
+      "name" in item &&
+      typeof item.id === "string" &&
+      typeof item.name === "string"
+    );
+  });
+  return parsed;
+}
 
 function parseSseChunk(
   chunk: string,
@@ -170,13 +197,19 @@ export default function Home(): ReactElement {
         </p>
         <div className="mt-2 space-y-2" data-testid="tool-calls">
           {Object.values(toolCallsById).map((toolCall) => (
-            <DefaultToolCallRenderer
-              key={toolCall.id}
-              name={toolCall.name}
-              status={toolCall.status}
-              result={toolCall.result}
-              errorMessage={toolCall.errorMessage}
-            />
+            <div className="rounded border p-2" key={toolCall.id}>
+              <DefaultToolCallRenderer
+                name={toolCall.name}
+                status={toolCall.status}
+                result={toolCall.result}
+                errorMessage={toolCall.errorMessage}
+              />
+              {toolCall.name === "run_search_graph" && toolCall.status === "complete" ? (
+                <ProductResultsToolRenderer
+                  products={parseProducts(toolCall.result) ?? []}
+                />
+              ) : null}
+            </div>
           ))}
         </div>
       </section>

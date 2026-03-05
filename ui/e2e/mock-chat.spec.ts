@@ -7,6 +7,9 @@ test("streams assistant text from mock AG-UI route", async ({ page }) => {
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",
   );
+  await expect(
+    page.getByTestId("product-results").getByText("BRIMNES Wardrobe"),
+  ).toBeVisible();
 });
 
 test("renders tool status transitions executing -> complete", async ({ page }) => {
