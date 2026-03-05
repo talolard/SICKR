@@ -19,6 +19,12 @@ pnpm test
 pnpm test:e2e
 ```
 
+## Runtime routing
+
+- Next.js runtime route: `POST /api/copilotkit`
+- Python AG-UI backend URL is read from `PY_AG_UI_URL`.
+- Default backend URL: `http://localhost:8000/ag-ui`
+
 ## Styling baseline
 
 - Keep `@copilotkit/react-ui/styles.css` as the baseline once CopilotKit UI components are added.
