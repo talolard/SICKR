@@ -9,6 +9,7 @@ describe("DefaultToolCallRenderer", () => {
         name="run_search_graph"
         status="complete"
         result={{ count: 2 }}
+        errorMessage={undefined}
       />,
     );
 
@@ -24,6 +25,7 @@ describe("DefaultToolCallRenderer", () => {
       <DefaultToolCallRenderer
         name="run_search_graph"
         status="failed"
+        result={undefined}
         errorMessage="Timed out after 20s"
       />,
     );

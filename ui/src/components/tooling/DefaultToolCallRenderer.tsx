@@ -5,8 +5,8 @@ type ToolCallStatus = "queued" | "executing" | "complete" | "failed";
 type DefaultToolCallRendererProps = {
   name: string;
   status: ToolCallStatus;
-  result?: unknown;
-  errorMessage?: string;
+  result: unknown | undefined;
+  errorMessage: string | undefined;
 };
 
 export function DefaultToolCallRenderer(

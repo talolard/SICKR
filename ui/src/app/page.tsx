@@ -2,9 +2,11 @@
 
 import { FormEvent, useState } from "react";
 import type { ReactElement } from "react";
+import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
+import { upsertToolCall } from "@/lib/toolEvents";
+import type { ToolCallEntry } from "@/lib/toolEvents";
 
 type Scenario = "success" | "disconnect";
-type ToolState = "idle" | "executing" | "complete" | "failed";
 
 function parseSseChunk(
   chunk: string,
@@ -32,13 +34,13 @@ export default function Home(): ReactElement {
   const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
   const [scenario, setScenario] = useState<Scenario>("success");
   const [assistantText, setAssistantText] = useState<string>("");
-  const [toolState, setToolState] = useState<ToolState>("idle");
+  const [toolCallsById, setToolCallsById] = useState<Record<string, ToolCallEntry>>({});
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
   const runStream = async (nextScenario: Scenario): Promise<void> => {
     setAssistantText("");
-    setToolState("idle");
+    setToolCallsById({});
     setError("");
     setIsRunning(true);
 
@@ -71,9 +73,29 @@ export default function Home(): ReactElement {
             }
           }
           if (message.event === "tool_status") {
+            const toolCallId = message.data.tool_call_id;
+            const toolName = message.data.tool;
             const status = message.data.status;
-            if (status === "executing" || status === "complete") {
-              setToolState(status);
+            if (
+              typeof toolCallId === "string" &&
+              typeof toolName === "string" &&
+              (status === "queued" ||
+                status === "executing" ||
+                status === "complete" ||
+                status === "failed")
+            ) {
+              setToolCallsById((current) =>
+                upsertToolCall(current, {
+                  tool_call_id: toolCallId,
+                  tool: toolName,
+                  status,
+                  result: message.data.result,
+                  errorMessage:
+                    typeof message.data.errorMessage === "string"
+                      ? message.data.errorMessage
+                      : undefined,
+                }),
+              );
             }
           }
           if (message.event === "done") {
@@ -83,7 +105,6 @@ export default function Home(): ReactElement {
       }
 
       if (!sawDone) {
-        setToolState("failed");
         throw new Error("Stream ended unexpectedly before done event.");
       }
     } catch (streamError) {
@@ -141,7 +162,23 @@ export default function Home(): ReactElement {
       <section className="rounded border p-3">
         <h2 className="text-sm font-medium">Assistant Stream</h2>
         <p data-testid="assistant-text">{assistantText}</p>
-        <p data-testid="tool-status">Tool status: {toolState}</p>
+        <p data-testid="tool-status">
+          Tool status:{" "}
+          {Object.values(toolCallsById)
+            .map((toolCall) => toolCall.status)
+            .join(", ") || "idle"}
+        </p>
+        <div className="mt-2 space-y-2" data-testid="tool-calls">
+          {Object.values(toolCallsById).map((toolCall) => (
+            <DefaultToolCallRenderer
+              key={toolCall.id}
+              name={toolCall.name}
+              status={toolCall.status}
+              result={toolCall.result}
+              errorMessage={toolCall.errorMessage}
+            />
+          ))}
+        </div>
       </section>
       {error ? (
         <section className="rounded border border-red-500 bg-red-50 p-3">

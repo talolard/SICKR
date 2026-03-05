@@ -23,7 +23,11 @@ export async function GET(request: NextRequest): Promise<Response> {
 
       push("assistant_delta", { text: "Analyzing request..." });
       await sleep(80);
-      push("tool_status", { tool: "run_search_graph", status: "executing" });
+      push("tool_status", {
+        tool_call_id: "tool-1",
+        tool: "run_search_graph",
+        status: "executing",
+      });
       await sleep(80);
 
       if (scenario === "disconnect") {
@@ -31,7 +35,19 @@ export async function GET(request: NextRequest): Promise<Response> {
         return;
       }
 
-      push("tool_status", { tool: "run_search_graph", status: "complete" });
+      push("tool_status", {
+        tool_call_id: "tool-1",
+        tool: "run_search_graph",
+        status: "complete",
+        result: {
+          products: [
+            {
+              id: "prod-001",
+              name: "BRIMNES Wardrobe",
+            },
+          ],
+        },
+      });
       await sleep(80);
       push("assistant_delta", { text: " Found 3 matching products." });
       push("done", { ok: true });
