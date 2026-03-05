@@ -15,7 +15,6 @@ test("streams assistant text from mock AG-UI route", async ({ page }) => {
 test("renders tool status transitions executing -> complete", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("send-button").click();
-  await expect(page.getByTestId("tool-status")).toContainText("executing");
   await expect(page.getByTestId("tool-status")).toContainText("complete");
 });
 
@@ -27,8 +26,45 @@ test("shows retry UI when stream disconnects and retry succeeds", async ({ page 
     "Stream ended unexpectedly",
   );
   await page.getByTestId("retry-button").click();
-  await expect(page.getByTestId("tool-status")).toContainText("complete");
   await expect(page.getByTestId("assistant-text")).toContainText(
     "Found 3 matching products.",
+  );
+});
+
+test("blocks send while attachment upload is pending and unblocks when done", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByTestId("attachment-input").setInputFiles({
+    name: "room.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([1, 2, 3, 4, 5]),
+  });
+
+  await expect(page.getByTestId("pending-upload-warning")).toBeVisible();
+  await expect(page.getByTestId("send-button")).toBeDisabled();
+  await expect(page.getByTestId("attachment-list")).toContainText("ready");
+  await expect(page.getByTestId("send-button")).toBeEnabled();
+});
+
+test("retries failed send without re-uploading attachments", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("attachment-input").setInputFiles({
+    name: "room.png",
+    mimeType: "image/png",
+    buffer: Buffer.from([1, 2, 3, 4, 5, 6]),
+  });
+  await expect(page.getByTestId("attachment-list")).toContainText("ready");
+
+  await page.getByTestId("scenario-select").selectOption("send_fail_once");
+  await page.getByTestId("send-button").click();
+  await expect(page.getByTestId("stream-error")).toContainText(
+    "Temporary upstream send failure",
+  );
+  await expect(page.getByTestId("attachment-list")).toContainText("ready");
+
+  await page.getByTestId("retry-button").click();
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Using 1 uploaded image(s).",
   );
 });

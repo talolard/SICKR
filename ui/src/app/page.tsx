@@ -1,13 +1,15 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import type { ReactElement } from "react";
+import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
+import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
 
-type Scenario = "success" | "disconnect";
+type Scenario = "success" | "disconnect" | "send_fail_once";
 
 type Product = {
   id: string;
@@ -62,10 +64,125 @@ export default function Home(): ReactElement {
   const [scenario, setScenario] = useState<Scenario>("success");
   const [assistantText, setAssistantText] = useState<string>("");
   const [toolCallsById, setToolCallsById] = useState<Record<string, ToolCallEntry>>({});
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [lastSendKey, setLastSendKey] = useState<string>("");
+  const attachmentFilesRef = useRef<Record<string, File>>({});
 
-  const runStream = async (nextScenario: Scenario): Promise<void> => {
+  const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
+
+  const setAttachmentProgress = (localId: string, progress: number): void => {
+    setAttachments((current) =>
+      current.map((attachment) =>
+        attachment.localId === localId ? { ...attachment, progress } : attachment,
+      ),
+    );
+  };
+
+  const setAttachmentReady = (localId: string, attachmentRef: AttachmentRef): void => {
+    setAttachments((current) =>
+      current.map((attachment) =>
+        attachment.localId === localId
+          ? { ...attachment, status: "ready", progress: 100, attachmentRef }
+          : attachment,
+      ),
+    );
+  };
+
+  const setAttachmentError = (localId: string, message: string): void => {
+    setAttachments((current) =>
+      current.map((attachment) =>
+        attachment.localId === localId
+          ? { ...attachment, status: "error", errorMessage: message }
+          : attachment,
+      ),
+    );
+  };
+
+  const uploadAttachment = async (localId: string, file: File): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/attachments");
+      xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+      xhr.setRequestHeader("x-filename", file.name);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setAttachmentProgress(localId, percent);
+      };
+      xhr.onerror = () => reject(new Error("Upload failed due to network error."));
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+          return;
+        }
+        const payload = JSON.parse(xhr.responseText) as AttachmentRef;
+        setAttachmentReady(localId, payload);
+        resolve();
+      };
+      xhr.send(file);
+    }).catch((uploadError) => {
+      const message =
+        uploadError instanceof Error ? uploadError.message : "Upload failed unexpectedly.";
+      setAttachmentError(localId, message);
+    });
+  };
+
+  const handleFilesSelected = (fileList: FileList): void => {
+    const files = Array.from(fileList);
+    const nextAttachments: PendingAttachment[] = files.map((file) => {
+      const localId = crypto.randomUUID();
+      attachmentFilesRef.current[localId] = file;
+      return {
+        localId,
+        fileName: file.name,
+        mimeType: file.type,
+        progress: 0,
+        status: "uploading",
+      };
+    });
+    setAttachments((current) => [...current, ...nextAttachments]);
+    nextAttachments.forEach((attachment, index) => {
+      const file = files[index];
+      if (file) {
+        void uploadAttachment(attachment.localId, file);
+      }
+    });
+  };
+
+  const handleRemoveAttachment = (localId: string): void => {
+    delete attachmentFilesRef.current[localId];
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.localId !== localId),
+    );
+  };
+
+  const handleRetryAttachment = (localId: string): void => {
+    const file = attachmentFilesRef.current[localId];
+    if (!file) {
+      return;
+    }
+    setAttachments((current) =>
+      current.map((attachment) =>
+        attachment.localId === localId
+          ? (() => {
+              const { errorMessage: _errorMessage, ...rest } = attachment;
+              return {
+                ...rest,
+                status: "uploading" as const,
+                progress: 0,
+              };
+            })()
+          : attachment,
+      ),
+    );
+    void uploadAttachment(localId, file);
+  };
+
+  const runStream = async (nextScenario: Scenario, sendKey: string): Promise<void> => {
     setAssistantText("");
     setToolCallsById({});
     setError("");
@@ -73,9 +190,25 @@ export default function Home(): ReactElement {
 
     let sawDone = false;
     try {
-      const response = await fetch(`/api/mock-agui?scenario=${nextScenario}`);
+      const readyAttachments = attachments
+        .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
+        .map((attachment) => attachment.attachmentRef as AttachmentRef);
+      const response = await fetch(`/api/mock-agui?scenario=${nextScenario}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-send-key": sendKey,
+        },
+        body: JSON.stringify({
+          prompt,
+          attachments: readyAttachments,
+        }),
+      });
       if (!response.ok || !response.body) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const errorBody = await response.text();
+        throw new Error(
+          `Request failed with status ${response.status}: ${errorBody || "No response body."}`,
+        );
       }
 
       const reader = response.body.getReader();
@@ -145,11 +278,21 @@ export default function Home(): ReactElement {
 
   const handleSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    await runStream(scenario);
+    if (pendingUploads) {
+      setError("Finish uploading or remove attachments to send.");
+      return;
+    }
+    const sendKey = crypto.randomUUID();
+    setLastSendKey(sendKey);
+    await runStream(scenario, sendKey);
   };
 
   const handleRetry = async (): Promise<void> => {
-    await runStream("success");
+    if (!lastSendKey) {
+      return;
+    }
+    const retryScenario = scenario === "disconnect" ? "success" : scenario;
+    await runStream(retryScenario, lastSendKey);
   };
 
   return (
@@ -175,17 +318,29 @@ export default function Home(): ReactElement {
           >
             <option value="success">success</option>
             <option value="disconnect">disconnect</option>
+            <option value="send_fail_once">send_fail_once</option>
           </select>
         </label>
         <button
           data-testid="send-button"
           className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-60"
-          disabled={isRunning}
+          disabled={isRunning || pendingUploads}
           type="submit"
         >
           Send
         </button>
       </form>
+      <AttachmentComposer
+        attachments={attachments}
+        onFilesSelected={handleFilesSelected}
+        onRemoveAttachment={handleRemoveAttachment}
+        onRetryAttachment={handleRetryAttachment}
+      />
+      {pendingUploads ? (
+        <p className="text-sm text-amber-700" data-testid="pending-upload-warning">
+          Finish uploading or remove attachments to send.
+        </p>
+      ) : null}
       <section className="rounded border p-3">
         <h2 className="text-sm font-medium">Assistant Stream</h2>
         <p data-testid="assistant-text">{assistantText}</p>
