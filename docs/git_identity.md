@@ -2,7 +2,7 @@
 
 ## Required Local Identity
 This repository should use public Git identity values:
-- `user.name = Talo Lard`
+- `user.name = Talolard`
 - `user.email = talolard@users.noreply.github.com`
 
 ## Verification Commands

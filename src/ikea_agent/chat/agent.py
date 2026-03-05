@@ -33,6 +33,7 @@ from ikea_agent.tools.floorplanner.tool import (
     render_floor_plan as run_floor_planner,
 )
 from ikea_agent.tools.image_analysis import (
+    AttachmentRefPayload,
     DepthEstimationRequest,
     DepthEstimationToolResult,
     ObjectDetectionRequest,
@@ -204,12 +205,20 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     @agent.tool
     async def analyze_room_photo(
         ctx: RunContext[ChatAgentDeps],
-        request: RoomPhotoAnalysisRequest,
+        request: RoomPhotoAnalysisRequest | None = None,
     ) -> RoomPhotoAnalysisToolResult:
         """Run combined room-photo understanding (object detection + depth)."""
 
+        resolved_request = request
+        if resolved_request is None:
+            if not ctx.deps.state.attachments:
+                raise ValueError("No uploaded images available. Upload a room photo first.")
+            resolved_request = RoomPhotoAnalysisRequest(
+                image=AttachmentRefPayload.from_ref(ctx.deps.state.attachments[0])
+            )
+
         return await run_room_photo_analysis(
-            request=request,
+            request=resolved_request,
             attachment_store=ctx.deps.attachment_store,
         )
 

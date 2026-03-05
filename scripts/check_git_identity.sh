@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-expected_name="Talo Lard"
-expected_email="talolard@users.noreply.github.com"
+expected_name="Tal Perry"
+expected_email="talolard@gmail.com"
 
 actual_name="$(git config --local user.name || true)"
 actual_email="$(git config --local user.email || true)"

@@ -237,7 +237,7 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 ## Git Identity
 
 - This repo must use the public identity:
-  - `user.name = Talo Lard`
+  - `user.name = Talolard`
   - `user.email = talolard@users.noreply.github.com`
 - Verify before pushing:
   - `git config --local --get user.name`

@@ -15,8 +15,8 @@ class AttachmentRefPayload(BaseModel):
     attachment_id: str
     mime_type: str
     uri: str
-    width: int | None
-    height: int | None
+    width: int | None = None
+    height: int | None = None
     file_name: str | None = None
 
     @classmethod

@@ -7,6 +7,10 @@ import { z } from "zod";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
+import {
+  RoomPhotoAnalysisToolRenderer,
+  type RoomPhotoAnalysisToolResult,
+} from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { AttachmentRef } from "@/lib/attachments";
 import { parseProductResults } from "@/lib/productResults";
 
@@ -27,6 +31,11 @@ const attachmentRefSchema = z.object({
 const imageToolOutputSchema = z.object({
   caption: z.string(),
   images: z.array(attachmentRefSchema),
+});
+const roomPhotoAnalysisSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  room_hints: z.array(z.string()),
 });
 
 type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
@@ -76,20 +85,43 @@ function parseImageToolOutput(result: unknown): ImageToolOutput | null {
   };
 }
 
+function looksLikeToolFailure(result: unknown): result is string {
+  if (typeof result !== "string") {
+    return false;
+  }
+  return /validation errors?/i.test(result) || /tool failed/i.test(result);
+}
+
+function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysisToolResult | null {
+  const validated = roomPhotoAnalysisSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    caption: validated.data.caption,
+    images: validated.data.images.map(normalizeAttachmentRef),
+    room_hints: validated.data.room_hints,
+  };
+}
+
 export function CopilotToolRenderers(): ReactElement | null {
   useDefaultRenderTool({
     render: ({ name, status, result, parameters }) => {
       const parsedResult = parseResult(result);
-      const mappedStatus =
+      const mappedStatusBase =
         status === "inProgress" ? "queued" : status === "executing" ? "executing" : "complete";
+      const mappedStatus =
+        mappedStatusBase === "complete" && looksLikeToolFailure(parsedResult)
+          ? "failed"
+          : mappedStatusBase;
       return (
         <div className="rounded border bg-white p-2">
           <DefaultToolCallRenderer
             name={name}
             status={mappedStatus}
-            result={parsedResult}
+            result={mappedStatus === "failed" ? undefined : parsedResult}
             args={parameters}
-            errorMessage={undefined}
+            errorMessage={looksLikeToolFailure(parsedResult) ? parsedResult : undefined}
           />
         </div>
       );
@@ -214,6 +246,40 @@ export function CopilotToolRenderers(): ReactElement | null {
       return (
         <div className="rounded border bg-white p-2">
           <ImageToolOutputRenderer caption={imageOutput.caption} images={imageOutput.images} />
+        </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "analyze_room_photo",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return (
+          <div className="rounded border bg-white p-2">
+            <p className="text-sm text-gray-700">Analyzing room photo...</p>
+          </div>
+        );
+      }
+      const parsed = parseRoomPhotoAnalysisResult(result);
+      if (parsed) {
+        return <RoomPhotoAnalysisToolRenderer result={parsed} />;
+      }
+      const parsedResult = parseResult(result);
+      const errorMessage =
+        typeof parsedResult === "string"
+          ? parsedResult
+          : "Tool returned an invalid room-analysis payload.";
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="analyze_room_photo"
+            status="failed"
+            result={undefined}
+            args={undefined}
+            errorMessage={errorMessage}
+          />
         </div>
       );
     },

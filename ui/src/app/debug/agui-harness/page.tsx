@@ -84,6 +84,7 @@ function parseSseChunk(
 }
 
 export default function Home(): ReactElement {
+  const [useMockMode, setUseMockMode] = useState<boolean>(useMockAgent);
   const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
   const [scenario, setScenario] = useState<Scenario>("success");
   const [assistantText, setAssistantText] = useState<string>("");
@@ -103,6 +104,12 @@ export default function Home(): ReactElement {
 
   useEffect(() => {
     const url = new URL(window.location.href);
+    const mockParam = url.searchParams.get("mock");
+    if (mockParam === "1") {
+      setUseMockMode(true);
+    } else if (mockParam === "0") {
+      setUseMockMode(false);
+    }
     const threadFromUrl = url.searchParams.get("thread");
     const resolvedThreadId =
       threadFromUrl ?? loadActiveThreadId() ?? crypto.randomUUID().slice(0, 8);
@@ -274,14 +281,14 @@ export default function Home(): ReactElement {
       const readyAttachments = attachments
         .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
         .map((attachment) => attachment.attachmentRef as AttachmentRef);
-      const endpoint = useMockAgent
+      const endpoint = useMockMode
         ? `/api/mock-agui?scenario=${nextScenario}`
         : "/api/agui-run";
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...(useMockAgent ? { "x-send-key": sendKey } : {}),
+          ...(useMockMode ? { "x-send-key": sendKey } : {}),
         },
         body: JSON.stringify({
           prompt,
@@ -485,7 +492,7 @@ export default function Home(): ReactElement {
       },
     ]);
     const retryScenario =
-      useMockAgent && scenario === "disconnect" ? "success" : scenario;
+      useMockMode && scenario === "disconnect" ? "success" : scenario;
     await runStream(retryScenario, lastSendKey);
   };
 
@@ -495,11 +502,11 @@ export default function Home(): ReactElement {
         <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
         <span
           className={`rounded px-2 py-1 text-xs font-semibold ${
-            useMockAgent ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+            useMockMode ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
           }`}
           data-testid="mode-badge"
         >
-          {useMockAgent ? "MOCK MODE" : "REAL MODE"}
+          {useMockMode ? "MOCK MODE" : "REAL MODE"}
         </span>
       </div>
       {threadId ? (
@@ -580,7 +587,7 @@ export default function Home(): ReactElement {
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Scenario
-          {useMockAgent ? (
+          {useMockMode ? (
             <select
               data-testid="scenario-select"
               className="rounded border p-2"

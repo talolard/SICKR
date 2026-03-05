@@ -1,6 +1,7 @@
 """fal.ai image analysis tools and typed contracts."""
 
 from ikea_agent.tools.image_analysis.models import (
+    AttachmentRefPayload,
     DepthEstimationRequest,
     DepthEstimationToolResult,
     ObjectDetectionRequest,
@@ -18,6 +19,7 @@ from ikea_agent.tools.image_analysis.tool import (
 )
 
 __all__ = [
+    "AttachmentRefPayload",
     "DepthEstimationRequest",
     "DepthEstimationToolResult",
     "ObjectDetectionRequest",
