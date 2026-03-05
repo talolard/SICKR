@@ -1,7 +1,11 @@
-.PHONY: deps chat lint format format-check format-all typecheck test tidy preflight
+.PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
+	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
+UI_DIR ?= ui
+UI_PORT ?= 3000
+PY_AG_UI_URL ?= http://127.0.0.1:8000/ag-ui
 
 deps:
 	uv sync --all-groups
@@ -31,6 +35,27 @@ preflight:
 
 chat:
 	uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
+
+ui-install:
+	cd $(UI_DIR) && corepack enable && corepack prepare pnpm@10.6.3 --activate && pnpm install
+
+ui-dev:
+	cd $(UI_DIR) && pnpm dev --port $(UI_PORT)
+
+ui-dev-mock:
+	cd $(UI_DIR) && pnpm dev:mock --port $(UI_PORT)
+
+ui-dev-real:
+	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm dev --port $(UI_PORT)
+
+ui-test:
+	cd $(UI_DIR) && pnpm test
+
+ui-test-e2e:
+	cd $(UI_DIR) && pnpm test:e2e
+
+ui-test-e2e-real:
+	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e
 
 # One command before commit.
 tidy: format

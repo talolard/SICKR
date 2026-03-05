@@ -25,6 +25,21 @@ pnpm test:e2e
 - Python AG-UI backend URL is read from `PY_AG_UI_URL`.
 - Default backend URL: `http://localhost:8000/ag-ui`
 
+## Separate-process workflow
+
+Run backend and UI in separate terminals:
+
+```bash
+make chat
+make ui-dev-real
+```
+
+Mock exploration mode:
+
+```bash
+make ui-dev-mock
+```
+
 ## Styling baseline
 
 - Keep `@copilotkit/react-ui/styles.css` as the baseline once CopilotKit UI components are added.
