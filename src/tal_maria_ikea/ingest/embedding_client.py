@@ -41,9 +41,10 @@ class VertexGeminiEmbeddingClient:
         if self._output_dimensions is not None:
             config["output_dimensionality"] = self._output_dimensions
 
+        contents: genai_types.ContentListUnion = list(texts)
         response = self._client.models.embed_content(
             model=self._model_name,
-            contents=texts,
+            contents=contents,
             config=config,
         )
 
