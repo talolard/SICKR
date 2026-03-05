@@ -10,6 +10,8 @@ Current phase is infrastructure and workflow setup only.
 - [GCP Setup](gcp_setup.md)
 - [Logging Standards](logging.md)
 - [Git Identity](git_identity.md)
+- [Agent Tool Bridge](tools/agent_tool_bridge.md)
+- [Floor Planner Tool](tools/floor_planner.md)
 - [Pipeline Plan](pipeline.md)
 - [Phase 1 Status](phase1_status.md)
 - [Web Runbook](web.md)

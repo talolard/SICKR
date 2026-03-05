@@ -45,6 +45,11 @@ Defined in `sql/10_schema.sql` and modeling SQL:
 ## Documentation Rule
 Any schema or semantic change must update this page in the same change.
 
+## Tool Sample Fixtures
+- Floor planner sample inputs live in `tests/fixtures/floor_planner/`.
+- They include valid non-rectangular and hallway layouts, plus invalid geometry cases.
+- Generated floor-plan PNGs are runtime artifacts only and are not stored in git.
+
 ## Phase 2 References
 - `spec/phase2/source_notes.md`
 - `spec/phase2/ui_critique.md`

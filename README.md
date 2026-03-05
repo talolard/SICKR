@@ -35,6 +35,7 @@ Phase 2 semantic-search implementation for IKEA catalog exploration.
 - Multi-country description rollup table: `app.product_description_country_rollup`.
 - Local parquet artifacts exported under `data/parquet/`.
 - Search UX includes sort modes, advanced filters, reset, and active-filter chips.
+- Typed floor-planner tooling under `src/tal_maria_ikea/tools/` for agent-compatible room visualization.
 
 ## Recovery / Error Handling
 
