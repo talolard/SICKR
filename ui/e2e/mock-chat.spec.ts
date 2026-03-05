@@ -78,3 +78,24 @@ test("renders generated image output and opens viewer modal", async ({ page }) =
   await page.getByText("Close").click();
   await expect(page.getByTestId("image-viewer-modal")).toBeHidden();
 });
+
+test("shows progress updates for long-running tool calls", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("scenario-select").selectOption("long_running");
+  await page.getByTestId("send-button").click();
+  await expect(page.getByTestId("run-status-container")).toContainText("Working...");
+  await expect(page.getByTestId("tool-progress-tool-1")).toContainText(
+    "Searching catalog:",
+  );
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Found 3 matching products.",
+  );
+});
+
+test("cancels long-running run locally and notifies user", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("scenario-select").selectOption("long_running");
+  await page.getByTestId("send-button").click();
+  await page.getByTestId("cancel-button").click();
+  await expect(page.getByTestId("stream-error")).toContainText("Run canceled locally.");
+});

@@ -68,7 +68,28 @@ async function handleStreamRequest(
         tool: "run_search_graph",
         status: "executing",
       });
-      await sleep(80);
+      if (scenario === "long_running") {
+        push("progress", {
+          tool_call_id: "tool-1",
+          percent: 10,
+          label: "Searching catalog",
+        });
+        await sleep(300);
+        push("progress", {
+          tool_call_id: "tool-1",
+          percent: 45,
+          label: "Searching catalog",
+        });
+        await sleep(300);
+        push("progress", {
+          tool_call_id: "tool-1",
+          percent: 80,
+          label: "Ranking matches",
+        });
+        await sleep(300);
+      } else {
+        await sleep(80);
+      }
 
       if (scenario === "disconnect") {
         controller.close();
@@ -106,6 +127,11 @@ async function handleStreamRequest(
             },
           ],
         },
+      });
+      push("progress", {
+        tool_call_id: "tool-2",
+        percent: 100,
+        label: "Floor plan ready",
       });
       await sleep(80);
       push("assistant_delta", { text: " Found 3 matching products." });

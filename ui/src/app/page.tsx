@@ -3,6 +3,7 @@
 import { FormEvent, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
+import { RunStatusContainer } from "@/components/containers/RunStatusContainer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
@@ -10,7 +11,7 @@ import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
 
-type Scenario = "success" | "disconnect" | "send_fail_once";
+type Scenario = "success" | "disconnect" | "send_fail_once" | "long_running";
 
 type Product = {
   id: string;
@@ -101,7 +102,11 @@ export default function Home(): ReactElement {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [lastSendKey, setLastSendKey] = useState<string>("");
+  const [toolProgressById, setToolProgressById] = useState<
+    Record<string, { percent: number; label: string }>
+  >({});
   const attachmentFilesRef = useRef<Record<string, File>>({});
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 
@@ -220,6 +225,9 @@ export default function Home(): ReactElement {
     setToolCallsById({});
     setError("");
     setIsRunning(true);
+    setToolProgressById({});
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     let sawDone = false;
     try {
@@ -236,6 +244,7 @@ export default function Home(): ReactElement {
           prompt,
           attachments: readyAttachments,
         }),
+        signal: controller.signal,
       });
       if (!response.ok || !response.body) {
         const errorBody = await response.text();
@@ -291,6 +300,21 @@ export default function Home(): ReactElement {
               );
             }
           }
+          if (message.event === "progress") {
+            const toolCallId = message.data.tool_call_id;
+            const percent = message.data.percent;
+            const label = message.data.label;
+            if (
+              typeof toolCallId === "string" &&
+              typeof percent === "number" &&
+              typeof label === "string"
+            ) {
+              setToolProgressById((current) => ({
+                ...current,
+                [toolCallId]: { percent, label },
+              }));
+            }
+          }
           if (message.event === "done") {
             sawDone = true;
           }
@@ -302,11 +326,20 @@ export default function Home(): ReactElement {
       }
     } catch (streamError) {
       const message =
-        streamError instanceof Error ? streamError.message : "Streaming failed.";
+        streamError instanceof Error && streamError.name === "AbortError"
+          ? "Run canceled locally."
+          : streamError instanceof Error
+            ? streamError.message
+            : "Streaming failed.";
       setError(message);
     } finally {
+      abortControllerRef.current = null;
       setIsRunning(false);
     }
+  };
+
+  const handleCancelRun = (): void => {
+    abortControllerRef.current?.abort();
   };
 
   const handleSubmit = async (event: FormEvent): Promise<void> => {
@@ -352,6 +385,7 @@ export default function Home(): ReactElement {
             <option value="success">success</option>
             <option value="disconnect">disconnect</option>
             <option value="send_fail_once">send_fail_once</option>
+            <option value="long_running">long_running</option>
           </select>
         </label>
         <button
@@ -362,7 +396,24 @@ export default function Home(): ReactElement {
         >
           Send
         </button>
+        <button
+          className="w-fit rounded border px-4 py-2 disabled:opacity-60"
+          data-testid="cancel-button"
+          disabled={!isRunning}
+          onClick={handleCancelRun}
+          type="button"
+        >
+          Cancel run
+        </button>
       </form>
+      <RunStatusContainer
+        isRunning={isRunning}
+        runningToolCount={
+          Object.values(toolCallsById).filter((toolCall) => toolCall.status === "executing")
+            .length
+        }
+        toolProgressById={toolProgressById}
+      />
       <AttachmentComposer
         attachments={attachments}
         onFilesSelected={handleFilesSelected}
