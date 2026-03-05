@@ -2,6 +2,19 @@
 
 Repository-local collaboration and implementation rules.
 
+## Repository structure (current)
+
+- `src/ikea_agent/`: active Python runtime (FastAPI + pydantic-ai + pydantic-graph).
+- `tests/`: pytest test suite (typed tests preferred).
+- `spec/`: specs (including `spec/ui/` for CopilotKit integration).
+- `external_docs/`: repo-local notes on external libraries and protocols.
+- `plans/`: planning docs that describe direction and sequencing.
+- `docs/`: user/developer docs and runbooks.
+- `legacy/`: reference-only; do not import from active runtime.
+
+Planned (Milestone -1 in `spec/ui/pydanticai_copilotkit_integration.md`):
+- `ui/`: Next.js (App Router) + React + TypeScript CopilotKit UI workspace.
+
 # External Documentation
 
 When using libraries search for documentation in
@@ -47,6 +60,22 @@ When using libraries search for documentation in
 - Use module-level loggers (`getLogger(__name__)`) and log concise operational facts (query + result counts).
 - Avoid hidden side effects in service constructors (for example auto-running schema SQL). Bootstrap runtime/schema explicitly at app startup.
 - Keep route handlers thin: validate request payloads, call graph/services, return typed responses.
+
+## UI + AG-UI integration (CopilotKit + PydanticAI)
+
+These are the protocol-level practices we follow for the CopilotKit UI integration (see `external_docs/pydantic_ai_ag_ui.md` and `spec/ui/pydanticai_copilotkit_integration.md`):
+
+- Expose the agent using `Agent.to_ag_ui(deps=...)` and mount the returned ASGI app into the FastAPI runtime.
+- Expect streaming over SSE (and possibly WebSocket routes depending on configuration); the stream can include:
+  - assistant text deltas
+  - tool call events (name/args/tool_call_id/results/errors)
+  - optional “thinking” deltas (enabled at provider/model settings)
+- Treat `tool_call_id` as a stable key in UI rendering; progressive tool rendering must be idempotent across retries/replays.
+- Keep “thinking” behind a disclosure toggle by default; surface only a high-level “Thinking…” indicator unless explicitly expanded.
+- Prefer explicit UI updates from tools via `ToolReturn` metadata (custom events or state snapshots) for progress updates and UI-only artifacts/state.
+- For long-running work, prefer deferred tools and plan for multi-round-trip runs:
+  - initial run yields deferred tool requests
+  - follow-up run provides `DeferredToolResults` keyed by `tool_call_id`
 
 ## SQL and Data Rules
 
