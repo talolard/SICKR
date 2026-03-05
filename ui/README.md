@@ -17,6 +17,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:e2e
+pnpm test:e2e:real
 ```
 
 ## Runtime routing
@@ -32,6 +33,12 @@ Run backend and UI in separate terminals:
 ```bash
 make chat
 make ui-dev-real
+```
+
+Run real-backend E2E smoke (with backend already running):
+
+```bash
+make ui-test-e2e-real
 ```
 
 Mock exploration mode:

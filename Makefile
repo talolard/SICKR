@@ -55,7 +55,7 @@ ui-test-e2e:
 	cd $(UI_DIR) && pnpm test:e2e
 
 ui-test-e2e-real:
-	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e
+	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
 
 # One command before commit.
 tidy: format
