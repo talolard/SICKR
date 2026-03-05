@@ -9,8 +9,30 @@ from ikea_agent.chat_app.main import create_app
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:
-    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
 
     response = client.get("/")
+    ag_ui_response = client.get("/ag-ui")
 
     assert response.status_code == 404
+    assert ag_ui_response.status_code == 404
+
+
+def test_create_app_with_ag_ui_mount_exposes_ag_ui_route() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.get("/ag-ui")
+
+    assert response.status_code != 404
