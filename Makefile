@@ -77,7 +77,7 @@ reset:
 	@pkill -f "uvicorn ikea_agent.chat_app.main:create_app" || true
 	@lsof -tiTCP:$(UI_PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@lsof -tiTCP:$(PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
-	@rm -rf $(UI_DIR)/.next
+	@rm -rf $(UI_DIR)/.next 2>/dev/null || true
 	@echo "Stopped dev servers on :$(UI_PORT)/:$(PORT) and cleared $(UI_DIR)/.next"
 
 # One command before commit.

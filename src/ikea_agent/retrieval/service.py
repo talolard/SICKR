@@ -59,6 +59,19 @@ class MilvusAccessService:
             )
         self._client.insert(collection_name=self._collection_name, data=payload)
 
+    def row_count(self) -> int:
+        """Return current number of rows in the Milvus collection."""
+
+        if not self._client.has_collection(collection_name=self._collection_name):
+            return 0
+        stats = self._client.get_collection_stats(collection_name=self._collection_name)
+        row_count_value = stats.get("row_count")
+        if isinstance(row_count_value, int):
+            return row_count_value
+        if isinstance(row_count_value, str):
+            return int(row_count_value)
+        return 0
+
     def search(
         self,
         *,

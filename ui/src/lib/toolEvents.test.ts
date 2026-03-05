@@ -9,6 +9,7 @@ describe("upsertToolCall", () => {
         tool: "run_search_graph",
         status: "executing",
         result: undefined,
+        args: { semantic_query: "hallway plants" },
         errorMessage: undefined,
       },
     );
@@ -18,11 +19,13 @@ describe("upsertToolCall", () => {
       tool: "run_search_graph",
       status: "complete",
       result: { products: [{ id: "prod-001" }] },
+      args: undefined,
       errorMessage: undefined,
     });
 
     expect(Object.keys(second)).toHaveLength(1);
     expect(second["tool-1"]?.status).toBe("complete");
+    expect(second["tool-1"]?.args).toEqual({ semantic_query: "hallway plants" });
     expect(second["tool-1"]?.result).toEqual({ products: [{ id: "prod-001" }] });
   });
 });

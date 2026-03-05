@@ -5,6 +5,7 @@ export type ToolEventPayload = {
   tool: string;
   status: ToolCallStatus;
   result: unknown | undefined;
+  args: unknown | undefined;
   errorMessage: string | undefined;
 };
 
@@ -13,6 +14,7 @@ export type ToolCallEntry = {
   name: string;
   status: ToolCallStatus;
   result: unknown | undefined;
+  args: unknown | undefined;
   errorMessage: string | undefined;
 };
 
@@ -28,6 +30,7 @@ export function upsertToolCall(
       name: event.tool,
       status: event.status,
       result: event.result ?? previous?.result,
+      args: event.args ?? previous?.args,
       errorMessage: event.errorMessage ?? previous?.errorMessage,
     },
   };

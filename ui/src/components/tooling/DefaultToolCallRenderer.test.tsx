@@ -9,6 +9,7 @@ describe("DefaultToolCallRenderer", () => {
         name="run_search_graph"
         status="complete"
         result={{ count: 2 }}
+        args={{ semantic_query: "low light hallway plants" }}
         errorMessage={undefined}
       />,
     );
@@ -17,6 +18,9 @@ describe("DefaultToolCallRenderer", () => {
       screen.getByRole("heading", { name: "run_search_graph" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Status: complete")).toBeInTheDocument();
+    expect(
+      screen.getByText("Search query: low light hallway plants"),
+    ).toBeInTheDocument();
     expect(screen.getByText(/"count": 2/)).toBeInTheDocument();
   });
 
@@ -26,6 +30,7 @@ describe("DefaultToolCallRenderer", () => {
         name="run_search_graph"
         status="failed"
         result={undefined}
+        args={undefined}
         errorMessage="Timed out after 20s"
       />,
     );

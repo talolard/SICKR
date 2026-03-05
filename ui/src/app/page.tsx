@@ -9,6 +9,7 @@ import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRen
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
+import { parseProductResults } from "@/lib/productResults";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
 import {
@@ -26,32 +27,7 @@ type ChatMessage = {
   toolCallIds: string[];
 };
 
-type Product = {
-  id: string;
-  name: string;
-};
 const useMockAgent = process.env.NEXT_PUBLIC_USE_MOCK_AGENT !== "0";
-
-function parseProducts(result: unknown): Product[] | null {
-  if (typeof result !== "object" || result === null || !("products" in result)) {
-    return null;
-  }
-  const { products } = result as { products: unknown };
-  if (!Array.isArray(products)) {
-    return null;
-  }
-  const parsed = products.filter((item): item is Product => {
-    return (
-      typeof item === "object" &&
-      item !== null &&
-      "id" in item &&
-      "name" in item &&
-      typeof item.id === "string" &&
-      typeof item.name === "string"
-    );
-  });
-  return parsed;
-}
 
 function parseImageToolOutput(
   result: unknown,
@@ -369,6 +345,7 @@ export default function Home(): ReactElement {
                   tool: toolName,
                   status,
                   result: message.data.result,
+                  args: message.data.args,
                   errorMessage:
                     typeof message.data.errorMessage === "string"
                       ? message.data.errorMessage
@@ -391,6 +368,7 @@ export default function Home(): ReactElement {
                   tool: existing.name,
                   status: existing.status,
                   result: message.data.result,
+                  args: existing.args,
                   errorMessage: undefined,
                 });
               });
@@ -556,13 +534,17 @@ export default function Home(): ReactElement {
                           name={toolCall.name}
                           status={toolCall.status}
                           result={toolCall.result}
+                          args={toolCall.args}
                           errorMessage={toolCall.errorMessage}
                         />
                         {toolCall.name === "run_search_graph" &&
                         toolCall.status === "complete" ? (
-                          <ProductResultsToolRenderer
-                            products={parseProducts(toolCall.result) ?? []}
-                          />
+                          (() => {
+                            const parsedProducts = parseProductResults(toolCall.result);
+                            return parsedProducts ? (
+                              <ProductResultsToolRenderer products={parsedProducts} />
+                            ) : null;
+                          })()
                         ) : null}
                         {toolCall.name === "generate_floor_plan_preview" &&
                         toolCall.status === "complete" ? (

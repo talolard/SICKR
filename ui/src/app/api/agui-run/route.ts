@@ -38,6 +38,7 @@ export const POST = async (request: NextRequest): Promise<Response> => {
               tool_call_id: params.event.toolCallId,
               tool: params.event.toolCallName,
               status: "executing",
+              args: params.event.toolCallArgs ?? params.toolCallArgs,
             });
           },
           onToolCallResultEvent: (params: any) => {
@@ -51,6 +52,7 @@ export const POST = async (request: NextRequest): Promise<Response> => {
               tool_call_id: params.event.toolCallId,
               tool: params.toolCallName,
               status: "complete",
+              args: params.event.toolCallArgs ?? params.toolCallArgs,
             });
           },
           onRunErrorEvent: (params: any) => {

@@ -67,6 +67,9 @@ async function handleStreamRequest(
         tool_call_id: "tool-1",
         tool: "run_search_graph",
         status: "executing",
+        args: {
+          semantic_query: runInput.prompt,
+        },
       });
       if (scenario === "long_running") {
         push("progress", {
@@ -100,6 +103,9 @@ async function handleStreamRequest(
         tool_call_id: "tool-1",
         tool: "run_search_graph",
         status: "complete",
+        args: {
+          semantic_query: runInput.prompt,
+        },
         result: {
           products: [
             {

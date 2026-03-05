@@ -7,8 +7,7 @@ import {
 import { NextRequest } from "next/server";
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
-const baseAgUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
-const agUiUrl = baseAgUiUrl.endsWith("/") ? baseAgUiUrl : `${baseAgUiUrl}/`;
+const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui";
 
 const runtime = new CopilotRuntime({
   agents: {
