@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { parseProductResults } from "../../lib/productResults";
 
 type ToolCallStatus = "queued" | "executing" | "complete" | "failed";
 
@@ -22,6 +23,10 @@ export function DefaultToolCallRenderer(
     typeof args.semantic_query === "string"
       ? args.semantic_query
       : null;
+  const productCount =
+    name === "run_search_graph" && status !== "failed"
+      ? (parseProductResults(result)?.length ?? 0)
+      : null;
 
   if (status === "failed") {
     return (
@@ -40,7 +45,8 @@ export function DefaultToolCallRenderer(
       <h2>{name}</h2>
       <p>Status: {status}</p>
       {semanticQuery ? <p>Search query: {semanticQuery}</p> : null}
-      {result ? <pre>{JSON.stringify(result, null, 2)}</pre> : null}
+      {productCount !== null ? <p>Result count: {productCount}</p> : null}
+      {productCount === null && result ? <pre>{JSON.stringify(result, null, 2)}</pre> : null}
     </section>
   );
 }

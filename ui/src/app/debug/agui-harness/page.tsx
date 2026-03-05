@@ -7,9 +7,7 @@ import { RunStatusContainer } from "@/components/containers/RunStatusContainer";
 import { ThreadContainer } from "@/components/containers/ThreadContainer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
-import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
-import { parseProductResults } from "@/lib/productResults";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
 import {
@@ -545,15 +543,6 @@ export default function Home(): ReactElement {
                           args={toolCall.args}
                           errorMessage={toolCall.errorMessage}
                         />
-                        {toolCall.name === "run_search_graph" &&
-                        toolCall.status === "complete" ? (
-                          (() => {
-                            const parsedProducts = parseProductResults(toolCall.result);
-                            return parsedProducts ? (
-                              <ProductResultsToolRenderer products={parsedProducts} />
-                            ) : null;
-                          })()
-                        ) : null}
                         {toolCall.name === "generate_floor_plan_preview" &&
                         toolCall.status === "complete" ? (
                           (() => {

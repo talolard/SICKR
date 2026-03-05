@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TypedDict, cast
 
+import matplotlib as mpl
 from pydantic import BaseModel
+
+# Renovation ultimately draws through matplotlib. On macOS, a GUI backend
+# instantiated from a worker thread crashes the process; force headless rendering.
+mpl.use("Agg", force=True)
+
 from renovation.elements import create_elements_registry
 from renovation.floor_plan import FloorPlan
 from renovation.project import Project

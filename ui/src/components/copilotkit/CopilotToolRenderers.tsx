@@ -6,13 +6,11 @@ import { z } from "zod";
 
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
-import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import {
   RoomPhotoAnalysisToolRenderer,
   type RoomPhotoAnalysisToolResult,
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { AttachmentRef } from "@/lib/attachments";
-import { parseProductResults } from "@/lib/productResults";
 
 type ImageToolOutput = {
   caption: string;
@@ -86,10 +84,48 @@ function parseImageToolOutput(result: unknown): ImageToolOutput | null {
 }
 
 function looksLikeToolFailure(result: unknown): result is string {
-  if (typeof result !== "string") {
+  const parsed = parseResult(result);
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "status" in parsed &&
+    parsed.status === "error"
+  ) {
+    return true;
+  }
+  if (typeof parsed !== "string") {
     return false;
   }
-  return /validation errors?/i.test(result) || /tool failed/i.test(result);
+  return (
+    /validation errors?/i.test(parsed) ||
+    /tool failed/i.test(parsed) ||
+    /missing_terminal_event/i.test(parsed) ||
+    /terminated/i.test(parsed)
+  );
+}
+
+function extractToolFailureMessage(result: unknown): string | undefined {
+  const parsed = parseResult(result);
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "status" in parsed &&
+    parsed.status === "error"
+  ) {
+    const message =
+      "message" in parsed && typeof parsed.message === "string"
+        ? parsed.message
+        : "Tool run failed.";
+    const reason =
+      "reason" in parsed && typeof parsed.reason === "string"
+        ? parsed.reason
+        : undefined;
+    return reason ? `${message} (${reason})` : message;
+  }
+  if (typeof parsed === "string" && looksLikeToolFailure(parsed)) {
+    return parsed;
+  }
+  return undefined;
 }
 
 function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysisToolResult | null {
@@ -114,6 +150,7 @@ export function CopilotToolRenderers(): ReactElement | null {
         mappedStatusBase === "complete" && looksLikeToolFailure(parsedResult)
           ? "failed"
           : mappedStatusBase;
+      const failureMessage = extractToolFailureMessage(parsedResult);
       return (
         <div className="rounded border bg-white p-2">
           <DefaultToolCallRenderer
@@ -121,7 +158,7 @@ export function CopilotToolRenderers(): ReactElement | null {
             status={mappedStatus}
             result={mappedStatus === "failed" ? undefined : parsedResult}
             args={parameters}
-            errorMessage={looksLikeToolFailure(parsedResult) ? parsedResult : undefined}
+            errorMessage={mappedStatus === "failed" ? failureMessage : undefined}
           />
         </div>
       );
@@ -135,7 +172,7 @@ export function CopilotToolRenderers(): ReactElement | null {
       limit: z.number().optional(),
       filters: z.unknown().optional(),
     }),
-    render: ({ status, result }) => {
+    render: ({ status, result, parameters }) => {
       if (status !== "complete") {
         return (
           <div className="rounded border bg-white p-2">
@@ -143,10 +180,29 @@ export function CopilotToolRenderers(): ReactElement | null {
           </div>
         );
       }
-      const products = parseProductResults(result) ?? [];
+      const failureMessage = extractToolFailureMessage(result);
+      if (failureMessage) {
+        return (
+          <div className="rounded border bg-white p-2">
+            <DefaultToolCallRenderer
+              name="run_search_graph"
+              status="failed"
+              result={undefined}
+              args={parameters}
+              errorMessage={failureMessage}
+            />
+          </div>
+        );
+      }
       return (
         <div className="rounded border bg-white p-2">
-          <ProductResultsToolRenderer products={products} />
+          <DefaultToolCallRenderer
+            name="run_search_graph"
+            status="complete"
+            result={parseResult(result)}
+            args={parameters}
+            errorMessage={undefined}
+          />
         </div>
       );
     },
@@ -163,16 +219,30 @@ export function CopilotToolRenderers(): ReactElement | null {
           </div>
         );
       }
+      const failureMessage = extractToolFailureMessage(result);
+      if (failureMessage) {
+        return (
+          <div className="rounded border bg-white p-2">
+            <DefaultToolCallRenderer
+              name="render_floor_plan"
+              status="failed"
+              result={undefined}
+              args={undefined}
+              errorMessage={failureMessage}
+            />
+          </div>
+        );
+      }
       const imageOutput = parseImageToolOutput(result);
       if (!imageOutput) {
         return (
           <div className="rounded border bg-white p-2">
             <DefaultToolCallRenderer
               name="render_floor_plan"
-              status="complete"
-              result={result}
+              status="failed"
+              result={undefined}
               args={undefined}
-              errorMessage={undefined}
+              errorMessage="Tool returned an invalid floor-plan payload."
             />
           </div>
         );

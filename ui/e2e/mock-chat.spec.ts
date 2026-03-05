@@ -16,9 +16,7 @@ test("streams assistant text from mock AG-UI route", async ({ page }) => {
   await expect(
     page.getByText("Search query: Find me storage for a small bedroom"),
   ).toBeVisible();
-  await expect(
-    page.getByTestId("product-results").getByText("BRIMNES Wardrobe"),
-  ).toBeVisible();
+  await expect(page.getByText("Result count: 1")).toBeVisible();
 });
 
 test("renders tool status transitions executing -> complete", async ({ page }) => {

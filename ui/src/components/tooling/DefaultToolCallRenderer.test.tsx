@@ -8,7 +8,7 @@ describe("DefaultToolCallRenderer", () => {
       <DefaultToolCallRenderer
         name="run_search_graph"
         status="complete"
-        result={{ count: 2 }}
+        result={{ products: [{ id: "a" }, { id: "b" }] }}
         args={{ semantic_query: "low light hallway plants" }}
         errorMessage={undefined}
       />,
@@ -21,7 +21,7 @@ describe("DefaultToolCallRenderer", () => {
     expect(
       screen.getByText("Search query: low light hallway plants"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/"count": 2/)).toBeInTheDocument();
+    expect(screen.getByText("Result count: 2")).toBeInTheDocument();
   });
 
   it("renders guidance for a failed call", () => {
