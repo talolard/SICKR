@@ -59,6 +59,13 @@ When using libraries search for documentation in
 - Avoid hidden side effects in service constructors (for example auto-running schema SQL). Bootstrap runtime/schema explicitly at app startup.
 - Keep route handlers thin: validate request payloads, call graph/services, return typed responses.
 
+## Implementing Tools
+
+- Implement new runtime tools under `src/ikea_agent/tools/`.
+- For floor planner specifically, use `src/ikea_agent/tools/floorplanner/` as the canonical module location.
+- Register tool functions directly in `src/ikea_agent/chat/agent.py` on the active pydantic-ai agent.
+- Prefer Pydantic models for tool inputs/outputs and avoid compatibility shim layers in legacy package paths.
+
 ## UI + AG-UI integration (CopilotKit + PydanticAI)
 
 These are the protocol-level practices we follow for the CopilotKit UI integration (see `external_docs/pydantic_ai_ag_ui.md` and `spec/ui/pydanticai_copilotkit_integration.md`):

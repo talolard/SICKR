@@ -4,22 +4,22 @@
 The floor planner tool renders a room plan to a local PNG using `renovation`.
 
 Code locations:
-- `src/tal_maria_ikea/tools/floor_planner_models.py`
-- `src/tal_maria_ikea/tools/floor_planner_renderer.py`
-- `src/tal_maria_ikea/tools/floor_planner_tool.py`
+- `src/ikea_agent/tools/floorplanner/models.py`
+- `src/ikea_agent/tools/floorplanner/renderer.py`
+- `src/ikea_agent/tools/floorplanner/tool.py`
 
 ## Input Contract
 `FloorPlanRequest` is the canonical typed payload.
 
 Core concepts:
-- Ordered perimeter walls (`walls`) that form a closed, non-self-intersecting polygon.
-- Doors/windows are anchored to walls by `wall_id` + offset.
-- Geometry validation rejects impossible layouts before rendering.
+- All user/agent units are centimeters as floats.
+- Layout and Renovation element wrappers are validated with Pydantic.
+- Conversion to meters happens only at the Renovation render boundary.
 
 ## Rendering Behavior
 - Tool writes PNG artifacts to local filesystem (`artifacts/floor_plans` by default).
-- Output file is renamed to `<output_filename_stem>.png`.
-- Tool returns `ToolExecutionResult` with output path and summary metadata.
+- Output file is written as `floor_plan.png`.
+- Tool returns typed output (`FloorPlannerToolResult`) and can optionally return `ToolReturn` with PNG `BinaryContent`.
 
 ## Agent Usage Guidance
 Use floor planning when the user provides clear room dimensions/openings.
@@ -28,17 +28,10 @@ After rendering, ask for confirmation before continuing, e.g.:
 - How confident are you that this matches the real room?
 
 ## Sample Data
-Fixtures are in `tests/fixtures/floor_planner/`.
-
-Valid scenarios:
-- `valid_room_complex.yaml` (recessed corner room)
-- `valid_hallway_7m_x_2_5m.yaml` (7m x 2.5m hallway with doors)
-
-Invalid scenarios:
-- self-intersection
-- opening outside wall extent
-- negative dimensions
-- open polygon perimeter
+Representative payloads and checks are in:
+- `tests/tools/test_floor_planner_models.py`
+- `tests/tools/test_floor_planner_renderer.py`
+- `tests/tools/test_floor_planner_tool.py`
 
 ## Artifact Policy
 Generated images are runtime/test artifacts and are not committed to git.

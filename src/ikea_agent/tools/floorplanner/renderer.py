@@ -2,78 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
 
+from pydantic import BaseModel
 from renovation.elements import create_elements_registry
 from renovation.floor_plan import FloorPlan
 from renovation.project import Project
 
-from tal_maria_ikea.tools.floor_planner_models import FloorPlanRequest
+from ikea_agent.tools.floorplanner.models import FloorPlanRequest
 
 
 class FloorPlannerRenderError(RuntimeError):
     """Raised when floor-plan rendering fails."""
 
 
-@dataclass(frozen=True, slots=True)
-class FloorPlanRenderResult:
+class FloorPlanRenderResult(BaseModel):
     """Structured metadata returned after successful rendering."""
 
     output_png: Path
-    plan_name: str
     wall_count: int
     door_count: int
     window_count: int
-
-
-class _ProjectSettings(TypedDict):
-    dpi: int
-    pdf_file: str | None
-    png_dir: str
-
-
-class _LayoutSettings(TypedDict):
-    bottom_left_corner: tuple[float, float]
-    top_right_corner: tuple[float, float]
-    scale_numerator: int
-    scale_denominator: int
-    grid_major_step: float
-    grid_minor_step: float
-
-
-class _ElementConfig(TypedDict, total=False):
-    type: str
-    anchor_point: tuple[float, float]
-    length: float
-    thickness: float
-    orientation_angle: float
-    overall_thickness: float
-    single_line_thickness: float
-    doorway_width: float
-    door_width: float
-    to_the_right: bool
-    color: str
-
-
-class _TitleConfig(TypedDict):
-    text: str
-    font_size: int
-
-
-class _FloorPlanConfig(TypedDict, total=False):
-    title: _TitleConfig
-    layout: _LayoutSettings
-    inherited_elements: list[str]
-    elements: list[_ElementConfig]
-
-
-class _RenovationSettings(TypedDict):
-    project: _ProjectSettings
-    default_layout: _LayoutSettings
-    reusable_elements: dict[str, list[_ElementConfig]]
-    floor_plans: list[_FloorPlanConfig]
 
 
 class FloorPlannerRenderer:
@@ -83,43 +32,39 @@ class FloorPlannerRenderer:
         """Render one floor plan and return metadata and output file path."""
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        settings = cast(
-            "_RenovationSettings",
-            request.to_renovation_settings(str(output_dir)),
-        )
+        settings = request.to_renovation_settings(str(output_dir))
 
         try:
             self._render_from_settings(settings)
         except Exception as exc:  # pragma: no cover - protected by integration tests
-            msg = f"Failed to render floor plan '{request.plan_name}'"
+            msg = "Failed to render floor plan"
             raise FloorPlannerRenderError(msg) from exc
 
-        output_png = _resolve_renderer_output(output_dir, request.plan_name)
+        output_png = _resolve_renderer_output(output_dir)
         if output_png is None:
             msg = f"Renderer did not produce any PNG output in: {output_dir}"
             raise FloorPlannerRenderError(msg)
 
-        final_png = output_dir / f"{request.output_filename_stem}.png"
+        final_png = output_dir / "floor_plan.png"
         if final_png.exists():
             final_png.unlink()
         output_png.replace(final_png)
 
         return FloorPlanRenderResult(
             output_png=final_png,
-            plan_name=request.plan_name,
-            wall_count=len(request.walls),
-            door_count=len(request.doors),
-            window_count=len(request.windows),
+            wall_count=request.count_elements("wall"),
+            door_count=request.count_elements("door"),
+            window_count=request.count_elements("window"),
         )
 
-    def _render_from_settings(self, settings: _RenovationSettings) -> None:
+    def _render_from_settings(self, settings: dict[str, object]) -> None:
         elements_registry = create_elements_registry()
         floor_plans: list[FloorPlan] = []
 
-        default_layout = settings["default_layout"]
-        reusable = settings["reusable_elements"]
+        default_layout = settings["default_layout"]  # type: ignore[index]
+        reusable = settings["reusable_elements"]  # type: ignore[index]
 
-        for floor_plan_params in settings["floor_plans"]:
+        for floor_plan_params in settings["floor_plans"]:  # type: ignore[index]
             layout_params = floor_plan_params.get("layout") or default_layout
             floor_plan = FloorPlan(**layout_params)
 
@@ -140,16 +85,12 @@ class FloorPlannerRenderer:
 
             floor_plans.append(floor_plan)
 
-        project_settings = settings["project"]
+        project_settings = settings["project"]  # type: ignore[index]
         project = Project(floor_plans, project_settings["dpi"])
         project.render_to_png(project_settings["png_dir"])
 
 
-def _resolve_renderer_output(output_dir: Path, plan_name: str) -> Path | None:
-    plan_named = output_dir / f"{plan_name}.png"
-    if plan_named.exists():
-        return plan_named
-
+def _resolve_renderer_output(output_dir: Path) -> Path | None:
     png_files = sorted(output_dir.glob("*.png"))
     if not png_files:
         return None

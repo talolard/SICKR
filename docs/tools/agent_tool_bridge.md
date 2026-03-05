@@ -1,22 +1,21 @@
 # Agent Tool Bridge Pattern
 
 ## Purpose
-The tools package separates domain logic from runtime-specific decorators.
+The floor planner tool is exposed directly in the active chat agent module.
 
-- Domain logic lives in plain Python classes implementing `ToolProtocol`.
-- The bridge layer registers decorated callables on an agent runtime.
-- The return shape is standardized via `ToolExecutionResult`.
+- Domain logic lives in `ikea_agent.tools.floorplanner`.
+- Registration happens in `src/ikea_agent/chat/agent.py` via `@agent.tool_plain`.
+- Return shape is typed (`FloorPlannerToolResult`) with optional rich `ToolReturn`.
 
-## Current Bridge
-`tal_maria_ikea.tools.floor_planner_tool.register_floor_planner_tool` uses duck typing:
+## Current Pattern
+`build_chat_agent` registers:
 
-- Expects an agent object with a callable `.tool` decorator.
-- Registers `render_floor_plan(request: FloorPlanRequest)`.
-- Delegates execution to `FloorPlannerTool.run`.
+- `run_search_graph(...)` via `@agent.tool`
+- `render_floor_plan(request: FloorPlanRequest)` via `@agent.tool_plain`
 
-This keeps tools independent from one specific runtime package while still supporting pydantic-ai-style decoration.
+`render_floor_plan` delegates to `ikea_agent.tools.floorplanner.tool.render_floor_plan`.
 
 ## Why This Shape
-- Testability: domain tool tests do not require agent runtime setup.
-- Typing: request/response contracts are explicit and reusable.
-- Extensibility: future tools can reuse the same result envelope and registration pattern.
+- Testability: tool function behavior is tested independently from model/provider wiring.
+- Typing: request/response contracts are explicit Pydantic models.
+- Clarity: avoids extra protocol/bridge layers for this runtime.

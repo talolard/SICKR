@@ -6,7 +6,7 @@ import os
 from logging import getLogger
 
 from google.genai.types import ThinkingLevel
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, ToolReturn
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
 from pydantic_ai.providers.google import GoogleProvider
 
@@ -18,6 +18,13 @@ from ikea_agent.chat.graph import (
 )
 from ikea_agent.config import get_settings
 from ikea_agent.shared.types import RetrievalFilters, ShortRetrievalResult
+from ikea_agent.tools.floorplanner.models import FloorPlanRequest
+from ikea_agent.tools.floorplanner.tool import (
+    FloorPlannerToolResult,
+)
+from ikea_agent.tools.floorplanner.tool import (
+    render_floor_plan as run_floor_planner,
+)
 
 logger = getLogger(__name__)
 
@@ -27,6 +34,8 @@ Use the `run_search_graph` tool to discover products relevant to the user query.
 You may call the tool multiple times with different phrasings and filters.
 Only recommend products that appear in tool results.
 When recommending products, explain why each is suitable and include key dimensions and price.
+Use `render_floor_plan` when the user provides enough room dimensions/openings to draft a layout.
+After rendering a floor plan, ask the user to confirm whether it matches their room.
 """
 
 
@@ -54,7 +63,7 @@ def build_chat_agent() -> Agent[ChatGraphDeps, str]:
     )
 
     @agent.tool
-    def run_search_graph(
+    async def run_search_graph(
         ctx: RunContext[ChatGraphDeps],
         semantic_query: str,
         limit: int = 20,
@@ -63,7 +72,7 @@ def build_chat_agent() -> Agent[ChatGraphDeps, str]:
         """Run semantic product search and return short product records."""
 
         graph = build_chat_graph()
-        result = graph.run_sync(
+        result = await graph.run(
             ParseUserIntentNode(user_message=semantic_query),
             state=ChatGraphState(filters=filters),
             deps=ctx.deps,
@@ -76,5 +85,11 @@ def build_chat_agent() -> Agent[ChatGraphDeps, str]:
             },
         )
         return result.output.product_matches[:limit]
+
+    @agent.tool_plain
+    def render_floor_plan(request: FloorPlanRequest) -> FloorPlannerToolResult | ToolReturn:
+        """Render a floor plan image from typed centimeter inputs."""
+
+        return run_floor_planner(request)
 
     return agent

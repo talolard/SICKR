@@ -1,110 +1,86 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
-from tal_maria_ikea.tools.contracts import ToolExecutionResult
-from tal_maria_ikea.tools.floor_planner_models import FloorPlanRequest
-from tal_maria_ikea.tools.floor_planner_renderer import (
-    FloorPlannerRenderError,
-    FloorPlanRenderResult,
-)
-from tal_maria_ikea.tools.floor_planner_tool import FloorPlannerTool, register_floor_planner_tool
+import pytest
+from pydantic_ai import ToolReturn
 
-
-@dataclass(frozen=True, slots=True)
-class _SuccessRenderer:
-    def render(self, request: FloorPlanRequest, output_dir: Path) -> FloorPlanRenderResult:
-        _ = output_dir
-        return FloorPlanRenderResult(
-            output_png=Path("artifacts/floor_plans/example.png"),
-            plan_name=request.plan_name,
-            wall_count=1,
-            door_count=0,
-            window_count=0,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class _FailRenderer:
-    def render(self, request: FloorPlanRequest, output_dir: Path) -> FloorPlanRenderResult:
-        _ = (request, output_dir)
-        msg = "renderer exploded"
-        raise FloorPlannerRenderError(msg)
-
-
-@dataclass(slots=True)
-class _DummyAgent:
-    decorated: list[Callable[[FloorPlanRequest], ToolExecutionResult]]
-
-    def tool(
-        self,
-        function: Callable[[FloorPlanRequest], ToolExecutionResult],
-    ) -> Callable[[FloorPlanRequest], ToolExecutionResult]:
-        self.decorated.append(function)
-        return function
+from ikea_agent.tools.floorplanner.models import FloorPlanRequest
+from ikea_agent.tools.floorplanner.renderer import FloorPlannerRenderError, FloorPlanRenderResult
+from ikea_agent.tools.floorplanner.tool import FloorPlannerToolResult, render_floor_plan
 
 
 def _minimal_request() -> FloorPlanRequest:
     return FloorPlanRequest.model_validate(
         {
-            "plan_name": "tiny",
-            "walls": [
+            "elements": [
                 {
-                    "id": "w1",
-                    "start": {"x_m": 0.0, "y_m": 0.0},
-                    "end": {"x_m": 1.0, "y_m": 0.0},
-                    "thickness_m": 0.1,
+                    "type": "wall",
+                    "name": "tiny_wall_1",
+                    "anchor_point_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                    "length_cm": 100.0,
+                    "thickness_cm": 10.0,
                 },
                 {
-                    "id": "w2",
-                    "start": {"x_m": 1.0, "y_m": 0.0},
-                    "end": {"x_m": 1.0, "y_m": 1.0},
-                    "thickness_m": 0.1,
+                    "type": "wall",
+                    "name": "tiny_wall_2",
+                    "anchor_point_cm": {"x_cm": 100.0, "y_cm": 0.0},
+                    "length_cm": 100.0,
+                    "thickness_cm": 10.0,
+                    "orientation_angle_deg": 90.0,
                 },
                 {
-                    "id": "w3",
-                    "start": {"x_m": 1.0, "y_m": 1.0},
-                    "end": {"x_m": 0.0, "y_m": 1.0},
-                    "thickness_m": 0.1,
-                },
-                {
-                    "id": "w4",
-                    "start": {"x_m": 0.0, "y_m": 1.0},
-                    "end": {"x_m": 0.0, "y_m": 0.0},
-                    "thickness_m": 0.1,
+                    "type": "wall",
+                    "name": "tiny_wall_3",
+                    "anchor_point_cm": {"x_cm": 100.0, "y_cm": 100.0},
+                    "length_cm": 100.0,
+                    "thickness_cm": 10.0,
+                    "orientation_angle_deg": 180.0,
                 },
             ],
         }
     )
 
 
-def test_tool_returns_success_result() -> None:
-    tool = FloorPlannerTool(renderer=_SuccessRenderer(), output_dir=Path("artifacts/unused"))
+def test_render_floor_plan_returns_success_result(tmp_path: Path) -> None:
+    request = _minimal_request()
 
-    result = tool.run(_minimal_request())
+    result = render_floor_plan(request, output_dir=tmp_path)
 
-    assert isinstance(result, ToolExecutionResult)
-    assert result.success is True
-    assert result.output_path == Path("artifacts/floor_plans/example.png")
-
-
-def test_tool_returns_error_result() -> None:
-    tool = FloorPlannerTool(renderer=_FailRenderer(), output_dir=Path("artifacts/unused"))
-
-    result = tool.run(_minimal_request())
-
-    assert result.success is False
-    assert result.errors == ("renderer exploded",)
+    assert isinstance(result, FloorPlannerToolResult)
+    assert result.element_names == ["tiny_wall_1", "tiny_wall_2", "tiny_wall_3"]
+    assert result.output_png_path == str(tmp_path / "floor_plan.png")
 
 
-def test_register_floor_planner_tool_decorates_callable() -> None:
-    agent = _DummyAgent(decorated=[])
-    tool = FloorPlannerTool(renderer=_SuccessRenderer(), output_dir=Path("artifacts/unused"))
+def test_render_floor_plan_returns_tool_return_when_requested(tmp_path: Path) -> None:
+    request = _minimal_request().model_copy(update={"include_image_bytes": True})
 
-    wrapped = register_floor_planner_tool(agent, tool)
-    output = wrapped(_minimal_request())
+    result = render_floor_plan(request, output_dir=tmp_path)
 
-    assert len(agent.decorated) == 1
-    assert output.success is True
+    assert isinstance(result, ToolReturn)
+    assert result.metadata is not None
+    assert result.metadata["element_names"] == ["tiny_wall_1", "tiny_wall_2", "tiny_wall_3"]
+    assert len(result.content) == 1
+
+
+def test_render_floor_plan_raises_value_error_from_renderer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _minimal_request()
+
+    def _raise_render_error(
+        self: object,
+        request: FloorPlanRequest,
+        output_dir: Path,
+    ) -> FloorPlanRenderResult:
+        _ = (self, request, output_dir)
+        msg = "renderer exploded"
+        raise FloorPlannerRenderError(msg)
+
+    monkeypatch.setattr(
+        "ikea_agent.tools.floorplanner.renderer.FloorPlannerRenderer.render",
+        _raise_render_error,
+    )
+
+    with pytest.raises(ValueError, match="Floor plan rendering failed"):
+        render_floor_plan(request, output_dir=Path("artifacts/unused"))

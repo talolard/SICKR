@@ -21,9 +21,9 @@ Active runtime uses Milvus Lite collection:
 3. Query flow retrieves vector candidates from Milvus.
 4. DuckDB hydrates and filters candidate products.
 
-## Tool Sample Fixtures
-- Floor planner sample inputs live in `tests/fixtures/floor_planner/`.
-- They include valid non-rectangular and hallway layouts, plus invalid geometry cases.
+## Tool Sample Inputs
+- Floor planner sample inputs live in typed tests under `tests/tools/test_floor_planner_*.py`.
+- Inputs are modeled as centimeter-based Pydantic payloads.
 - Generated floor-plan PNGs are runtime artifacts only and are not stored in git.
 
 ## Phase 2 References
