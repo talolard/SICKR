@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import duckdb
 
-from ikea_agent.retrieval.repository import RetrievalRepository, ShortlistRepository
-from ikea_agent.retrieval.vector_store import VectorMatch
+from ikea_agent.retrieval.catalog_repository import CatalogRepository
+from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
@@ -82,7 +82,7 @@ def test_hydrate_candidates_filters_by_price_and_dimensions() -> None:
     _setup_schema(connection)
     _seed_products(connection)
 
-    repository = RetrievalRepository(connection)
+    repository = CatalogRepository(connection)
     filters = RetrievalFilters(
         category="tables-desks",
         price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),
@@ -103,29 +103,12 @@ def test_hydrate_candidates_filters_by_price_and_dimensions() -> None:
     assert results[0].embedding_text == "line1\nline2"
 
 
-def test_shortlist_repository_add_remove_list() -> None:
-    connection = duckdb.connect(":memory:")
-    _setup_schema(connection)
-    _seed_products(connection)
-
-    repository = ShortlistRepository(connection)
-    repository.add("1-DE", note="candidate")
-
-    items = repository.list_items()
-    assert len(items) == 1
-    assert items[0].canonical_product_key == "1-DE"
-    assert items[0].note == "candidate"
-
-    repository.remove("1-DE")
-    assert repository.list_items() == []
-
-
 def test_hydrate_candidates_filters_by_include_and_exclude_keyword() -> None:
     connection = duckdb.connect(":memory:")
     _setup_schema(connection)
     _seed_products(connection)
 
-    repository = RetrievalRepository(connection)
+    repository = CatalogRepository(connection)
     filters = RetrievalFilters(
         include_keyword="work",
         exclude_keyword="compact",

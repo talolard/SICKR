@@ -1,12 +1,12 @@
-"""Local reranking with lexical baseline and optional transformer backend."""
+"""Typed reranker backends with explicit factory selection."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Any
+from typing import Any, Literal, Protocol, overload
 
-from ikea_agent.config import get_settings
+from ikea_agent.config import AppSettings
 from ikea_agent.shared.types import RetrievalResult
 
 
@@ -20,59 +20,102 @@ class RerankedItem:
     rerank_score: float
 
 
-class RerankerService:
-    """Rerank top retrieval candidates using a local backend."""
-
-    def __init__(self) -> None:
-        self._settings = get_settings()
+class Reranker(Protocol):
+    """Typed reranker protocol used by chat graph runtime."""
 
     def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
         """Return reordered items with before/after metadata."""
 
-        if not self._settings.rerank_enabled:
-            return _identity_ranking(results)
-        candidate_limit = min(self._settings.rerank_candidate_limit, len(results))
-        candidates = results[:candidate_limit]
-        remainder = results[candidate_limit:]
 
-        backend = self._settings.rerank_backend
-        if backend == "transformer":
-            scores = _transformer_scores(query_text, candidates)
-        else:
-            scores = _lexical_scores(query_text, candidates)
+class IdentityReranker:
+    """No-op reranker preserving semantic candidate order."""
 
-        scored = list(enumerate(candidates))
-        scored.sort(
-            key=lambda item: (
-                -scores[item[0]],
-                -item[1].semantic_score,
-                item[1].canonical_product_key,
-            )
-        )
+    def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
+        """Return identity-ranked items with original semantic order."""
 
-        reranked_results = [item[1] for item in scored]
-        reranked_results.extend(remainder)
-        score_map = {item.canonical_product_key: scores[idx] for idx, item in enumerate(candidates)}
+        _ = query_text
         return [
             RerankedItem(
-                result=result,
-                rank_before=_rank_of(results, result.canonical_product_key),
+                result=item,
+                rank_before=index + 1,
                 rank_after=index + 1,
-                rerank_score=score_map.get(result.canonical_product_key, 0.0),
+                rerank_score=item.semantic_score,
             )
-            for index, result in enumerate(reranked_results)
+            for index, item in enumerate(results)
         ]
 
 
-def _identity_ranking(results: list[RetrievalResult]) -> list[RerankedItem]:
+class LexicalReranker:
+    """Token-overlap reranker that combines lexical and semantic signals."""
+
+    def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
+        """Return reranked items using lexical token overlap scoring."""
+
+        scores = _lexical_scores(query_text, results)
+        return _build_reranked_items(results=results, scores=scores)
+
+
+class TransformerReranker:
+    """Cross-encoder reranker with lexical fallback when deps are unavailable."""
+
+    def __init__(self, settings: AppSettings) -> None:
+        self._settings = settings
+
+    def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
+        """Return reranked items using cross-encoder or lexical fallback."""
+
+        scores = _transformer_scores(
+            query_text=query_text, results=results, settings=self._settings
+        )
+        return _build_reranked_items(results=results, scores=scores)
+
+
+RerankerBackend = Literal["identity", "lexical", "transformer"]
+
+
+@overload
+def get_reranker(backend: Literal["identity"], settings: AppSettings) -> IdentityReranker: ...
+
+
+@overload
+def get_reranker(backend: Literal["lexical"], settings: AppSettings) -> LexicalReranker: ...
+
+
+@overload
+def get_reranker(backend: Literal["transformer"], settings: AppSettings) -> TransformerReranker: ...
+
+
+def get_reranker(backend: RerankerBackend, settings: AppSettings) -> Reranker:
+    """Return explicit reranker backend instance for the selected literal."""
+
+    if backend == "identity":
+        return IdentityReranker()
+    if backend == "lexical":
+        return LexicalReranker()
+    return TransformerReranker(settings)
+
+
+def _build_reranked_items(
+    *, results: list[RetrievalResult], scores: list[float]
+) -> list[RerankedItem]:
+    scored = list(enumerate(results))
+    scored.sort(
+        key=lambda item: (
+            -scores[item[0]],
+            -item[1].semantic_score,
+            item[1].canonical_product_key,
+        )
+    )
+    reranked_results = [item[1] for item in scored]
+    score_map = {item.canonical_product_key: scores[idx] for idx, item in enumerate(results)}
     return [
         RerankedItem(
-            result=item,
-            rank_before=index + 1,
+            result=result,
+            rank_before=_rank_of(results, result.canonical_product_key),
             rank_after=index + 1,
-            rerank_score=item.semantic_score,
+            rerank_score=score_map.get(result.canonical_product_key, 0.0),
         )
-        for index, item in enumerate(results)
+        for index, result in enumerate(reranked_results)
     ]
 
 
@@ -100,14 +143,18 @@ def _lexical_scores(query_text: str, results: list[RetrievalResult]) -> list[flo
     return values
 
 
-def _transformer_scores(query_text: str, results: list[RetrievalResult]) -> list[float]:
+def _transformer_scores(
+    *,
+    query_text: str,
+    results: list[RetrievalResult],
+    settings: AppSettings,
+) -> list[float]:
     try:
         torch_mod = import_module("torch")
         transformers_mod = import_module("transformers")
     except Exception:
         return _lexical_scores(query_text, results)
 
-    settings = get_settings()
     device = "mps" if torch_mod.backends.mps.is_available() else "cpu"
     tokenizer = transformers_mod.AutoTokenizer.from_pretrained(settings.rerank_model_name)
     model = transformers_mod.AutoModelForSequenceClassification.from_pretrained(

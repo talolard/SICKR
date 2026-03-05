@@ -13,13 +13,12 @@ The active graph nodes in `src/ikea_agent/chat/graph.py` run:
 
 ## Retrieval Data Path
 
-`RetrieveCandidatesNode` calls `RetrievalService.retrieve_with_trace`:
+`RetrieveCandidatesNode` uses runtime helpers in `chat/runtime.py`:
 
-1. Embed query text through `PydanticAIEmbeddingClient` (`pydantic_ai.Embedder`).
+1. Embed query text through `pydantic_ai.Embedder` directly.
 2. Search Milvus Lite collection for nearest vectors.
 3. Hydrate candidate keys in DuckDB (`app.products_canonical` + `app.product_embeddings`).
 4. Apply structured filters in inline SQL.
-5. Persist query telemetry to `app.query_log`.
 
 ## Raw Data vs Embeddings
 

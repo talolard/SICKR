@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from logging import getLogger
+from uuid import uuid4
 
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.chat.runtime import ChatRuntime, embed_query, search_candidates
 from ikea_agent.shared.types import (
     RetrievalFilters,
     RetrievalRequest,
@@ -64,19 +65,23 @@ class RetrieveCandidatesNode(BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphRe
     async def run(
         self, ctx: GraphRunContext[ChatGraphState, ChatGraphDeps]
     ) -> BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResult]:
-        """Execute typed retrieval and pass candidates to reranking."""
+        """Embed query, run Milvus search, and hydrate candidates from DuckDB."""
 
         request = RetrievalRequest(
             query_text=ctx.state.user_message,
             result_limit=max(200, ctx.deps.runtime.settings.default_query_limit),
             filters=ctx.state.filters or RetrievalFilters(),
         )
-        execution = await ctx.deps.runtime.retrieval_service.retrieve_with_trace(
-            request,
-            source="chat",
+        query_vector = await embed_query(ctx.deps.runtime, request.query_text)
+        retrieval_results = search_candidates(
+            ctx.deps.runtime,
+            query_vector=query_vector,
+            filters=request.filters,
+            result_limit=request.result_limit,
         )
-        ctx.state.request_id = execution.request_id
-        return RerankNode(retrieval_results=execution.results)
+
+        ctx.state.request_id = str(uuid4())
+        return RerankNode(retrieval_results=retrieval_results)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,9 +93,9 @@ class RerankNode(BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResult]):
     async def run(
         self, ctx: GraphRunContext[ChatGraphState, ChatGraphDeps]
     ) -> BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResult]:
-        """Apply reranking and project results for agent tools."""
+        """Apply configured reranker backend and project short result rows."""
 
-        reranked_items = ctx.deps.runtime.reranker_service.rerank(
+        reranked_items = ctx.deps.runtime.reranker.rerank(
             query_text=ctx.state.user_message,
             results=self.retrieval_results,
         )

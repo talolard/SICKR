@@ -7,8 +7,6 @@
 Active runtime uses DuckDB for:
 - `app.products_canonical` (catalog metadata)
 - `app.product_embeddings` (embedding snapshot source used to build Milvus)
-- `app.query_log` (request telemetry)
-- `app.shortlist_global` (user shortlist)
 
 ### Milvus Lite (`data/milvus_lite.db`)
 
@@ -19,7 +17,7 @@ Active runtime uses Milvus Lite collection:
 ## Data Lifecycle
 
 1. Embedding snapshots live in DuckDB/parquet data artifacts.
-2. Runtime loads or rebuilds Milvus Lite collection from DuckDB embeddings.
+2. A dedicated ingest script loads Milvus Lite from DuckDB embeddings.
 3. Query flow retrieves vector candidates from Milvus.
 4. DuckDB hydrates and filters candidate products.
 

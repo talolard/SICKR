@@ -1,4 +1,4 @@
-"""DuckDB repositories for retrieval hydration and shortlist persistence."""
+"""DuckDB catalog hydration repository for vector search candidates."""
 
 from __future__ import annotations
 
@@ -6,37 +6,15 @@ from collections.abc import Sequence
 
 import duckdb
 
-from ikea_agent.retrieval.vector_store import VectorMatch
-from ikea_agent.shared.types import RetrievalFilters, RetrievalResult, ShortlistItem
+from ikea_agent.retrieval.service import VectorMatch
+from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 
-class RetrievalRepository:
-    """Hydrate Milvus candidates with catalog data and persist query logs."""
+class CatalogRepository:
+    """Hydrate semantic candidate keys with typed product rows."""
 
     def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
         self._connection = connection
-
-    def read_embedding_rows(self, embedding_model: str) -> list[tuple[str, str, tuple[float, ...]]]:
-        """Read embedding rows used to build the Milvus Lite collection."""
-
-        rows = self._connection.execute(
-            """
-            SELECT
-                canonical_product_key,
-                embedding_model,
-                embedding_vector
-            FROM app.product_embeddings
-            WHERE embedding_model = ?
-            ORDER BY canonical_product_key
-            """,
-            [embedding_model],
-        ).fetchall()
-
-        return [
-            (str(row[0]), str(row[1]), _vector_from_value(row[2]))
-            for row in rows
-            if row[2] is not None
-        ]
 
     def hydrate_candidates(
         self,
@@ -45,7 +23,7 @@ class RetrievalRepository:
         filters: RetrievalFilters,
         result_limit: int,
     ) -> list[RetrievalResult]:
-        """Apply structured filters and hydrate vector hits with product metadata."""
+        """Apply filters and hydrate vector hits with product metadata."""
 
         if not candidates:
             return []
@@ -73,9 +51,10 @@ class RetrievalRepository:
             ],
         )
 
-        query = _hydration_query(filters.sort)
-        params = [*list(_filter_params(filters)), result_limit]
-        rows = self._connection.execute(query, params).fetchall()
+        rows = self._connection.execute(
+            _hydration_query(filters.sort),
+            [*list(_filter_params(filters)), result_limit],
+        ).fetchall()
 
         return [
             RetrievalResult(
@@ -99,135 +78,32 @@ class RetrievalRepository:
             for row in rows
         ]
 
-    def log_query(
-        self,
-        query_id: str,
-        query_text: str,
-        filters: RetrievalFilters,
-        result_limit: int,
-        low_confidence: bool,
-        latency_ms: int,
-        source: str,
-    ) -> None:
-        """Persist one query request for debugging and analysis."""
 
-        self._connection.execute(
-            """
-            INSERT OR REPLACE INTO app.query_log (
-                query_id,
-                query_text,
-                sort_mode,
-                include_keyword,
-                exclude_keyword,
-                result_limit,
-                category_filter,
-                min_price_eur,
-                max_price_eur,
-                min_width_cm,
-                max_width_cm,
-                min_depth_cm,
-                max_depth_cm,
-                min_height_cm,
-                max_height_cm,
-                exact_width_cm,
-                exact_depth_cm,
-                exact_height_cm,
-                low_confidence,
-                request_source,
-                latency_ms,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
-            """,
-            [
-                query_id,
-                query_text,
-                filters.sort,
-                filters.include_keyword,
-                filters.exclude_keyword,
-                result_limit,
-                filters.category,
-                filters.price.min_eur,
-                filters.price.max_eur,
-                filters.dimensions.width.min_cm,
-                filters.dimensions.width.max_cm,
-                filters.dimensions.depth.min_cm,
-                filters.dimensions.depth.max_cm,
-                filters.dimensions.height.min_cm,
-                filters.dimensions.height.max_cm,
-                filters.dimensions.width.exact_cm,
-                filters.dimensions.depth.exact_cm,
-                filters.dimensions.height.exact_cm,
-                low_confidence,
-                source,
-                latency_ms,
-            ],
-        )
-
-
-class ShortlistRepository:
-    """Persistence operations for global shortlist state."""
+class EmbeddingSnapshotRepository:
+    """Load embedding snapshot rows for external Milvus hydration scripts."""
 
     def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
         self._connection = connection
 
-    def add(self, canonical_product_key: str, note: str | None = None) -> None:
-        """Insert or update one global shortlist item."""
-
-        self._connection.execute(
-            """
-            INSERT OR REPLACE INTO app.shortlist_global (
-                canonical_product_key,
-                added_at,
-                note
-            ) VALUES (?, now(), ?)
-            """,
-            [canonical_product_key, note],
-        )
-
-    def remove(self, canonical_product_key: str) -> None:
-        """Delete one shortlist item by canonical key."""
-
-        self._connection.execute(
-            "DELETE FROM app.shortlist_global WHERE canonical_product_key = ?",
-            [canonical_product_key],
-        )
-
-    def list_items(self) -> list[ShortlistItem]:
-        """Load hydrated shortlist entries from canonical catalog table."""
+    def read_embedding_rows(self, embedding_model: str) -> list[tuple[str, str, tuple[float, ...]]]:
+        """Read embedding rows from DuckDB snapshot tables."""
 
         rows = self._connection.execute(
             """
             SELECT
-                p.canonical_product_key,
-                p.product_name,
-                p.product_type,
-                p.main_category,
-                p.sub_category,
-                p.dimensions_text,
-                p.price_eur,
-                p.url,
-                p.country,
-                s.note
-            FROM app.shortlist_global AS s
-            JOIN app.products_canonical AS p
-            ON p.canonical_product_key = s.canonical_product_key
-            WHERE p.country = 'Germany'
-            ORDER BY s.added_at DESC
-            """
+                canonical_product_key,
+                embedding_model,
+                embedding_vector
+            FROM app.product_embeddings
+            WHERE embedding_model = ?
+            ORDER BY canonical_product_key
+            """,
+            [embedding_model],
         ).fetchall()
         return [
-            ShortlistItem(
-                canonical_product_key=str(row[0]),
-                product_name=str(row[1]),
-                product_type=_str_or_none(row[2]),
-                main_category=_str_or_none(row[3]),
-                sub_category=_str_or_none(row[4]),
-                dimensions_text=_str_or_none(row[5]),
-                price_eur=_float_or_none(row[6]),
-                url=_str_or_none(row[7]),
-                note=_str_or_none(row[9]),
-            )
+            (str(row[0]), str(row[1]), _vector_from_value(row[2]))
             for row in rows
+            if row[2] is not None
         ]
 
 

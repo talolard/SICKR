@@ -1,149 +1,112 @@
-"""High-level retrieval service orchestration."""
+"""Very light Milvus access service for semantic vector retrieval."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from time import monotonic
-from uuid import uuid4
+import hashlib
+from dataclasses import dataclass
 
-from ikea_agent.config import get_settings
-from ikea_agent.logging_config import get_logger
-from ikea_agent.retrieval.embedder import PydanticAIEmbeddingClient
-from ikea_agent.retrieval.repository import RetrievalRepository
-from ikea_agent.retrieval.vector_store import MilvusLiteVectorStore
-from ikea_agent.shared.db import connect_db
-from ikea_agent.shared.types import RetrievalRequest, RetrievalResult
+from pymilvus import MilvusClient
+
+from ikea_agent.config import AppSettings
 
 
 @dataclass(frozen=True, slots=True)
-class RetrievalExecution:
-    """Retrieval response with request metadata for downstream telemetry."""
+class VectorMatch:
+    """One vector match from Milvus retrieval."""
 
-    request_id: str
-    results: list[RetrievalResult]
-    latency_ms: int
-    low_confidence: bool
+    canonical_product_key: str
+    semantic_score: float
 
 
-class RetrievalService:
-    """Semantic retrieval service callable from web and chat graph flows."""
+class MilvusAccessService:
+    """Thin wrapper around Milvus Lite collection search operations."""
 
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, settings: AppSettings) -> None:
         self._settings = settings
-        self._connection = connect_db(settings.duckdb_path)
-        self._repository = RetrievalRepository(self._connection)
-        self._embedder = PydanticAIEmbeddingClient(settings)
-        self._vector_store = MilvusLiteVectorStore(settings)
-        self._vector_store.ensure_collection()
-        self._sync_milvus_if_needed()
-        self._logger = get_logger("retrieval.service")
+        self._collection_name = settings.milvus_collection
+        self._client = MilvusClient(uri=settings.milvus_lite_uri)
 
-    async def retrieve(
-        self, request: RetrievalRequest, source: str = "web"
-    ) -> list[RetrievalResult]:
-        """Return ranked products for the given query request."""
+    def ensure_collection(self) -> None:
+        """Create collection if missing with cosine metric and required fields."""
 
-        execution = await self.retrieve_with_trace(request=request, source=source)
-        return execution.results
-
-    async def retrieve_with_trace(
-        self, request: RetrievalRequest, source: str = "web"
-    ) -> RetrievalExecution:
-        """Return ranked products plus request metadata for request telemetry."""
-
-        start = monotonic()
-        query_vector = await self._embedder.embed_query(request.query_text)
-
-        candidate_limit = max(request.result_limit * 10, self._settings.retrieval_candidate_limit)
-        candidates = self._vector_store.search(
-            query_vector=query_vector,
-            embedding_model=self._settings.gemini_model,
-            candidate_limit=candidate_limit,
-        )
-        results = self._repository.hydrate_candidates(
-            candidates=candidates,
-            filters=request.filters,
-            result_limit=request.result_limit,
+        if self._client.has_collection(collection_name=self._collection_name):
+            return
+        self._client.create_collection(
+            collection_name=self._collection_name,
+            dimension=self._settings.embedding_dimensions,
+            metric_type="COSINE",
+            consistency_level="Strong",
         )
 
-        latency_ms = int((monotonic() - start) * 1000)
-        low_confidence = len(results) == 0
-        if results:
-            top_score = results[0].semantic_score
-            low_confidence = top_score < self._settings.retrieval_low_confidence_threshold
+    def upsert_rows(self, rows: list[tuple[str, str, tuple[float, ...]]]) -> None:
+        """Replace collection contents with provided embedding rows."""
 
-        query_id = str(uuid4())
-        self._repository.log_query(
-            query_id=query_id,
-            query_text=request.query_text,
-            filters=request.filters,
-            result_limit=request.result_limit,
-            low_confidence=low_confidence,
-            latency_ms=latency_ms,
-            source=source,
-        )
+        if self._client.has_collection(collection_name=self._collection_name):
+            self._client.drop_collection(collection_name=self._collection_name)
+        self.ensure_collection()
+        if not rows:
+            return
 
-        self._logger.info(
-            "query_retrieved",
-            query_id=query_id,
-            query_text=request.query_text,
-            filters=_filters_for_log(request),
-            result_count=len(results),
-            latency_ms=latency_ms,
-            low_confidence=low_confidence,
-        )
-        return RetrievalExecution(
-            request_id=query_id,
-            results=results,
-            latency_ms=latency_ms,
-            low_confidence=low_confidence,
-        )
-
-    def _sync_milvus_if_needed(self) -> None:
-        """Populate Milvus collection when empty or configured for forced rebuild."""
-
-        if not self._settings.milvus_rebuild_on_start:
-            stats = self._vector_store.search(
-                query_vector=tuple(0.0 for _ in range(self._settings.embedding_dimensions)),
-                embedding_model=self._settings.gemini_model,
-                candidate_limit=1,
+        payload: list[dict[str, object]] = []
+        for canonical_product_key, embedding_model, vector in rows:
+            payload.append(
+                {
+                    "id": _stable_id(canonical_product_key, embedding_model),
+                    "vector": list(vector),
+                    "canonical_product_key": canonical_product_key,
+                    "embedding_model": embedding_model,
+                }
             )
-            if stats:
-                return
+        self._client.insert(collection_name=self._collection_name, data=payload)
 
-        rows = self._repository.read_embedding_rows(embedding_model=self._settings.gemini_model)
-        self._vector_store.rebuild(rows)
+    def search(
+        self,
+        *,
+        query_vector: tuple[float, ...],
+        embedding_model: str,
+        candidate_limit: int,
+    ) -> list[VectorMatch]:
+        """Search Milvus and return ranked canonical keys with cosine scores."""
 
+        if not query_vector:
+            return []
 
-def _filters_for_log(request: RetrievalRequest) -> dict[str, object]:
-    """Return filter payload with only non-null values for structured logs."""
-
-    pruned = _prune_none(asdict(request.filters))
-    if isinstance(pruned, dict):
-        return pruned
-    return {}
-
-
-def _prune_none(value: object) -> object:
-    """Recursively drop `None` fields from nested filter structures."""
-
-    if isinstance(value, dict):
-        result: dict[str, object] = {}
-        for key, item in value.items():
-            pruned_item = _prune_none(item)
-            if pruned_item is not None:
-                result[key] = pruned_item
-        return result if result else None
-
-    if isinstance(value, list):
-        result_list = [item for item in (_prune_none(item) for item in value) if item is not None]
-        return result_list if result_list else None
-
-    if isinstance(value, tuple):
-        result_tuple = tuple(
-            item for item in (_prune_none(item) for item in value) if item is not None
+        result_batches = self._client.search(
+            collection_name=self._collection_name,
+            data=[list(query_vector)],
+            limit=candidate_limit,
+            filter=f'embedding_model == "{embedding_model}"',
+            output_fields=["canonical_product_key"],
         )
-        return result_tuple if result_tuple else None
+        if not result_batches:
+            return []
 
-    return value
+        matches: list[VectorMatch] = []
+        for row in result_batches[0]:
+            entity_obj = row.get("entity")
+            if not isinstance(entity_obj, dict):
+                continue
+            product_key_obj = entity_obj.get("canonical_product_key")
+            if not isinstance(product_key_obj, str):
+                continue
+            distance_value = row.get("distance")
+            matches.append(
+                VectorMatch(
+                    canonical_product_key=product_key_obj,
+                    semantic_score=_to_semantic_score(distance_value),
+                )
+            )
+        return matches
+
+
+def _stable_id(canonical_product_key: str, embedding_model: str) -> int:
+    digest = hashlib.sha256(f"{canonical_product_key}::{embedding_model}".encode()).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=False) >> 1
+
+
+def _to_semantic_score(distance_value: object) -> float:
+    if isinstance(distance_value, int | float):
+        return float(distance_value)
+    if isinstance(distance_value, str):
+        return float(distance_value)
+    return 0.0

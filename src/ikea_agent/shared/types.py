@@ -120,25 +120,3 @@ class ShortRetrievalResult:
             height_cm=result.height_cm,
             price_eur=result.price_eur,
         )
-
-
-@dataclass(frozen=True, slots=True)
-class ShortlistItem:
-    """One product entry in global shortlist persistence."""
-
-    canonical_product_key: str
-    product_name: str
-    product_type: str | None
-    main_category: str | None
-    sub_category: str | None
-    dimensions_text: str | None
-    price_eur: float | None
-    url: str | None
-    note: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class ShortlistState:
-    """Current shortlist state returned to template layer."""
-
-    items: tuple[ShortlistItem, ...]

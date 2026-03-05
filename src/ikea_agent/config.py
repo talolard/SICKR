@@ -7,6 +7,7 @@ and CI values can be layered in a predictable order.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,15 +36,13 @@ class AppSettings(BaseSettings):
     default_market: str = Field(default="Germany")
 
     embedding_dimensions: int = Field(default=256, ge=64, le=3072)
-    retrieval_low_confidence_threshold: float = Field(default=0.15)
     retrieval_candidate_limit: int = Field(default=250, ge=50, le=2000)
 
     milvus_lite_uri: str = Field(default="data/milvus_lite.db")
     milvus_collection: str = Field(default="ikea_product_embeddings")
-    milvus_rebuild_on_start: bool = Field(default=False)
 
     rerank_enabled: bool = Field(default=True)
-    rerank_backend: str = Field(default="transformer")
+    rerank_backend: Literal["lexical", "transformer"] = Field(default="transformer")
     rerank_candidate_limit: int = Field(default=100, ge=10, le=500)
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
