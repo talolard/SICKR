@@ -24,6 +24,7 @@ type Product = {
   id: string;
   name: string;
 };
+const useMockAgent = process.env.NEXT_PUBLIC_USE_MOCK_AGENT !== "0";
 
 function parseProducts(result: unknown): Product[] | null {
   if (typeof result !== "object" || result === null || !("products" in result)) {
@@ -273,11 +274,14 @@ export default function Home(): ReactElement {
       const readyAttachments = attachments
         .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
         .map((attachment) => attachment.attachmentRef as AttachmentRef);
-      const response = await fetch(`/api/mock-agui?scenario=${nextScenario}`, {
+      const endpoint = useMockAgent
+        ? `/api/mock-agui?scenario=${nextScenario}`
+        : "/api/agui-run";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-send-key": sendKey,
+          ...(useMockAgent ? { "x-send-key": sendKey } : {}),
         },
         body: JSON.stringify({
           prompt,
@@ -339,6 +343,24 @@ export default function Home(): ReactElement {
               );
             }
           }
+          if (message.event === "tool_result") {
+            const toolCallId = message.data.tool_call_id;
+            if (typeof toolCallId === "string") {
+              setToolCallsById((current) => {
+                const existing = current[toolCallId];
+                if (!existing) {
+                  return current;
+                }
+                return upsertToolCall(current, {
+                  tool_call_id: toolCallId,
+                  tool: existing.name,
+                  status: existing.status,
+                  result: message.data.result,
+                  errorMessage: undefined,
+                });
+              });
+            }
+          }
           if (message.event === "progress") {
             const toolCallId = message.data.tool_call_id;
             const percent = message.data.percent;
@@ -356,6 +378,12 @@ export default function Home(): ReactElement {
           }
           if (message.event === "done") {
             sawDone = true;
+          }
+          if (message.event === "error") {
+            const errorMessage = message.data.message;
+            throw new Error(
+              typeof errorMessage === "string" ? errorMessage : "Streaming failed.",
+            );
           }
         }
       }
@@ -411,7 +439,8 @@ export default function Home(): ReactElement {
     if (!lastSendKey) {
       return;
     }
-    const retryScenario = scenario === "disconnect" ? "success" : scenario;
+    const retryScenario =
+      useMockAgent && scenario === "disconnect" ? "success" : scenario;
     await runStream(retryScenario, lastSendKey);
   };
 
@@ -433,17 +462,23 @@ export default function Home(): ReactElement {
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Scenario
-          <select
-            data-testid="scenario-select"
-            className="rounded border p-2"
-            value={scenario}
-            onChange={(event) => setScenario(event.target.value as Scenario)}
-          >
-            <option value="success">success</option>
-            <option value="disconnect">disconnect</option>
-            <option value="send_fail_once">send_fail_once</option>
-            <option value="long_running">long_running</option>
-          </select>
+          {useMockAgent ? (
+            <select
+              data-testid="scenario-select"
+              className="rounded border p-2"
+              value={scenario}
+              onChange={(event) => setScenario(event.target.value as Scenario)}
+            >
+              <option value="success">success</option>
+              <option value="disconnect">disconnect</option>
+              <option value="send_fail_once">send_fail_once</option>
+              <option value="long_running">long_running</option>
+            </select>
+          ) : (
+            <p className="rounded border p-2 text-sm text-gray-700">
+              Real backend mode (`/api/agui-run`)
+            </p>
+          )}
         </label>
         <button
           data-testid="send-button"

@@ -1,5 +1,6 @@
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
-	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real
+	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
+	dev-all dev-all-mock
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -46,7 +47,7 @@ ui-dev-mock:
 	cd $(UI_DIR) && pnpm dev:mock --port $(UI_PORT)
 
 ui-dev-real:
-	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm dev --port $(UI_PORT)
+	cd $(UI_DIR) && NEXT_PUBLIC_USE_MOCK_AGENT=0 PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm dev --port $(UI_PORT)
 
 ui-test:
 	cd $(UI_DIR) && pnpm test
@@ -56,6 +57,20 @@ ui-test-e2e:
 
 ui-test-e2e-real:
 	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
+
+dev-all:
+	@set -e; \
+	trap 'kill 0' INT TERM EXIT; \
+	$(MAKE) chat & \
+	sleep 2; \
+	$(MAKE) ui-dev-real & \
+	wait
+
+dev-all-mock:
+	@set -e; \
+	trap 'kill 0' INT TERM EXIT; \
+	$(MAKE) ui-dev-mock & \
+	wait
 
 # One command before commit.
 tidy: format
