@@ -36,3 +36,11 @@ data/*.csv
 
 # Logs
 *.log
+
+# Node / frontend
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+playwright-report/
+test-results/
