@@ -7,7 +7,7 @@ from logging import getLogger
 from urllib.parse import quote
 
 from google.genai.types import ThinkingLevel
-from pydantic_ai import Agent, RunContext, ToolReturn
+from pydantic_ai import Agent, ModelRetry, RunContext, ToolReturn
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
 from pydantic_ai.providers.google import GoogleProvider
 
@@ -71,6 +71,8 @@ Use `estimate_depth_map` when rough depth structure can help reason about layout
 Use `segment_image_with_prompt` to find prompt-defined items (for example clutter, leaves).
 Use `generate_floor_plan_preview_image` when the user asks to visualize a draft room layout.
 Use `render_floor_plan` when the user provides enough room dimensions/openings to draft a layout.
+If `render_floor_plan` fails, fix arguments and retry up to two times,
+then ask for clarification.
 After rendering a floor plan, ask the user to confirm whether it matches their room.
 """
 
@@ -162,9 +164,20 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
 
     @agent.tool_plain
     def render_floor_plan(request: FloorPlanRequest) -> FloorPlannerToolResult | ToolReturn:
-        """Render a floor plan image from typed centimeter inputs."""
+        """Render a floor plan image from typed 2D centimeter elements.
 
-        return run_floor_planner(request)
+        Input must be a flattened `elements` list of wall/door/window primitives.
+        If the call fails validation or rendering, fix the payload and retry.
+        """
+
+        try:
+            return run_floor_planner(request)
+        except ValueError as exc:
+            raise ModelRetry(
+                "render_floor_plan failed. Correct the `elements` payload (wall segments, "
+                "door/window anchors, orientations, lengths) and retry. "
+                f"Error: {exc}"
+            ) from exc
 
     @agent.tool
     async def detect_objects_in_image(

@@ -35,6 +35,14 @@ const roomPhotoAnalysisSchema = z.object({
   images: z.array(attachmentRefSchema),
   room_hints: z.array(z.string()),
 });
+const floorPlanResultSchema = z.object({
+  output_png_path: z.string(),
+  element_names: z.array(z.string()),
+  wall_count: z.number(),
+  door_count: z.number(),
+  window_count: z.number(),
+  message: z.string(),
+});
 
 type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
 
@@ -140,6 +148,11 @@ function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysisToolRes
   };
 }
 
+function parseFloorPlanResult(result: unknown): z.infer<typeof floorPlanResultSchema> | null {
+  const validated = floorPlanResultSchema.safeParse(parseResult(result));
+  return validated.success ? validated.data : null;
+}
+
 export function CopilotToolRenderers(): ReactElement | null {
   useDefaultRenderTool({
     render: ({ name, status, result, parameters }) => {
@@ -235,6 +248,20 @@ export function CopilotToolRenderers(): ReactElement | null {
       }
       const imageOutput = parseImageToolOutput(result);
       if (!imageOutput) {
+        const floorPlanResult = parseFloorPlanResult(result);
+        if (floorPlanResult) {
+          return (
+            <div className="rounded border bg-white p-2">
+              <DefaultToolCallRenderer
+                name="render_floor_plan"
+                status="complete"
+                result={floorPlanResult}
+                args={undefined}
+                errorMessage={undefined}
+              />
+            </div>
+          );
+        }
         return (
           <div className="rounded border bg-white p-2">
             <DefaultToolCallRenderer

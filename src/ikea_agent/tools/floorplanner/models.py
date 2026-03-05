@@ -39,15 +39,17 @@ class _BaseElementCm(BaseModel):
     )
     anchor_point_cm: PointCm = Field(
         description=(
-            "Element anchor point in centimeters. This is the exact `anchor_point` that "
-            "Renovation expects, but expressed in cm."
+            "Element start point in centimeters for the 2D plan (x/y only). "
+            "If your source data is a room object with wall segments, convert each segment "
+            "into explicit wall/door/window elements and use the segment start as anchor."
         )
     )
     orientation_angle_deg: float = Field(
         default=0.0,
         description=(
             "Counterclockwise orientation angle in degrees from the X axis. "
-            "Use 0 for horizontal-right, 90 for vertical-up."
+            "Use 0 for horizontal-right, 90 for vertical-up, 180 for horizontal-left, "
+            "and -90 for vertical-down."
         ),
     )
 
@@ -241,6 +243,20 @@ class FloorPlanRequest(BaseModel):
                             "anchor_point_cm": {"x_cm": 20.0, "y_cm": 0.0},
                             "orientation_angle_deg": 90.0,
                         },
+                        {
+                            "type": "wall",
+                            "name": "inset_vertical",
+                            "anchor_point_cm": {"x_cm": 320.0, "y_cm": 260.0},
+                            "length_cm": 70.0,
+                            "orientation_angle_deg": -90.0,
+                        },
+                        {
+                            "type": "wall",
+                            "name": "inset_horizontal",
+                            "anchor_point_cm": {"x_cm": 320.0, "y_cm": 190.0},
+                            "length_cm": 20.0,
+                            "orientation_angle_deg": 0.0,
+                        },
                     ]
                 }
             ]
@@ -250,8 +266,10 @@ class FloorPlanRequest(BaseModel):
     elements: list[FloorPlanElementCm] = Field(
         min_length=1,
         description=(
-            "Floor-plan elements to render. Provide at least three walls. Most dimensions "
-            "have defaults to keep calls lightweight."
+            "Flattened 2D floor-plan primitives to render. Provide at least three walls "
+            "as explicit wall elements, and model non-rectangular corners as extra wall segments. "
+            "This tool does not accept high-level `room/walls/features/furniture` objects "
+            "directly; first translate those into `elements`."
         ),
     )
     layout_padding_cm: float = Field(
@@ -259,14 +277,14 @@ class FloorPlanRequest(BaseModel):
         ge=0.0,
         description=(
             "Padding around inferred element bounds used when auto-generating layout. "
-            "Defaults to 50 cm."
+            "Increase when labels or thick walls are clipped. Defaults to 50 cm."
         ),
     )
     include_image_bytes: bool = Field(
         default=False,
         description=(
-            "If true, return PNG bytes as `ToolReturn` binary content for model-side visual "
-            "reasoning."
+            "If true, include PNG bytes as binary content in `ToolReturn` so UIs that "
+            "support binary tool content can render the image inline."
         ),
     )
 

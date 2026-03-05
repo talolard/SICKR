@@ -53,7 +53,7 @@ class FloorPlannerRenderer:
         try:
             self._render_png_from_settings(settings)
         except Exception as exc:  # pragma: no cover - protected by integration tests
-            msg = "Failed to render floor plan"
+            msg = f"Failed to render floor plan: {exc}"
             raise FloorPlannerRenderError(msg) from exc
 
         output_png = _resolve_renderer_output(output_dir)
@@ -82,7 +82,7 @@ class FloorPlannerRenderer:
         try:
             self._render_svg_from_settings(settings)
         except Exception as exc:  # pragma: no cover - protected by integration tests
-            msg = "Failed to render floor plan"
+            msg = f"Failed to render floor plan: {exc}"
             raise FloorPlannerRenderError(msg) from exc
 
         output_svg = _resolve_renderer_output_svg(output_dir)
