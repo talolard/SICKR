@@ -11,30 +11,19 @@ from fastapi.responses import FileResponse
 
 from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.graph import ChatGraphDeps
-from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
+from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.shared.types import ImageToolOutput
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 
-def create_app(
-    runtime: ChatRuntime | None = None,
-    *,
-    mount_web_ui: bool = True,
-    mount_ag_ui: bool = True,
-) -> FastAPI:
-    """Create FastAPI app and mount the pydantic-ai web chat UI."""
+def _build_attachment_store() -> AttachmentStore:
+    return AttachmentStore(Path(gettempdir()) / "ikea_agent" / "chat_attachments")
 
-    app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
-    chat_runtime = build_chat_runtime() if runtime is None else runtime
-    deps = ChatGraphDeps(runtime=chat_runtime)
-    web_agent = build_chat_agent()
-    attachment_store = AttachmentStore(
-        Path(gettempdir()) / "ikea_agent" / "chat_attachments"
-    )
 
+def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
     @app.post("/attachments")
     async def upload_attachment(request: Request) -> dict[str, object]:
         """Upload one image and return a typed attachment reference."""
@@ -75,21 +64,28 @@ def create_app(
             filename=stored.ref.file_name,
         )
 
+
+def _floor_plan_preview_svg() -> str:
+    # Keep each line short to satisfy lint, and keep output deterministic for caching.
+    lines = [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420">',
+        '  <rect x="20" y="20" width="600" height="380" fill="#f6f6f6" stroke="#333" />',
+        '  <rect x="80" y="80" width="180" height="120" fill="#d9e6ff" stroke="#1d4ed8" />',
+        '  <rect x="340" y="120" width="220" height="160" fill="#ffe4d6" stroke="#c2410c" />',
+        '  <text x="90" y="110" font-size="20" fill="#1f2937">Wardrobe</text>',
+        '  <text x="350" y="150" font-size="20" fill="#1f2937">Bed</text>',
+        "</svg>",
+    ]
+    return "\n".join(lines)
+
+
+def _register_generated_image_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
     @app.post("/generated-images/floor-plan")
     async def generate_floor_plan_image() -> dict[str, object]:
         """Generate and store a simple floor plan preview artifact."""
 
-        svg = """
-        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"420\">
-          <rect x=\"20\" y=\"20\" width=\"600\" height=\"380\" fill=\"#f6f6f6\" stroke=\"#333\" />
-          <rect x=\"80\" y=\"80\" width=\"180\" height=\"120\" fill=\"#d9e6ff\" stroke=\"#1d4ed8\" />
-          <rect x=\"340\" y=\"120\" width=\"220\" height=\"160\" fill=\"#ffe4d6\" stroke=\"#c2410c\" />
-          <text x=\"90\" y=\"110\" font-size=\"20\" fill=\"#1f2937\">Wardrobe</text>
-          <text x=\"350\" y=\"150\" font-size=\"20\" fill=\"#1f2937\">Bed</text>
-        </svg>
-        """.strip()
         stored = attachment_store.save_image_bytes(
-            content=svg.encode("utf-8"),
+            content=_floor_plan_preview_svg().encode("utf-8"),
             mime_type="image/svg+xml",
             filename="generated-floor-plan.svg",
         )
@@ -98,6 +94,23 @@ def create_app(
             images=[stored.ref],
         )
         return asdict(output)
+
+
+def create_app(
+    runtime: ChatRuntime | None = None,
+    *,
+    mount_web_ui: bool = True,
+    mount_ag_ui: bool = True,
+) -> FastAPI:
+    """Create FastAPI app and mount the pydantic-ai web chat UI."""
+
+    app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
+    chat_runtime = build_chat_runtime() if runtime is None else runtime
+    deps = ChatGraphDeps(runtime=chat_runtime)
+    web_agent = build_chat_agent()
+    attachment_store = _build_attachment_store()
+    _register_attachment_routes(app, attachment_store)
+    _register_generated_image_routes(app, attachment_store)
 
     if mount_ag_ui:
         app.mount("/ag-ui", web_agent.to_ag_ui(deps=deps))

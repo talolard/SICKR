@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from logging import getLogger
+from typing import Literal, Protocol
 
 import duckdb
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingSettings
 
 from ikea_agent.config import AppSettings, get_settings
-from ikea_agent.retrieval.catalog_repository import CatalogRepository
+from ikea_agent.retrieval.catalog_repository import (
+    CatalogRepository,
+    EmbeddingSnapshotRepository,
+)
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
 from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db import connect_db
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
+
+logger = getLogger(__name__)
 
 GoogleEmbeddingTaskType = Literal[
     "TASK_TYPE_UNSPECIFIED",
@@ -46,6 +52,42 @@ def build_google_embedding_settings(*, dimensions: int) -> GoogleEmbeddingSettin
         dimensions=dimensions,
         google_task_type="RETRIEVAL_QUERY",
     )
+
+
+class EmbeddingRowsRepository(Protocol):
+    """Minimal surface needed to load persisted embeddings for Milvus hydration."""
+
+    def read_embedding_rows(
+        self, *, embedding_model: str
+    ) -> list[tuple[str, str, tuple[float, ...]]]:
+        """Return embedding rows keyed by sku and embedding model."""
+
+
+class MilvusHydrationService(Protocol):
+    """Minimal surface needed to hydrate Milvus from persisted embeddings."""
+
+    def row_count(self) -> int:
+        """Return current row count for the active collection."""
+
+    def upsert_rows(self, rows: list[tuple[str, str, tuple[float, ...]]]) -> None:
+        """Upsert embedding rows into the active collection."""
+
+
+def sync_milvus_from_snapshot_if_empty(
+    *,
+    repository: EmbeddingRowsRepository,
+    milvus_service: MilvusHydrationService,
+    embedding_model: str,
+) -> int:
+    """Hydrate Milvus from DuckDB embeddings when collection has no vectors."""
+
+    if milvus_service.row_count() > 0:
+        return 0
+
+    rows = repository.read_embedding_rows(embedding_model=embedding_model)
+    milvus_service.upsert_rows(rows)
+    logger.info("milvus_hydrated_from_snapshot", extra={"row_count": len(rows)})
+    return len(rows)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +139,7 @@ def build_chat_runtime() -> ChatRuntime:
     settings = get_settings()
     connection = connect_db(settings.duckdb_path)
     ensure_runtime_schema(connection)
+    snapshot_repository = EmbeddingSnapshotRepository(connection)
 
     embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)
     embedder = Embedder(
@@ -105,6 +148,11 @@ def build_chat_runtime() -> ChatRuntime:
     )
     milvus_service = MilvusAccessService(settings)
     milvus_service.ensure_collection()
+    sync_milvus_from_snapshot_if_empty(
+        repository=snapshot_repository,
+        milvus_service=milvus_service,
+        embedding_model=settings.gemini_model,
+    )
 
     backend: RerankerBackend
     if not settings.rerank_enabled:

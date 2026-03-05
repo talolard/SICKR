@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic_ai import ToolReturn
+from pydantic_ai import BinaryContent, ToolReturn
 
 from ikea_agent.tools.floorplanner.models import FloorPlanRequest
 from ikea_agent.tools.floorplanner.renderer import FloorPlannerRenderError, FloorPlanRenderResult
@@ -60,7 +60,9 @@ def test_render_floor_plan_returns_tool_return_when_requested(tmp_path: Path) ->
     assert isinstance(result, ToolReturn)
     assert result.metadata is not None
     assert result.metadata["element_names"] == ["tiny_wall_1", "tiny_wall_2", "tiny_wall_3"]
+    assert isinstance(result.content, list)
     assert len(result.content) == 1
+    assert isinstance(result.content[0], BinaryContent)
 
 
 def test_render_floor_plan_raises_value_error_from_renderer(

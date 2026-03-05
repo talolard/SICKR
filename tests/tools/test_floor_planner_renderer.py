@@ -174,3 +174,14 @@ def test_renderer_writes_png_for_hallway(tmp_path: Path) -> None:
     assert result.output_png.name == "floor_plan.png"
     assert result.output_png.stat().st_size > 0
     assert result.door_count == 4
+
+
+def test_renderer_writes_svg_for_complex_room(tmp_path: Path) -> None:
+    request = FloorPlanRequest.model_validate(_complex_room_payload())
+
+    result = FloorPlannerRenderer().render_svg(request, tmp_path)
+
+    assert result.output_svg.exists()
+    assert result.output_svg.name == "floor_plan.svg"
+    assert result.output_svg.stat().st_size > 0
+    assert "<svg" in result.output_svg.read_text(encoding="utf-8")
