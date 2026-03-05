@@ -99,3 +99,33 @@ test("cancels long-running run locally and notifies user", async ({ page }) => {
   await page.getByTestId("cancel-button").click();
   await expect(page.getByTestId("stream-error")).toContainText("Run canceled locally.");
 });
+
+test("persists thread history across refresh", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("send-button").click();
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Found 3 matching products.",
+  );
+  const threadId = await page.getByTestId("thread-id").textContent();
+  await page.reload();
+  await expect(page.getByTestId("thread-id")).toContainText(threadId ?? "");
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Found 3 matching products.",
+  );
+});
+
+test("isolates thread history when switching to a new thread", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("send-button").click();
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Found 3 matching products.",
+  );
+  const previousThreadId = (await page.getByTestId("thread-id").textContent()) ?? "";
+  await page.getByTestId("new-thread-button").click();
+  await expect(page.getByTestId("assistant-text")).toHaveText("");
+  await expect(page.getByTestId("thread-id")).not.toContainText(previousThreadId);
+  await page.goto(`/?thread=${previousThreadId}`);
+  await expect(page.getByTestId("assistant-text")).toContainText(
+    "Found 3 matching products.",
+  );
+});

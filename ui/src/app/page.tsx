@@ -1,15 +1,22 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { RunStatusContainer } from "@/components/containers/RunStatusContainer";
+import { ThreadContainer } from "@/components/containers/ThreadContainer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
 import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { upsertToolCall } from "@/lib/toolEvents";
 import type { ToolCallEntry } from "@/lib/toolEvents";
+import {
+  loadActiveThreadId,
+  loadThreadSnapshot,
+  saveActiveThreadId,
+  saveThreadSnapshot,
+} from "@/lib/threadStore";
 
 type Scenario = "success" | "disconnect" | "send_fail_once" | "long_running";
 
@@ -105,8 +112,40 @@ export default function Home(): ReactElement {
   const [toolProgressById, setToolProgressById] = useState<
     Record<string, { percent: number; label: string }>
   >({});
+  const [threadId, setThreadId] = useState<string>("");
   const attachmentFilesRef = useRef<Record<string, File>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const threadFromUrl = url.searchParams.get("thread");
+    const resolvedThreadId =
+      threadFromUrl ?? loadActiveThreadId() ?? crypto.randomUUID().slice(0, 8);
+    setThreadId(resolvedThreadId);
+    saveActiveThreadId(resolvedThreadId);
+    const snapshot = loadThreadSnapshot(resolvedThreadId);
+    if (snapshot) {
+      setPrompt(snapshot.prompt);
+      setAssistantText(snapshot.assistantText);
+      setToolCallsById(snapshot.toolCallsById);
+      setAttachments(snapshot.attachments);
+    }
+    url.searchParams.set("thread", resolvedThreadId);
+    window.history.replaceState({}, "", url.toString());
+  }, []);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    saveThreadSnapshot({
+      threadId,
+      prompt,
+      assistantText,
+      toolCallsById,
+      attachments,
+    });
+  }, [assistantText, attachments, prompt, threadId, toolCallsById]);
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 
@@ -342,6 +381,21 @@ export default function Home(): ReactElement {
     abortControllerRef.current?.abort();
   };
 
+  const handleNewThread = (): void => {
+    const nextThreadId = crypto.randomUUID().slice(0, 8);
+    setThreadId(nextThreadId);
+    setPrompt("Find me storage for a small bedroom");
+    setAssistantText("");
+    setToolCallsById({});
+    setAttachments([]);
+    setError("");
+    setToolProgressById({});
+    saveActiveThreadId(nextThreadId);
+    const url = new URL(window.location.href);
+    url.searchParams.set("thread", nextThreadId);
+    window.history.replaceState({}, "", url.toString());
+  };
+
   const handleSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     if (pendingUploads) {
@@ -364,6 +418,9 @@ export default function Home(): ReactElement {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-8">
       <h1 className="text-2xl font-semibold">AG-UI Streaming Harness</h1>
+      {threadId ? (
+        <ThreadContainer onNewThread={handleNewThread} threadId={threadId} />
+      ) : null}
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           Prompt
