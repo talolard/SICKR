@@ -120,3 +120,23 @@ class ShortRetrievalResult:
             height_cm=result.height_cm,
             price_eur=result.price_eur,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class AttachmentRef:
+    """Attachment pointer passed between upload UX, agent inputs, and tool outputs."""
+
+    attachment_id: str
+    mime_type: str
+    uri: str
+    width: int | None
+    height: int | None
+    file_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ImageToolOutput:
+    """Typed image payload returned by image-producing tools."""
+
+    caption: str
+    images: list[AttachmentRef]

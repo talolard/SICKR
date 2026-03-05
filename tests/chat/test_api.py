@@ -36,3 +36,35 @@ def test_create_app_with_ag_ui_mount_exposes_ag_ui_route() -> None:
     response = client.get("/ag-ui")
 
     assert response.status_code != 404
+
+
+def test_attachment_upload_and_fetch_round_trip() -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    upload_response = client.post(
+        "/attachments",
+        content=b"fake-image-bytes",
+        headers={"content-type": "image/png", "x-filename": "room.png"},
+    )
+
+    assert upload_response.status_code == 200
+    attachment_ref = upload_response.json()
+    assert attachment_ref["attachment_id"]
+    assert attachment_ref["uri"].startswith("/attachments/")
+
+    download_response = client.get(attachment_ref["uri"])
+    assert download_response.status_code == 200
+    assert download_response.content == b"fake-image-bytes"
+    assert download_response.headers["content-type"].startswith("image/png")
+
+
+def test_attachment_upload_rejects_unsupported_type() -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    upload_response = client.post(
+        "/attachments",
+        content=b"not-an-image",
+        headers={"content-type": "application/pdf"},
+    )
+
+    assert upload_response.status_code == 415
