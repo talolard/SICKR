@@ -16,6 +16,7 @@ dependencies = [
   "pydantic-ai>=1.39.0",
   "pydantic-settings>=2.10.1",
   "python-dotenv>=1.1.1",
+  "renovation>=0.1.1",
   "structlog>=25.4.0",
   "uvicorn>=0.40.0",
 ]

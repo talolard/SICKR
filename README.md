@@ -25,6 +25,13 @@ Simplified IKEA search/runtime project centered on:
 - `src/ikea_agent/retrieval/` Milvus + DuckDB data access
 - `src/ikea_agent/shared/` typed contracts and DB bootstrap helpers
 
+## Phase 2 Highlights
+- Single strategy-free embedding pipeline (`app.embedding_input`).
+- Multi-country description rollup table: `app.product_description_country_rollup`.
+- Local parquet artifacts exported under `data/parquet/`.
+- Search UX includes sort modes, advanced filters, reset, and active-filter chips.
+- Typed floor-planner tooling under `src/tal_maria_ikea/tools/` for agent-compatible room visualization.
+
 ## Legacy Content
 
 Historical plans/specs/SQL and pre-simplification modules are in `legacy/`.

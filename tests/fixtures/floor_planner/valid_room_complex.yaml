@@ -1,0 +1,44 @@
+plan_name: "Tal Room Recessed"
+output_filename_stem: "tal_room_recessed"
+wall_margin_m: 0.5
+walls:
+  - id: "w1"
+    start: { x_m: 0.0, y_m: 0.0 }
+    end: { x_m: 3.4, y_m: 0.0 }
+    thickness_m: 0.1
+  - id: "w2"
+    start: { x_m: 3.4, y_m: 0.0 }
+    end: { x_m: 3.4, y_m: 1.9 }
+    thickness_m: 0.1
+  - id: "w3"
+    start: { x_m: 3.4, y_m: 1.9 }
+    end: { x_m: 3.2, y_m: 1.9 }
+    thickness_m: 0.1
+  - id: "w4"
+    start: { x_m: 3.2, y_m: 1.9 }
+    end: { x_m: 3.2, y_m: 2.6 }
+    thickness_m: 0.1
+  - id: "w5"
+    start: { x_m: 3.2, y_m: 2.6 }
+    end: { x_m: 0.0, y_m: 2.6 }
+    thickness_m: 0.1
+    color: "#e87830"
+  - id: "w6"
+    start: { x_m: 0.0, y_m: 2.6 }
+    end: { x_m: 0.0, y_m: 0.0 }
+    thickness_m: 0.1
+doors:
+  - id: "left_door"
+    wall_id: "w6"
+    offset_from_wall_start_m: 0.0
+    doorway_width_m: 0.3
+    door_width_m: 0.28
+    thickness_m: 0.05
+    to_the_right: true
+windows:
+  - id: "right_window"
+    wall_id: "w2"
+    offset_from_wall_start_m: 0.1
+    length_m: 1.6
+    overall_thickness_m: 0.1
+    single_line_thickness_m: 0.03

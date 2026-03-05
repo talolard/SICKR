@@ -1,0 +1,41 @@
+plan_name: "Long Hallway"
+output_filename_stem: "long_hallway"
+wall_margin_m: 0.6
+walls:
+  - id: "h1"
+    start: { x_m: 0.0, y_m: 0.0 }
+    end: { x_m: 7.0, y_m: 0.0 }
+    thickness_m: 0.1
+  - id: "h2"
+    start: { x_m: 7.0, y_m: 0.0 }
+    end: { x_m: 7.0, y_m: 2.5 }
+    thickness_m: 0.1
+  - id: "h3"
+    start: { x_m: 7.0, y_m: 2.5 }
+    end: { x_m: 0.0, y_m: 2.5 }
+    thickness_m: 0.1
+  - id: "h4"
+    start: { x_m: 0.0, y_m: 2.5 }
+    end: { x_m: 0.0, y_m: 0.0 }
+    thickness_m: 0.1
+doors:
+  - id: "left_end"
+    wall_id: "h4"
+    offset_from_wall_start_m: 0.85
+    doorway_width_m: 0.9
+    thickness_m: 0.05
+  - id: "right_end"
+    wall_id: "h2"
+    offset_from_wall_start_m: 0.8
+    doorway_width_m: 0.9
+    thickness_m: 0.05
+  - id: "bottom_side"
+    wall_id: "h1"
+    offset_from_wall_start_m: 2.0
+    doorway_width_m: 0.8
+    thickness_m: 0.05
+  - id: "top_side"
+    wall_id: "h3"
+    offset_from_wall_start_m: 3.2
+    doorway_width_m: 0.8
+    thickness_m: 0.05
