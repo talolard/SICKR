@@ -2,6 +2,13 @@
 
 Repository-local collaboration and implementation rules.
 
+# External Documentation
+
+When using libraries search for documentation in
+
+1. `./external_docs/` for any docs we've already collected on the library
+2. search the context7 mcp for the library docs, store relevent parts in external_docs
+
 ## Workflow
 
 - Create/update task plans in `plans/` before substantial changes.
@@ -29,26 +36,36 @@ Repository-local collaboration and implementation rules.
 - Keep test files small, prefer paramaterized tests. Make sure tests are fully type annotated.
 - Keep files short and split modules before they become hard to scan.
 
-## Django Standards
+## Chat Runtime Standards
 
-- Use only class-based views (CBVs); do not add function-based views.
-- Keep Django files focused and short (views/forms/services split by responsibility).
-- Prefer reusable template snippets (`include`/partials) over large monolithic templates.
-- Keep web layer thin: call retrieval/service interfaces rather than embedding heavy logic in views.
+- Treat FastAPI + pydantic-ai + pydantic-graph as the default web/runtime stack.
+- Prefer chat-first UX and API surfaces over form-heavy page flows.
+- Keep graph state minimal; pass intermediate payloads through typed nodes when possible.
+- Prefer tools that return typed domain objects (for example `list[RetrievalResult]`) over preformatted prose.
+- Keep agent prompts concrete, scenario-driven, and explicit about output structure.
+- Prefer current lightweight generation models as defaults when they satisfy quality/cost needs; keep model choice configurable.
+- Use module-level loggers (`getLogger(__name__)`) and log concise operational facts (query + result counts).
+- Avoid hidden side effects in service constructors (for example auto-running schema SQL). Bootstrap runtime/schema explicitly at app startup.
+- Keep route handlers thin: validate request payloads, call graph/services, return typed responses.
 
 ## SQL and Data Rules
 
-- Keep SQL in `.sql` files under `sql/`.
-- Prefer DuckDB CLI + SQL scripts for schema/load/query tasks.
-- Avoid embedding complex SQL inside Python unless strongly justified.
-- Update `docs/data/` whenever schema or column semantics change.
-- Treat the IKEA source dataset as static for this project unless we explicitly decide to refresh it.
-- When analysing data yourself, view small result sets and aggregates first, to avoid consuming a lot of data at once.
-- Maintain a docs/data_patterns.md with patterns you notice in the data, and queries that work or dont. reference it often and keep it updated.
+- Active runtime data access should use short, inline SQL in typed repository methods.
+- Keep query text close to row-mapping code for readability and testability.
+- Bootstrap runtime schema explicitly at startup; avoid hidden constructor side effects.
+- Update `docs/data/` whenever active schema or column semantics change.
+- Treat IKEA source data as static unless explicitly refreshing the dataset.
+- For analysis, inspect aggregates and small result sets first.
+
+## Legacy Policy
+
+- `legacy/` is reference-only and excluded from active implementation guidance.
+- Do not import `legacy/` modules into active runtime code.
+- When updating docs, prefer linking active docs and avoid routing implementation decisions through legacy files.
 
 ## Logging
 
-- Use shared logger configuration from `src/tal_maria_ikea/logging_config.py`.
+- Use shared logger configuration from `src/ikea_agent/logging_config.py`.
 - Include query/request IDs in pipeline logs where available.
 
 ## Git Identity

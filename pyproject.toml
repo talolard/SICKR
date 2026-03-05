@@ -3,15 +3,16 @@ requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "tal-maria-ikea"
+name = "ikea-agent"
 version = "0.1.0"
-description = "Scaffold for IKEA semantic search learning project."
+description = "Simplified IKEA agent runtime with PydanticAI + Pydantic Graph."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "duckdb>=1.4.0",
   "fastapi>=0.127.1",
-  "google-genai>=1.30.0",
+  "milvus-lite>=2.4.11",
+  "pymilvus>=2.6.0",
   "pydantic-ai>=1.39.0",
   "pydantic-settings>=2.10.1",
   "python-dotenv>=1.1.1",
@@ -29,7 +30,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tal_maria_ikea"]
+packages = ["src/ikea_agent"]
 
 [[tool.uv.index]]
 url = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/"
@@ -43,6 +44,7 @@ pythonpath = ["src"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = [
@@ -121,7 +123,7 @@ docstring-code-format = true
 quote-style = "double"
 
 [tool.coverage.run]
-source = ["src/tal_maria_ikea"]
+source = ["src/ikea_agent"]
 branch = true
 
 [tool.coverage.report]

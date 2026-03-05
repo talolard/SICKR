@@ -4,8 +4,8 @@ from typing import cast
 
 from fastapi.testclient import TestClient
 
-from tal_maria_ikea.chat.runtime import ChatRuntime
-from tal_maria_ikea.chat_app.main import create_app
+from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.chat_app.main import create_app
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:

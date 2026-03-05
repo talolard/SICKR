@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tal_maria_ikea.shared.types import PriceFilterEUR, RetrievalFilters, RetrievalRequest
+from ikea_agent.shared.types import PriceFilterEUR, RetrievalFilters, RetrievalRequest
 
 
 def test_smoke_import_and_type_contract() -> None:

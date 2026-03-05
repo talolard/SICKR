@@ -3,21 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
-from tal_maria_ikea.chat.graph import (
+from ikea_agent.chat.graph import (
     ChatGraphDeps,
     ChatGraphState,
     ParseUserIntentNode,
     build_chat_graph,
 )
-from tal_maria_ikea.chat.runtime import ChatRuntime
-from tal_maria_ikea.phase3.query_expansion import ExpansionOutcome
-from tal_maria_ikea.phase3.search_summary import (
-    SearchSummaryExecution,
-    SearchSummaryItem,
-    SearchSummaryResponse,
-)
-from tal_maria_ikea.retrieval.service import RetrievalExecution
-from tal_maria_ikea.shared.types import RetrievalResult
+from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.retrieval.service import RetrievalExecution
+from ikea_agent.shared.types import RetrievalResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,24 +19,11 @@ class _SettingsStub:
     default_query_limit: int = 25
 
 
-class _ExpansionStub:
-    def expand(self, query_text: str, mode: str) -> ExpansionOutcome:
-        _ = (query_text, mode)
-        return ExpansionOutcome(
-            expanded_query_text=None,
-            extracted_filters={},
-            confidence=0.0,
-            heuristic_reason="none",
-            applied=False,
-            provider="heuristic",
-        )
-
-
 class _RetrievalStub:
     def __init__(self, results: list[RetrievalResult]) -> None:
         self._results = results
 
-    def retrieve_with_trace(self, request: object, source: str) -> RetrievalExecution:
+    async def retrieve_with_trace(self, request: object, source: str) -> RetrievalExecution:
         _ = (request, source)
         return RetrievalExecution(
             request_id="req-1",
@@ -74,57 +55,11 @@ class _RerankerStub:
         ]
 
 
-class _SummaryStub:
-    def generate(self, **kwargs: object) -> SearchSummaryExecution:
-        _ = kwargs
-        response = SearchSummaryResponse(
-            summary="Summary text",
-            items=[
-                SearchSummaryItem(
-                    canonical_product_key="1-DE",
-                    item_name="Lamp",
-                    why="relevant",
-                )
-            ],
-        )
-        return SearchSummaryExecution(
-            prompt_run_id="run-1",
-            turn_id="turn-1",
-            rendered_system_prompt="system",
-            generation_config_json="{}",
-            response=response,
-        )
-
-
-class _Phase3RepoStub:
-    def __init__(self) -> None:
-        self.saved_messages = 0
-
-    def insert_search_request(self, event: object) -> None:
-        _ = event
-
-    def insert_result_snapshots(self, rows: object) -> None:
-        _ = rows
-
-    def insert_expansion_event(self, **kwargs: object) -> None:
-        _ = kwargs
-
-    def upsert_conversation_thread(self, event: object) -> None:
-        _ = event
-
-    def insert_conversation_message(self, event: object) -> None:
-        _ = event
-        self.saved_messages += 1
-
-
 @dataclass(frozen=True, slots=True)
 class _RuntimeStub:
     settings: _SettingsStub
-    expansion_service: _ExpansionStub
     retrieval_service: _RetrievalStub
     reranker_service: _RerankerStub
-    summary_service: _SummaryStub
-    phase3_repository: _Phase3RepoStub
 
 
 def _sample_result() -> RetrievalResult:
@@ -148,14 +83,11 @@ def _sample_result() -> RetrievalResult:
     )
 
 
-def test_graph_returns_clarification_when_no_results() -> None:
+def test_graph_returns_empty_matches_when_no_results() -> None:
     runtime = _RuntimeStub(
         settings=_SettingsStub(),
-        expansion_service=_ExpansionStub(),
         retrieval_service=_RetrievalStub(results=[]),
         reranker_service=_RerankerStub(),
-        summary_service=_SummaryStub(),
-        phase3_repository=_Phase3RepoStub(),
     )
     graph = build_chat_graph()
 
@@ -165,19 +97,15 @@ def test_graph_returns_clarification_when_no_results() -> None:
         deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
     ).output
 
-    assert output.needs_clarification is True
-    assert "Could you add" in output.answer_text
+    assert output.request_id == "req-1"
+    assert output.product_matches == []
 
 
-def test_graph_returns_ranked_answer_and_persists_messages() -> None:
-    repository = _Phase3RepoStub()
+def test_graph_returns_ranked_results() -> None:
     runtime = _RuntimeStub(
         settings=_SettingsStub(),
-        expansion_service=_ExpansionStub(),
         retrieval_service=_RetrievalStub(results=[_sample_result()]),
         reranker_service=_RerankerStub(),
-        summary_service=_SummaryStub(),
-        phase3_repository=repository,
     )
     graph = build_chat_graph()
 
@@ -187,7 +115,6 @@ def test_graph_returns_ranked_answer_and_persists_messages() -> None:
         deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
     ).output
 
-    assert output.needs_clarification is False
-    assert "Top picks" in output.answer_text
-    assert output.recommended_keys == ("1-DE",)
-    assert repository.saved_messages == 2
+    assert output.request_id == "req-1"
+    assert len(output.product_matches) == 1
+    assert output.product_matches[0].product_id == "1-DE"

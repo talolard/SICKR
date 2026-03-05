@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tal_maria_ikea.shared.parsing import classify_dimensions_type, parse_dimensions_text
+from ikea_agent.shared.parsing import classify_dimensions_type, parse_dimensions_text
 
 
 def test_parse_dimensions_text_returns_three_axes() -> None:

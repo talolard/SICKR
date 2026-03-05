@@ -1,67 +1,18 @@
-# Configuration Management
+# Configuration
 
-## Goals
-Keep configuration explicit, typed, and environment-driven while preventing secret leakage.
+Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 
-## Canonical Key Registry
-The current required/expected keys are:
+## Core Settings
 
-- `GCP_PROJECT_ID` (default `gen-lang-client-0545732168`)
-- `GCP_REGION` (default `us-central1`)
-- `GEMINI_MODEL` (default `gemini-embedding-001`)
-- `GEMINI_GENERATION_MODEL` (default `gemini-2.5-flash`)
-- `EMBEDDING_PROVIDER` (default `vertex_gemini`)
-- `GOOGLE_APPLICATION_CREDENTIALS` (required when not using API key mode)
-- `GEMINI_API_KEY` (optional, enables direct Gemini Developer API mode)
-- `IKEA_RAW_CSV_PATH` (default `data/IKEA_product_catalog.csv`)
-- `DUCKDB_PATH` (default `data/ikea.duckdb`)
-- `LOG_LEVEL` (default `INFO`)
-- `LOG_JSON` (default `true`)
-- `APP_ENV` (default `dev`)
-- `DEFAULT_QUERY_LIMIT` (default `25`)
-- `DEFAULT_MARKET` (default `Germany`)
-- `EMBEDDING_PARALLELISM` (default `8`)
-- `EMBEDDING_BATCH_SIZE` (default `16`)
-- `EMBEDDING_DIMENSIONS` (default `256`)
-- `EMBEDDING_REQUESTS_PER_MINUTE` (default `90`)
-- `EMBEDDING_MAX_RETRIES` (default `5`)
-- `EMBEDDING_RETRY_BASE_SECONDS` (default `2.0`)
-- `EMBEDDING_RETRY_MAX_SECONDS` (default `90.0`)
-- `EMBEDDING_RETRY_JITTER_SECONDS` (default `1.0`)
-- `EMBEDDING_UPSERT_CHUNK_SIZE` (default `25`)
-- `EVAL_GENERATION_BATCH_SIZE` (default `25`)
-- `EVAL_GENERATION_PARALLELISM` (default `4`)
-- `EVAL_GENERATION_MAX_ROUNDS` (default `8`)
-- `VSS_BUILD_INDEX` (default `false`)
-- `VSS_METRIC` (default `cosine`)
-- `RETRIEVAL_LOW_CONFIDENCE_THRESHOLD` (default `0.15`)
-- `RERANK_ENABLED` (default `true`)
-- `RERANK_BACKEND` (default `transformer`)
-- `RERANK_CANDIDATE_LIMIT` (default `100`)
-- `RERANK_MODEL_NAME` (default `cross-encoder/ms-marco-MiniLM-L-6-v2`)
+- `DUCKDB_PATH` default: `data/ikea.duckdb`
+- `MILVUS_LITE_URI` default: `data/milvus_lite.db`
+- `MILVUS_COLLECTION` default: `ikea_product_embeddings`
+- `MILVUS_REBUILD_ON_START` default: `false`
+- `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
+- `EMBEDDING_DIMENSIONS` default: `256`
+- `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
 
-## Chat Config Scope (DuckDB)
+## Notes
 
-Phase 3 keeps DuckDB as both retrieval/runtime analytics plane and chat config plane.
-
-Current config entities are persisted in DuckDB and seeded by `sql/43_chat_config.sql`:
-
-- prompt templates and prompt variant sets
-- feedback reason tags
-- query expansion policy config
-
-## Layering Order
-Configuration precedence (lowest to highest):
-1. Code defaults in `AppSettings`
-2. `.env` local file
-3. Shell environment variables
-4. CI-provided environment variables
-
-## Secret Handling
-- Never commit `.env` files.
-- Keep only placeholders in `.env.example`.
-- Rotate secrets if they are ever exposed in logs/history.
-
-## Validation Policy
-- `make preflight` fails fast when required keys/files are missing.
-- New required config keys must be documented here and reflected in `.env.example`.
+- Embeddings are generated via pydantic-ai embedding providers.
+- Milvus Lite stores vectors; DuckDB stores product metadata and query logs.

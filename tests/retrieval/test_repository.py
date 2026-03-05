@@ -1,24 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import duckdb
 
-from tal_maria_ikea.retrieval.repository import RetrievalRepository, ShortlistRepository
-from tal_maria_ikea.shared.types import (
+from ikea_agent.retrieval.repository import RetrievalRepository, ShortlistRepository
+from ikea_agent.retrieval.vector_store import VectorMatch
+from ikea_agent.shared.bootstrap import ensure_runtime_schema
+from ikea_agent.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
     PriceFilterEUR,
     RetrievalFilters,
 )
 
-VECTOR_DIMENSIONS = 256
-
 
 def _setup_schema(connection: duckdb.DuckDBPyConnection) -> None:
-    connection.execute(Path("sql/10_schema.sql").read_text(encoding="utf-8"))
-    connection.execute(Path("sql/14_market_views.sql").read_text(encoding="utf-8"))
-    connection.execute(Path("sql/22_embedding_store.sql").read_text(encoding="utf-8"))
+    ensure_runtime_schema(connection)
 
 
 def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
@@ -71,31 +67,33 @@ def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
         ) VALUES
             (
                 '1-DE', 'gemini-embedding-001', 'run-1',
-                list_resize([1.0, 0.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'line1\\nline2', now()
+                [1.0, 0.0], 'line1\\nline2', now()
             ),
             (
                 '2-DE', 'gemini-embedding-001', 'run-1',
-                list_resize([0.0, 1.0]::FLOAT[], 256, 0.0)::FLOAT[256], 'desk two', now()
+                [0.0, 1.0], 'desk two', now()
             )
         """
     )
 
 
-def test_retrieval_repository_search_filters_by_price_and_dimensions() -> None:
+def test_hydrate_candidates_filters_by_price_and_dimensions() -> None:
     connection = duckdb.connect(":memory:")
     _setup_schema(connection)
     _seed_products(connection)
 
-    repository = RetrievalRepository(connection, vector_dimensions=VECTOR_DIMENSIONS)
+    repository = RetrievalRepository(connection)
     filters = RetrievalFilters(
         category="tables-desks",
         price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),
         dimensions=DimensionFilter(width=DimensionAxisFilter(min_cm=110.0, max_cm=130.0)),
     )
 
-    results = repository.search(
-        query_vector=[1.0, 0.0],
-        embedding_model="gemini-embedding-001",
+    results = repository.hydrate_candidates(
+        candidates=[
+            VectorMatch(canonical_product_key="1-DE", semantic_score=0.95),
+            VectorMatch(canonical_product_key="2-DE", semantic_score=0.85),
+        ],
         filters=filters,
         result_limit=10,
     )
@@ -122,20 +120,22 @@ def test_shortlist_repository_add_remove_list() -> None:
     assert repository.list_items() == []
 
 
-def test_retrieval_repository_search_filters_by_include_and_exclude_keyword() -> None:
+def test_hydrate_candidates_filters_by_include_and_exclude_keyword() -> None:
     connection = duckdb.connect(":memory:")
     _setup_schema(connection)
     _seed_products(connection)
 
-    repository = RetrievalRepository(connection, vector_dimensions=VECTOR_DIMENSIONS)
+    repository = RetrievalRepository(connection)
     filters = RetrievalFilters(
         include_keyword="work",
         exclude_keyword="compact",
     )
 
-    results = repository.search(
-        query_vector=[1.0, 0.0],
-        embedding_model="gemini-embedding-001",
+    results = repository.hydrate_candidates(
+        candidates=[
+            VectorMatch(canonical_product_key="1-DE", semantic_score=0.9),
+            VectorMatch(canonical_product_key="2-DE", semantic_score=0.8),
+        ],
         filters=filters,
         result_limit=10,
     )

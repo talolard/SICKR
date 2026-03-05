@@ -33,8 +33,6 @@ venv/
 *.sqlite
 *.sqlite3
 data/*.csv
-data/*.parquet
-data/parquet/
 
 # Logs
 *.log

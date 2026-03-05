@@ -1,3 +1,5 @@
-
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
+
+# Track parquet artifacts in Git LFS
+data/parquet/** filter=lfs diff=lfs merge=lfs -text

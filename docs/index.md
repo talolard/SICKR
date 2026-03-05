@@ -1,28 +1,15 @@
 # Documentation Index
 
-## Project Overview
-This repository is an educational scaffold for building an IKEA semantic-search application.
-Current phase is infrastructure and workflow setup only.
-
-## Setup and Workflow
+## Active Docs
 - [Configuration](configuration.md)
-- [Typing and Pyrefly Policy](typing.md)
-- [GCP Setup](gcp_setup.md)
+- [Typing and Static Analysis](typing.md)
 - [Logging Standards](logging.md)
 - [Git Identity](git_identity.md)
-- [Pipeline Plan](pipeline.md)
-- [Phase 1 Status](phase1_status.md)
 - [Web Runbook](web.md)
-- [Eval Runbook](eval.md)
-
-## Phase 3 Planning
-- Architecture snapshot: `spec/phase3/current_architecture.md`
-- Implementation plan: `spec/phase3/phase3_implementation_plan.md`
-
-## Data Documentation
-- [Data Model and Schema](data/index.md)
+- [Data Model and Storage](data/index.md)
+- [Current Graph Data Access](data/current_graph_data_access.md)
 - [Data Patterns](data/data_patterns.md)
 
-## External Docs
-External reference material lives in `external_docs/`.
-This index intentionally links to that folder but does not modify its files.
+## Legacy
+
+Historical docs/specs/plans/SQL are archived under `legacy/` and are reference-only.
