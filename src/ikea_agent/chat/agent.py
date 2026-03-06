@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from logging import getLogger
+from pathlib import Path
 from urllib.parse import quote
 
 from google.genai.types import ThinkingLevel
-from pydantic_ai import Agent, ModelRetry, RunContext, ToolReturn
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
 from pydantic_ai.providers.google import GoogleProvider
 
@@ -162,27 +163,48 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
             images=[preview_ref],
         )
 
-    @agent.tool_plain
-    def render_floor_plan(request: FloorPlanRequest) -> FloorPlannerToolResult | ToolReturn:
+    @agent.tool
+    def render_floor_plan(
+        ctx: RunContext[ChatAgentDeps],
+        request: FloorPlanRequest,
+    ) -> FloorPlannerToolResult | ImageToolOutput:
         """Render a floor plan image from typed 2D centimeter elements.
 
         Input must be a flattened `elements` list of wall/door/window primitives.
         If the call fails validation or rendering, fix the payload and retry.
         """
 
-        resolved_request = (
-            request
-            if request.include_image_bytes
-            else request.model_copy(update={"include_image_bytes": True})
-        )
         try:
-            return run_floor_planner(resolved_request)
+            result = run_floor_planner(request.model_copy(update={"include_image_bytes": False}))
         except ValueError as exc:
             raise ModelRetry(
                 "render_floor_plan failed. Correct the `elements` payload (wall segments, "
                 "door/window anchors, orientations, lengths) and retry. "
                 f"Error: {exc}"
             ) from exc
+        if not isinstance(result, FloorPlannerToolResult):
+            msg = "render_floor_plan returned unexpected non-metadata payload."
+            raise ModelRetry(msg)
+
+        output_path = Path(result.output_png_path)
+        if not output_path.exists():
+            raise ModelRetry(
+                "render_floor_plan succeeded but image file is missing at "
+                f"{result.output_png_path}."
+            )
+
+        stored = ctx.deps.attachment_store.save_image_bytes(
+            content=output_path.read_bytes(),
+            mime_type="image/png",
+            filename="floor-plan.png",
+        )
+        return ImageToolOutput(
+            caption=(
+                f"{result.message} Walls: {result.wall_count}, doors: {result.door_count}, "
+                f"windows: {result.window_count}."
+            ),
+            images=[stored.ref],
+        )
 
     @agent.tool
     async def detect_objects_in_image(
