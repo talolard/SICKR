@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import duckdb
+from pathlib import Path
+
+from sqlalchemy import Engine
 
 from ikea_agent.retrieval.catalog_repository import CatalogRepository
 from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
+from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
@@ -13,76 +16,77 @@ from ikea_agent.shared.types import (
 )
 
 
-def _setup_schema(connection: duckdb.DuckDBPyConnection) -> None:
-    ensure_runtime_schema(connection)
+def _setup_schema(engine: Engine) -> None:
+    ensure_runtime_schema(engine)
 
 
-def _seed_products(connection: duckdb.DuckDBPyConnection) -> None:
-    connection.execute(
-        """
-        INSERT INTO app.products_canonical (
-            canonical_product_key,
-            product_id,
-            unique_id,
-            country,
-            product_name,
-            product_type,
-            description_text,
-            main_category,
-            sub_category,
-            dimensions_text,
-            width_cm,
-            depth_cm,
-            height_cm,
-            price_eur,
-            currency,
-            rating,
-            rating_count,
-            badge,
-            online_sellable,
-            url,
-            source_updated_at
-        ) VALUES
-            (
-                '1-DE', 1, '1-Germany', 'Germany', 'Desk One', 'Desk', 'Work desk',
-                'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
-                4.0, 10, 'none', true, 'https://example.com/1', now()
-            ),
-            (
-                '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', 'Desk', 'Compact desk',
-                'tables-desks', 'desks', '100x50x74 cm', 100, 50, 74, 80, 'EUR',
-                4.5, 20, 'none', true, 'https://example.com/2', now()
-            )
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO app.product_embeddings (
-            canonical_product_key,
-            embedding_model,
-            run_id,
-            embedding_vector,
-            embedded_text,
-            embedded_at
-        ) VALUES
-            (
-                '1-DE', 'gemini-embedding-001', 'run-1',
-                [1.0, 0.0], 'line1\\nline2', now()
-            ),
-            (
-                '2-DE', 'gemini-embedding-001', 'run-1',
-                [0.0, 1.0], 'desk two', now()
-            )
-        """
-    )
+def _seed_products(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO app.products_canonical (
+                canonical_product_key,
+                product_id,
+                unique_id,
+                country,
+                product_name,
+                product_type,
+                description_text,
+                main_category,
+                sub_category,
+                dimensions_text,
+                width_cm,
+                depth_cm,
+                height_cm,
+                price_eur,
+                currency,
+                rating,
+                rating_count,
+                badge,
+                online_sellable,
+                url,
+                source_updated_at
+            ) VALUES
+                (
+                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One', 'Desk', 'Work desk',
+                    'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
+                    4.0, 10, 'none', true, 'https://example.com/1', now()
+                ),
+                (
+                    '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', 'Desk', 'Compact desk',
+                    'tables-desks', 'desks', '100x50x74 cm', 100, 50, 74, 80, 'EUR',
+                    4.5, 20, 'none', true, 'https://example.com/2', now()
+                )
+            """
+        )
+        connection.exec_driver_sql(
+            """
+            INSERT INTO app.product_embeddings (
+                canonical_product_key,
+                embedding_model,
+                run_id,
+                embedding_vector,
+                embedded_text,
+                embedded_at
+            ) VALUES
+                (
+                    '1-DE', 'gemini-embedding-001', 'run-1',
+                    [1.0, 0.0], 'line1\\nline2', now()
+                ),
+                (
+                    '2-DE', 'gemini-embedding-001', 'run-1',
+                    [0.0, 1.0], 'desk two', now()
+                )
+            """
+        )
 
 
-def test_hydrate_candidates_filters_by_price_and_dimensions() -> None:
-    connection = duckdb.connect(":memory:")
-    _setup_schema(connection)
-    _seed_products(connection)
+def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> None:
+    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_1.duckdb"))
+    _setup_schema(engine)
+    _seed_products(engine)
 
-    repository = CatalogRepository(connection)
+    repository = CatalogRepository(engine)
     filters = RetrievalFilters(
         category="tables-desks",
         price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),
@@ -103,12 +107,12 @@ def test_hydrate_candidates_filters_by_price_and_dimensions() -> None:
     assert results[0].embedding_text == "line1\nline2"
 
 
-def test_hydrate_candidates_filters_by_include_and_exclude_keyword() -> None:
-    connection = duckdb.connect(":memory:")
-    _setup_schema(connection)
-    _seed_products(connection)
+def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Path) -> None:
+    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_2.duckdb"))
+    _setup_schema(engine)
+    _seed_products(engine)
 
-    repository = CatalogRepository(connection)
+    repository = CatalogRepository(engine)
     filters = RetrievalFilters(
         include_keyword="work",
         exclude_keyword="compact",

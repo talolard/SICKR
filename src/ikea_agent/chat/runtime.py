@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import Literal, Protocol
 
-import duckdb
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingSettings
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.retrieval.catalog_repository import (
@@ -19,8 +19,7 @@ from ikea_agent.retrieval.catalog_repository import (
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
 from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.db import connect_db
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
+from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine, create_session_factory
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 logger = getLogger(__name__)
@@ -98,7 +97,7 @@ class ChatRuntime:
 
     settings: AppSettings
     sqlalchemy_engine: Engine
-    connection: duckdb.DuckDBPyConnection
+    session_factory: sessionmaker[Session]
     embedder: Embedder
     milvus_service: MilvusAccessService
     catalog_repository: CatalogRepository
@@ -141,9 +140,9 @@ def build_chat_runtime() -> ChatRuntime:
 
     settings = get_settings()
     sqlalchemy_engine = create_duckdb_engine(settings.duckdb_path)
-    connection = connect_db(settings.duckdb_path)
-    ensure_runtime_schema(connection)
-    snapshot_repository = EmbeddingSnapshotRepository(connection)
+    session_factory = create_session_factory(sqlalchemy_engine)
+    ensure_runtime_schema(sqlalchemy_engine)
+    snapshot_repository = EmbeddingSnapshotRepository(sqlalchemy_engine)
 
     embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)
     embedder = Embedder(
@@ -169,9 +168,9 @@ def build_chat_runtime() -> ChatRuntime:
     return ChatRuntime(
         settings=settings,
         sqlalchemy_engine=sqlalchemy_engine,
-        connection=connection,
+        session_factory=session_factory,
         embedder=embedder,
         milvus_service=milvus_service,
-        catalog_repository=CatalogRepository(connection),
+        catalog_repository=CatalogRepository(sqlalchemy_engine),
         reranker=get_reranker(backend, settings),
     )

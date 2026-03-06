@@ -1,10 +1,10 @@
-"""DuckDB catalog hydration repository for vector search candidates."""
+"""SQLAlchemy-backed catalog hydration repository for vector search candidates."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-import duckdb
+from sqlalchemy import Engine
 
 from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
@@ -13,8 +13,8 @@ from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 class CatalogRepository:
     """Hydrate semantic candidate keys with typed product rows."""
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
-        self._connection = connection
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
 
     def hydrate_candidates(
         self,
@@ -28,33 +28,37 @@ class CatalogRepository:
         if not candidates:
             return []
 
-        self._connection.execute(
-            """
-            CREATE OR REPLACE TEMP TABLE temp_candidate_scores (
-                canonical_product_key VARCHAR,
-                semantic_score DOUBLE,
-                candidate_rank BIGINT
+        rows: list[tuple[object, ...]]
+        with self._engine.begin() as connection:
+            connection.exec_driver_sql("DROP TABLE IF EXISTS temp_candidate_scores")
+            connection.exec_driver_sql(
+                """
+                CREATE TEMP TABLE temp_candidate_scores (
+                    canonical_product_key VARCHAR,
+                    semantic_score DOUBLE,
+                    candidate_rank BIGINT
+                )
+                """
             )
-            """
-        )
-        self._connection.executemany(
-            """
-            INSERT INTO temp_candidate_scores (
-                canonical_product_key,
-                semantic_score,
-                candidate_rank
-            ) VALUES (?, ?, ?)
-            """,
-            [
-                (item.canonical_product_key, item.semantic_score, rank)
-                for rank, item in enumerate(candidates, start=1)
-            ],
-        )
-
-        rows = self._connection.execute(
-            _hydration_query(filters.sort),
-            [*list(_filter_params(filters)), result_limit],
-        ).fetchall()
+            connection.exec_driver_sql(
+                """
+                INSERT INTO temp_candidate_scores (
+                    canonical_product_key,
+                    semantic_score,
+                    candidate_rank
+                ) VALUES (?, ?, ?)
+                """,
+                [
+                    (item.canonical_product_key, item.semantic_score, rank)
+                    for rank, item in enumerate(candidates, start=1)
+                ],
+            )
+            rows = list(
+                connection.exec_driver_sql(
+                    _hydration_query(filters.sort),
+                    (*_filter_params(filters), result_limit),
+                ).fetchall()
+            )
 
         return [
             RetrievalResult(
@@ -82,24 +86,25 @@ class CatalogRepository:
 class EmbeddingSnapshotRepository:
     """Load embedding snapshot rows for external Milvus hydration scripts."""
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection) -> None:
-        self._connection = connection
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
 
     def read_embedding_rows(self, embedding_model: str) -> list[tuple[str, str, tuple[float, ...]]]:
         """Read embedding rows from DuckDB snapshot tables."""
 
-        rows = self._connection.execute(
-            """
-            SELECT
-                canonical_product_key,
-                embedding_model,
-                embedding_vector
-            FROM app.product_embeddings
-            WHERE embedding_model = ?
-            ORDER BY canonical_product_key
-            """,
-            [embedding_model],
-        ).fetchall()
+        with self._engine.connect() as connection:
+            rows = connection.exec_driver_sql(
+                """
+                SELECT
+                    canonical_product_key,
+                    embedding_model,
+                    embedding_vector
+                FROM app.product_embeddings
+                WHERE embedding_model = ?
+                ORDER BY canonical_product_key
+                """,
+                (embedding_model,),
+            ).fetchall()
         return [
             (str(row[0]), str(row[1]), _vector_from_value(row[2]))
             for row in rows

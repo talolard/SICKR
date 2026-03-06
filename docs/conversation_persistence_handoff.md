@@ -86,3 +86,28 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Runtime read/write paths are not yet switched to these tables; integration starts in next tasks.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.3` and migrate active runtime retrieval/bootstrap SQL paths to SQLAlchemy wiring.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.3` completed
+- Read this file at task start.
+- Migrated active runtime retrieval/bootstrap paths to SQLAlchemy-managed access:
+  - Added retrieval SQLAlchemy table definitions:
+    - `src/ikea_agent/retrieval/schema.py`
+  - Replaced bootstrap raw DuckDB DDL execution with SQLAlchemy metadata create flow:
+    - `src/ikea_agent/shared/bootstrap.py`
+  - Refactored retrieval repositories from direct DuckDB connection usage to SQLAlchemy engine usage:
+    - `src/ikea_agent/retrieval/catalog_repository.py`
+  - Updated chat runtime wiring to SQLAlchemy-managed primitives:
+    - `src/ikea_agent/chat/runtime.py`
+    - `ChatRuntime` now stores `sqlalchemy_engine` + `session_factory`; active runtime no longer relies on raw DuckDB connection field.
+- Updated retrieval tests for SQLAlchemy engine-backed setup:
+  - `tests/retrieval/test_repository.py`
+- Migrations created/updated:
+  - No new migration revision for this task.
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/retrieval/schema.py src/ikea_agent/shared/bootstrap.py src/ikea_agent/retrieval/catalog_repository.py src/ikea_agent/chat/runtime.py tests/retrieval/test_repository.py`
+  - `uv run pytest tests/retrieval/test_repository.py tests/chat/test_runtime.py -q` (5 passed)
+- Risks / known gaps:
+  - Retrieval hydration still uses raw SQL text statements executed through SQLAlchemy driver API for parity and temp-table semantics; full query-builder conversion can be done incrementally later.
+  - Legacy helper `src/ikea_agent/shared/db.py` remains for non-runtime scripts and is not part of active runtime retrieval path.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.4` and persist AG-UI run lifecycle + message archive records from live runs.
