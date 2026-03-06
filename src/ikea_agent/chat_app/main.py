@@ -13,6 +13,8 @@ from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.config import get_settings
+from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.shared.types import ImageToolOutput
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
@@ -104,7 +106,10 @@ def create_app(
 ) -> FastAPI:
     """Create FastAPI app and mount the pydantic-ai web chat UI."""
 
+    settings = get_settings()
+    configure_logfire(settings)
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
+    instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
     web_agent = build_chat_agent()
     attachment_store = _build_attachment_store()

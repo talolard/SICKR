@@ -21,6 +21,11 @@ class AppSettings(BaseSettings):
     app_env: str = Field(default="dev")
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=True)
+    logfire_token: str | None = Field(default=None)
+    logfire_service_name: str = Field(default="ikea-agent")
+    logfire_service_version: str | None = Field(default=None)
+    logfire_environment: str | None = Field(default=None)
+    logfire_send_mode: Literal["if-token-present", "always"] = Field(default="if-token-present")
 
     gcp_project_id: str = Field(default="gen-lang-client-0545732168")
     gcp_region: str = Field(default="us-central1")

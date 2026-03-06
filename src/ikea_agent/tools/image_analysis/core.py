@@ -101,6 +101,7 @@ class FalImageAnalysisCore:
             extra={"model_id": model_id, "argument_keys": sorted(arguments)},
         )
         try:
+            # TODO - document why we use subscribe_async instead of a more tradional pattern
             result = await fal_client.subscribe_async(
                 model_id,
                 arguments=arguments,
@@ -145,7 +146,9 @@ class FalImageAnalysisCore:
         detections: list[DetectedObject],
     ) -> AttachmentRefPayload:
         """Draw detection boxes on top of the source image and store the overlay."""
-
+        # TODO - when rendering in the UI, it may be better to send detection
+        # coordinates/labels and let the client render overlays, so we avoid
+        # generating additional attachment files.
         source_bytes = prepared.stored.path.read_bytes()
         with Image.open(BytesIO(source_bytes)).convert("RGBA") as base:
             draw = ImageDraw.Draw(base)
@@ -171,7 +174,8 @@ class FalImageAnalysisCore:
         mask_images: list[AttachmentRefPayload],
     ) -> AttachmentRefPayload:
         """Compose colorized segmentation masks on the source image."""
-
+        # TODO: Likewise - client-side mask rendering might be better. Research
+        # tradeoffs and keep this server-side path until a user flow requires it.
         source_bytes = prepared.stored.path.read_bytes()
         with Image.open(BytesIO(source_bytes)).convert("RGBA") as base:
             for index, mask_ref in enumerate(mask_images):
