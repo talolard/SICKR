@@ -5,9 +5,9 @@ import type { ReactElement } from "react";
 import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
+import { useThreadSession } from "@/app/CopilotKitProviders";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
-import { getOrCreateSessionId } from "@/lib/sessionStore";
 
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
@@ -21,22 +21,21 @@ function resolveAttachmentUri(uri: string): string {
 
 export default function Home(): ReactElement {
   const { agent } = useAgent({ agentId: "ikea_agent" });
+  const {
+    threadId,
+    threadIds,
+    warning: threadWarning,
+    selectThread,
+    createThread,
+    clearWarning,
+  } = useThreadSession();
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const attachmentFilesRef = useRef<Record<string, File>>({});
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const resolvedSessionId = getOrCreateSessionId(window.localStorage);
-    setSessionId(resolvedSessionId);
-  }, []);
-
-  useEffect(() => {
-    if (!sessionId) {
+    if (!threadId) {
       return;
     }
     const readyAttachments = attachments
@@ -53,10 +52,10 @@ export default function Home(): ReactElement {
         : {};
     agent.setState({
       ...previousState,
-      session_id: sessionId,
+      session_id: threadId,
       attachments: readyAttachments,
     });
-  }, [agent, attachments, sessionId]);
+  }, [agent, attachments, threadId]);
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
     setAttachments((current) =>
@@ -186,6 +185,42 @@ export default function Home(): ReactElement {
         <p className="text-sm text-gray-600">
           Chat with the agent. Tool calls render inline.
         </p>
+        <div className="mt-2 flex items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-gray-600">
+            Thread
+            <select
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900"
+              disabled={!threadId}
+              onChange={(event) => {
+                selectThread(event.target.value);
+              }}
+              value={threadId ?? ""}
+            >
+              {(threadId && !threadIds.includes(threadId) ? [threadId, ...threadIds] : threadIds).map(
+                (id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          <button
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50"
+            onClick={createThread}
+            type="button"
+          >
+            New thread
+          </button>
+        </div>
+        {threadWarning ? (
+          <div className="mt-1 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+            <span>{threadWarning}</span>
+            <button className="underline" onClick={clearWarning} type="button">
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         <p className="text-xs text-gray-500">
           Debug harness: <a className="underline" href="/debug/agui-harness">/debug/agui-harness</a>
         </p>

@@ -1,6 +1,6 @@
 # CopilotKit + AG-UI milestone status
 
-Updated: 2026-03-05
+Updated: 2026-03-06
 
 ## Completed milestones
 
@@ -11,6 +11,16 @@ Updated: 2026-03-05
 - Milestone 3: generated image artifact output (`ImageToolOutput`) and inline image viewer modal.
 - Milestone 4: long-running progress updates + run-level status container + local cancellation UX.
 - Milestone 5: thread/session persistence, URL thread routing, resume-on-refresh, thread isolation.
+
+## Temporary thread fallback behavior
+
+- Main UI now keeps a stable thread id in URL (`?thread=...`) and localStorage, and passes it to `CopilotKit`.
+- Agent shared state uses `session_id == thread_id` so backend runs are aligned to selected thread.
+- Thread picker allows selecting existing thread ids or creating a new one.
+- Temporary limitation while backend persistence is disabled:
+  - selecting a thread that cannot be resumed from backend session state shows a warning
+  - UI automatically starts a new thread instead of failing
+  - this warning is expected until backend thread persistence is implemented
 
 ## Key commands
 
