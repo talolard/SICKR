@@ -89,6 +89,28 @@ def test_floor_plan_request_schema_is_agent_friendly() -> None:
     assert "examples" in schema
 
 
+def test_floor_plan_request_clamps_default_door_width_to_doorway_width() -> None:
+    payload = _valid_payload()
+    payload["elements"].append(  # type: ignore[index]
+        {
+            "type": "door",
+            "name": "narrow_doorway_without_explicit_leaf",
+            "anchor_point_cm": {"x_cm": 0.0, "y_cm": 230.0},
+            "orientation_angle_deg": 90.0,
+            "doorway_width_cm": 30.0,
+        }
+    )
+
+    request = FloorPlanRequest.model_validate(payload)
+    door = next(
+        element
+        for element in request.elements
+        if element.type == "door" and element.name == "narrow_doorway_without_explicit_leaf"
+    )
+    assert door.doorway_width_cm == 30.0
+    assert door.door_width_cm == 30.0
+
+
 @pytest.mark.parametrize(
     ("mutator", "expected_message"),
     [

@@ -125,7 +125,12 @@ class DoorElementCm(_BaseElementCm):
 
     @model_validator(mode="after")
     def validate_widths(self) -> DoorElementCm:
-        """Ensure door width does not exceed doorway width."""
+        """Ensure door width is valid, auto-adjusting omitted defaults when needed."""
+
+        fields_set = getattr(self, "__pydantic_fields_set__", set())
+        if "door_width_cm" not in fields_set and self.door_width_cm > self.doorway_width_cm:
+            # If caller omitted door_width_cm, keep payload ergonomic by matching doorway width.
+            self.door_width_cm = self.doorway_width_cm
 
         if self.door_width_cm > self.doorway_width_cm:
             msg = "door_width_cm must be less than or equal to doorway_width_cm"
