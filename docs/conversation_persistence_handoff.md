@@ -111,3 +111,38 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Legacy helper `src/ikea_agent/shared/db.py` remains for non-runtime scripts and is not part of active runtime retrieval path.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.4` and persist AG-UI run lifecycle + message archive records from live runs.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.4` completed
+- Read this file at task start.
+- Added durable AG-UI run lifecycle persistence wiring:
+  - `src/ikea_agent/chat_app/main.py`
+  - Replaced `app.mount("/ag-ui", web_agent.to_ag_ui(...))` with explicit `/ag-ui` POST handlers that delegate to `handle_ag_ui_request(...)` and attach `on_complete` callback.
+  - Persist run start (`started`), completion (`completed`), and failure (`failed`) states.
+  - Parse AG-UI payload for `thread_id`, `run_id`, `parent_run_id`, and user prompt extraction.
+- Added repository for lifecycle + archive persistence:
+  - `src/ikea_agent/persistence/run_history_repository.py`
+  - Methods: `record_run_start`, `record_run_complete`, `record_run_failed`, `load_archived_all_messages_json`.
+  - Added `extract_last_user_prompt` helper for AG-UI payloads.
+- Added persistence tests:
+  - `tests/persistence/test_run_history_repository.py`
+  - `tests/persistence/__init__.py`
+- Added schema bootstrap helper used by app startup:
+  - `src/ikea_agent/persistence/models.py` with `ensure_persistence_schema(engine)`.
+- Added package docstrings required by lint quality gate:
+  - `migrations/__init__.py`
+  - `migrations/versions/__init__.py`
+  - `tests/shared/__init__.py`
+- While running mandatory `make tidy`, fixed two typed SQLAlchemy migration regressions caught by `pyrefly`:
+  - `src/ikea_agent/retrieval/catalog_repository.py` (typed row casting + semantic score narrowing)
+  - `src/ingest/hydrate_milvus.py` (switch to SQLAlchemy engine helper)
+- Migrations created/updated:
+  - No new migration revision for this task.
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/chat_app/main.py src/ikea_agent/persistence/models.py src/ikea_agent/persistence/run_history_repository.py tests/persistence/test_run_history_repository.py tests/chat/test_api.py`
+  - `uv run pytest tests/persistence/test_run_history_repository.py tests/chat/test_api.py -q` (8 passed)
+  - `make tidy` (passed; 54 tests passed)
+- Risks / known gaps:
+  - Resume path reconstruction API is repository-ready (`load_archived_all_messages_json`) but not yet exposed via explicit runtime resume endpoint/tool selection flag.
+  - AG-UI payload parsing is tolerant/best-effort; malformed payloads log debug and proceed with normal AG-UI flow.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.5` and migrate attachment/generated artifact storage to durable filesystem + `assets` table metadata linkage.

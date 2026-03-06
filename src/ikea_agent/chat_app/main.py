@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
+from logging import getLogger
 from pathlib import Path
 from tempfile import gettempdir
+from typing import Protocol
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
+from pydantic_ai import Agent
+from pydantic_ai.ag_ui import handle_ag_ui_request
 
 from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
@@ -15,11 +21,23 @@ from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
+from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.run_history_repository import (
+    RunHistoryRepository,
+    extract_last_user_prompt,
+)
 from ikea_agent.shared.types import ImageToolOutput
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+logger = getLogger(__name__)
+
+
+class _ArchivedMessagesResult(Protocol):
+    def all_messages_json(self) -> bytes: ...
+
+    def new_messages_json(self) -> bytes: ...
 
 
 def _build_attachment_store() -> AttachmentStore:
@@ -99,6 +117,62 @@ def _register_generated_image_routes(app: FastAPI, attachment_store: AttachmentS
         return asdict(output)
 
 
+def _register_ag_ui_route(
+    app: FastAPI,
+    *,
+    web_agent: Agent[ChatAgentDeps, str],
+    deps: ChatAgentDeps,
+    run_history_repository: RunHistoryRepository | None,
+) -> None:
+    @app.post("/ag-ui")
+    @app.post("/ag-ui/")
+    async def run_ag_ui(request: Request) -> Response:
+        body = await request.body()
+        run_id = f"agui-{uuid4().hex[:16]}"
+        try:
+            payload = json.loads(body.decode("utf-8")) if body else {}
+            run_id = str(payload.get("run_id") or run_id)
+            thread_id = str(payload.get("thread_id") or "anonymous-thread")
+            parent_run_id = payload.get("parent_run_id")
+            parent_run_id_value = str(parent_run_id) if isinstance(parent_run_id, str) else None
+            message_payload = payload.get("messages")
+            messages = message_payload if isinstance(message_payload, list) else []
+            user_prompt_text = extract_last_user_prompt(
+                [item for item in messages if isinstance(item, dict)]
+            )
+            if run_history_repository is not None:
+                run_history_repository.record_run_start(
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    parent_run_id=parent_run_id_value,
+                    user_prompt_text=user_prompt_text,
+                    agui_input_messages_json=json.dumps(messages),
+                )
+        except Exception:
+            # If request parsing fails, proceed with AG-UI normal error semantics.
+            logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
+
+        async def _on_complete(result: _ArchivedMessagesResult) -> None:
+            if run_history_repository is not None:
+                run_history_repository.record_run_complete(
+                    run_id=run_id,
+                    pydantic_all_messages_json=result.all_messages_json(),
+                    pydantic_new_messages_json=result.new_messages_json(),
+                )
+
+        try:
+            return await handle_ag_ui_request(
+                web_agent,
+                request,
+                deps=deps,
+                on_complete=_on_complete,
+            )
+        except Exception as exc:
+            if run_history_repository is not None:
+                run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
+            raise
+
+
 def create_app(
     runtime: ChatRuntime | None = None,
     *,
@@ -112,8 +186,15 @@ def create_app(
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
+    if hasattr(chat_runtime, "sqlalchemy_engine"):
+        ensure_persistence_schema(chat_runtime.sqlalchemy_engine)
     web_agent = build_chat_agent()
     attachment_store = _build_attachment_store()
+    run_history_repository = (
+        RunHistoryRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
     deps = ChatAgentDeps(
         runtime=chat_runtime,
         attachment_store=attachment_store,
@@ -124,7 +205,12 @@ def create_app(
     _register_generated_image_routes(app, attachment_store)
 
     if mount_ag_ui:
-        app.mount("/ag-ui", web_agent.to_ag_ui(deps=deps))
+        _register_ag_ui_route(
+            app,
+            web_agent=web_agent,
+            deps=deps,
+            run_history_repository=run_history_repository,
+        )
 
     if mount_web_ui:
         app.mount("/", web_agent.to_web(deps=deps))

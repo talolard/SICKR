@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
 from sqlalchemy import Engine
 
@@ -53,34 +54,40 @@ class CatalogRepository:
                     for rank, item in enumerate(candidates, start=1)
                 ],
             )
-            rows = list(
+            rows = cast(
+                "list[tuple[object, ...]]",
                 connection.exec_driver_sql(
                     _hydration_query(filters.sort),
                     (*_filter_params(filters), result_limit),
-                ).fetchall()
+                ).fetchall(),
             )
 
-        return [
-            RetrievalResult(
-                canonical_product_key=str(row[0]),
-                product_name=str(row[1]),
-                product_type=_str_or_none(row[2]),
-                description_text=_str_or_none(row[3]),
-                embedding_text=_format_embedding_text(row[4]),
-                main_category=_str_or_none(row[5]),
-                sub_category=_str_or_none(row[6]),
-                dimensions_text=_str_or_none(row[7]),
-                width_cm=_float_or_none(row[8]),
-                depth_cm=_float_or_none(row[9]),
-                height_cm=_float_or_none(row[10]),
-                price_eur=_float_or_none(row[11]),
-                url=_str_or_none(row[12]),
-                semantic_score=float(row[13]),
-                filter_pass_reasons=("structured_filters_passed",),
-                rank_explanation=f"milvus cosine score {float(row[13]):.3f}",
+        hydrated_results: list[RetrievalResult] = []
+        for row in rows:
+            semantic_score = _float_or_none(row[13])
+            if semantic_score is None:
+                continue
+            hydrated_results.append(
+                RetrievalResult(
+                    canonical_product_key=str(row[0]),
+                    product_name=str(row[1]),
+                    product_type=_str_or_none(row[2]),
+                    description_text=_str_or_none(row[3]),
+                    embedding_text=_format_embedding_text(row[4]),
+                    main_category=_str_or_none(row[5]),
+                    sub_category=_str_or_none(row[6]),
+                    dimensions_text=_str_or_none(row[7]),
+                    width_cm=_float_or_none(row[8]),
+                    depth_cm=_float_or_none(row[9]),
+                    height_cm=_float_or_none(row[10]),
+                    price_eur=_float_or_none(row[11]),
+                    url=_str_or_none(row[12]),
+                    semantic_score=semantic_score,
+                    filter_pass_reasons=("structured_filters_passed",),
+                    rank_explanation=f"milvus cosine score {semantic_score:.3f}",
+                )
             )
-            for row in rows
-        ]
+        return hydrated_results
 
 
 class EmbeddingSnapshotRepository:

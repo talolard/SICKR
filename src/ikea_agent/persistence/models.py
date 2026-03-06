@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, Engine, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.sql import text
 
 APP_SCHEMA = "app"
 
@@ -264,3 +265,11 @@ class SearchResultRecord(Base):
     depth_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+def ensure_persistence_schema(engine: Engine) -> None:
+    """Create persistence schema and tables when missing."""
+
+    with engine.begin() as connection:
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
+    Base.metadata.create_all(engine, checkfirst=True)
