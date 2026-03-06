@@ -36,4 +36,6 @@ def test_alembic_upgrade_creates_conversation_persistence_tables(tmp_path: Path)
         "analysis_detections",
         "search_runs",
         "search_results",
+        "room_3d_assets",
+        "room_3d_snapshots",
     }.issubset(table_names)

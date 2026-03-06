@@ -153,6 +153,74 @@ class FloorPlanRevisionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class Room3DAssetRecord(Base):
+    """Thread-scoped OpenUSD asset bindings for room-scene workflows."""
+
+    __tablename__ = "room_3d_assets"
+    __table_args__ = (
+        Index("ix_room_3d_assets_thread_id", "thread_id"),
+        Index("ix_room_3d_assets_source_asset_id", "source_asset_id"),
+        {"schema": APP_SCHEMA},
+    )
+
+    room_3d_asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    source_asset_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.assets.asset_id"),
+        nullable=False,
+    )
+    usd_format: Mapped[str] = mapped_column(String(16), nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Room3DSnapshotRecord(Base):
+    """Persisted 3D camera snapshots and linked metadata for one thread."""
+
+    __tablename__ = "room_3d_snapshots"
+    __table_args__ = (
+        Index("ix_room_3d_snapshots_thread_id", "thread_id"),
+        Index("ix_room_3d_snapshots_snapshot_asset_id", "snapshot_asset_id"),
+        {"schema": APP_SCHEMA},
+    )
+
+    room_3d_snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    snapshot_asset_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.assets.asset_id"),
+        nullable=False,
+    )
+    room_3d_asset_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.room_3d_assets.room_3d_asset_id"),
+        nullable=True,
+    )
+    camera_json: Mapped[str] = mapped_column(Text, nullable=False)
+    lighting_json: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AnalysisRunRecord(Base):
     """Persistence row for image-analysis tool calls and outputs."""
 
