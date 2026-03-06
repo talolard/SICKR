@@ -9,19 +9,27 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
     """Strongly typed runtime settings for local development and CI."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     app_env: str = Field(default="dev")
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=True)
-    logfire_token: str | None = Field(default=None)
+    logfire_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LOGFIRE_TOKEN", "APP_LOGFIRE_TOKEN"),
+    )
     logfire_service_name: str = Field(default="ikea-agent")
     logfire_service_version: str | None = Field(default=None)
     logfire_environment: str | None = Field(default=None)
@@ -37,6 +45,7 @@ class AppSettings(BaseSettings):
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     duckdb_path: str = Field(default="data/ikea.duckdb")
+    artifact_root_dir: str = Field(default="data/artifacts")
     default_query_limit: int = Field(default=25, ge=1, le=200)
     default_market: str = Field(default="Germany")
 

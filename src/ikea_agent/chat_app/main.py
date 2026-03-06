@@ -6,7 +6,6 @@ import json
 from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
-from tempfile import gettempdir
 from typing import Protocol
 from uuid import uuid4
 
@@ -21,6 +20,7 @@ from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
+from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
@@ -40,8 +40,12 @@ class _ArchivedMessagesResult(Protocol):
     def new_messages_json(self) -> bytes: ...
 
 
-def _build_attachment_store() -> AttachmentStore:
-    return AttachmentStore(Path(gettempdir()) / "ikea_agent" / "chat_attachments")
+def _build_attachment_store(
+    *,
+    root_dir: Path,
+    asset_repository: AssetRepository | None,
+) -> AttachmentStore:
+    return AttachmentStore(root_dir=root_dir, asset_repository=asset_repository)
 
 
 def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
@@ -69,6 +73,9 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
             content=body,
             mime_type=mime_type,
             filename=request.headers.get("x-filename"),
+            thread_id=request.headers.get("x-thread-id") or None,
+            run_id=request.headers.get("x-run-id") or None,
+            kind="user_upload",
         )
         return asdict(stored.ref)
 
@@ -102,13 +109,16 @@ def _floor_plan_preview_svg() -> str:
 
 def _register_generated_image_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
     @app.post("/generated-images/floor-plan")
-    async def generate_floor_plan_image() -> dict[str, object]:
+    async def generate_floor_plan_image(request: Request) -> dict[str, object]:
         """Generate and store a simple floor plan preview artifact."""
 
         stored = attachment_store.save_image_bytes(
             content=_floor_plan_preview_svg().encode("utf-8"),
             mime_type="image/svg+xml",
             filename="generated-floor-plan.svg",
+            thread_id=request.headers.get("x-thread-id") or None,
+            run_id=request.headers.get("x-run-id") or None,
+            kind="generated_preview",
         )
         output = ImageToolOutput(
             caption="Draft floor plan preview generated from current room assumptions.",
@@ -148,6 +158,8 @@ def _register_ag_ui_route(
                     user_prompt_text=user_prompt_text,
                     agui_input_messages_json=json.dumps(messages),
                 )
+            deps.state.thread_id = thread_id
+            deps.state.run_id = run_id
         except Exception:
             # If request parsing fails, proceed with AG-UI normal error semantics.
             logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
@@ -161,12 +173,16 @@ def _register_ag_ui_route(
                 )
 
         try:
-            return await handle_ag_ui_request(
-                web_agent,
-                request,
-                deps=deps,
-                on_complete=_on_complete,
-            )
+            with deps.attachment_store.bind_context(
+                thread_id=deps.state.thread_id or "anonymous-thread",
+                run_id=deps.state.run_id,
+            ):
+                return await handle_ag_ui_request(
+                    web_agent,
+                    request,
+                    deps=deps,
+                    on_complete=_on_complete,
+                )
         except Exception as exc:
             if run_history_repository is not None:
                 run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
@@ -189,7 +205,15 @@ def create_app(
     if hasattr(chat_runtime, "sqlalchemy_engine"):
         ensure_persistence_schema(chat_runtime.sqlalchemy_engine)
     web_agent = build_chat_agent()
-    attachment_store = _build_attachment_store()
+    asset_repository = (
+        AssetRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
+    attachment_store = _build_attachment_store(
+        root_dir=Path(settings.artifact_root_dir),
+        asset_repository=asset_repository,
+    )
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")

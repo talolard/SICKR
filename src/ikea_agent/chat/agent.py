@@ -326,11 +326,19 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             content=output_png_path.read_bytes(),
             mime_type="image/png",
             filename="floor-plan.png",
+            thread_id=ctx.deps.state.thread_id,
+            run_id=ctx.deps.state.run_id,
+            created_by_tool="render_floor_plan",
+            kind="floor_plan_png",
         )
         stored_svg = ctx.deps.attachment_store.save_image_bytes(
             content=output_svg_path.read_bytes(),
             mime_type="image/svg+xml",
             filename="floor-plan.svg",
+            thread_id=ctx.deps.state.thread_id,
+            run_id=ctx.deps.state.run_id,
+            created_by_tool="render_floor_plan",
+            kind="floor_plan_svg",
         )
         persisted = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
         summary = scene_to_summary(scene)

@@ -102,7 +102,7 @@ async def _run_once(
     configure_logfire(settings)
 
     runtime = _build_runtime_with_fallback(settings)
-    attachment_store = AttachmentStore(Path(gettempdir()) / "ikea_agent" / "chat_attachments")
+    attachment_store = AttachmentStore(Path(settings.artifact_root_dir))
     deps = ChatAgentDeps(
         runtime=runtime,
         attachment_store=attachment_store,

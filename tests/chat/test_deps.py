@@ -11,6 +11,8 @@ def test_chat_agent_state_defaults_are_eval_and_session_ready() -> None:
     assert state.labels == []
     assert state.eval_dataset_name is None
     assert state.eval_case_id is None
+    assert state.thread_id is None
+    assert state.run_id is None
     assert state.attachments == []
 
 
@@ -21,6 +23,8 @@ def test_chat_agent_state_accepts_session_and_eval_fields() -> None:
         labels=["discovery", "layout"],
         eval_dataset_name="local-discovery",
         eval_case_id="case-001",
+        thread_id="thread-123",
+        run_id="run-123",
     )
 
     assert state.session_id == "session-123"
@@ -28,3 +32,5 @@ def test_chat_agent_state_accepts_session_and_eval_fields() -> None:
     assert state.labels == ["discovery", "layout"]
     assert state.eval_dataset_name == "local-discovery"
     assert state.eval_case_id == "case-001"
+    assert state.thread_id == "thread-123"
+    assert state.run_id == "run-123"

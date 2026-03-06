@@ -136,6 +136,8 @@ class FalImageAnalysisCore:
             content=response.content,
             mime_type=content_type or "image/png",
             filename=self._filename_from_url(remote_url) or fallback_filename,
+            created_by_tool="image_analysis",
+            kind="analysis_output",
         )
         return AttachmentRefPayload.from_ref(stored.ref)
 
@@ -164,6 +166,8 @@ class FalImageAnalysisCore:
             content=output.getvalue(),
             mime_type="image/png",
             filename="object-detection-overlay.png",
+            created_by_tool="detect_objects_in_image",
+            kind="analysis_overlay",
         )
         return AttachmentRefPayload.from_ref(stored.ref)
 
@@ -194,6 +198,8 @@ class FalImageAnalysisCore:
             content=output.getvalue(),
             mime_type="image/png",
             filename="segmentation-overlay.png",
+            created_by_tool="segment_image_with_prompt",
+            kind="analysis_overlay",
         )
         return AttachmentRefPayload.from_ref(stored.ref)
 

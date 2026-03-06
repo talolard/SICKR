@@ -20,6 +20,8 @@ class ChatAgentState(BaseModel):
     labels: list[str] = Field(default_factory=list)
     eval_dataset_name: str | None = None
     eval_case_id: str | None = None
+    thread_id: str | None = None
+    run_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)
 
 

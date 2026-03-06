@@ -133,6 +133,9 @@ export default function Home(): ReactElement {
       xhr.open("POST", "/api/attachments");
       xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
       xhr.setRequestHeader("x-filename", file.name);
+      if (threadId) {
+        xhr.setRequestHeader("x-thread-id", threadId);
+      }
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) {
           return;

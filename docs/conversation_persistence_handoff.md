@@ -146,3 +146,42 @@ This file is the continuity log for the conversation persistence epic and all ch
   - AG-UI payload parsing is tolerant/best-effort; malformed payloads log debug and proceed with normal AG-UI flow.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.5` and migrate attachment/generated artifact storage to durable filesystem + `assets` table metadata linkage.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.5` completed
+- Read this file at task start.
+- Implemented durable artifact metadata persistence and filesystem storage wiring:
+  - Added `src/ikea_agent/persistence/asset_repository.py` with thread-safe asset metadata persistence into `app.assets`.
+  - Added request-local attachment context binding in `src/ikea_agent/chat_app/attachments.py` using contextvars.
+  - `AttachmentStore.save_image_bytes(...)` now persists metadata (`sha256`, `size_bytes`, mime, filename, storage path, kind, tool) when repository is available.
+- Migrated app attachment store root from tempdir to managed repo data path:
+  - `src/ikea_agent/config.py` adds `artifact_root_dir` (default `data/artifacts`).
+  - `src/ikea_agent/chat_app/main.py` now constructs `AttachmentStore` with `asset_repository` and `artifact_root_dir`.
+- Persisted thread/run linkage for uploads and generated images:
+  - `/attachments` and `/generated-images/floor-plan` routes accept optional `x-thread-id` and `x-run-id` headers.
+  - AG-UI route now sets shared state `thread_id`/`run_id` and binds attachment context for all tool-generated artifacts during the run.
+- Added state fields for linkage:
+  - `src/ikea_agent/chat/deps.py` (`ChatAgentState.thread_id`, `ChatAgentState.run_id`).
+- Updated tool artifact writes to include metadata where available:
+  - `src/ikea_agent/chat/agent.py` floor-plan outputs now set `created_by_tool` and explicit artifact kinds.
+  - `src/ikea_agent/tools/image_analysis/core.py` output artifacts now set `created_by_tool` and analysis kinds.
+- Updated CLI runtime attachment root to managed artifact path:
+  - `src/ikea_agent/chat/run_agent.py`.
+- UI upload proxy/header pass-through updates (backward-compatible attachment contract retained):
+  - `ui/src/app/api/attachments/route.ts`
+  - `ui/src/app/page.tsx`
+  - `ui/src/app/debug/agui-harness/page.tsx`
+- Added tests:
+  - `tests/persistence/test_attachment_store_persistence.py`
+  - Updated `tests/chat/test_deps.py` for new state fields.
+- Migrations created/updated:
+  - No new migration revision for this task (reused existing `assets` table schema).
+- Commands/tests run:
+  - `uv run ruff check <changed files>` (passed)
+  - `uv run pytest tests/persistence/test_attachment_store_persistence.py tests/chat/test_deps.py tests/chat/test_api.py tests/tools/test_image_analysis_core.py tests/tools/test_image_analysis_tool.py -q` (15 passed)
+  - `pnpm -C ui exec tsc --noEmit` (passed)
+  - `make tidy` (passed; 56 tests passed)
+- Risks / known gaps:
+  - Width/height extraction is still unset (`None`) in asset metadata; can be populated in a follow-up if UI grid sorting/filtering needs dimensions.
+  - AG-UI per-request context currently uses shared deps object plus contextvars; concurrency behavior should be revisited when introducing multi-worker load.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.6` and persist floor-plan revisions/confirmations to DB with restart continuity.
