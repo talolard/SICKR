@@ -9,6 +9,7 @@ import { useThreadSession } from "@/app/CopilotKitProviders";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
+import { subscribeFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
 import {
   type FloorPlanPreviewState,
   loadFloorPlanPreview,
@@ -69,6 +70,25 @@ export default function Home(): ReactElement {
       return;
     }
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
+  }, [threadId]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeFloorPlanRendered((detail) => {
+      const resolvedImages = detail.images.map((image) => ({
+        ...image,
+        uri: resolveAttachmentUri(image.uri),
+      }));
+      const nextSnapshot: FloorPlanPreviewState = {
+        ...detail,
+        images: resolvedImages,
+        threadId: threadId ?? "pending",
+      };
+      setFloorPlanPreview(nextSnapshot);
+      if (threadId) {
+        saveFloorPlanPreview(nextSnapshot);
+      }
+    });
+    return unsubscribe;
   }, [threadId]);
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
@@ -253,15 +273,19 @@ export default function Home(): ReactElement {
           ) : null}
           <CopilotToolRenderers
             onFloorPlanRendered={(snapshot) => {
-              if (!threadId) {
-                return;
-              }
+              const resolvedImages = snapshot.images.map((image) => ({
+                ...image,
+                uri: resolveAttachmentUri(image.uri),
+              }));
               const nextSnapshot: FloorPlanPreviewState = {
                 ...snapshot,
-                threadId,
+                threadId: threadId ?? "pending",
+                images: resolvedImages,
               };
               setFloorPlanPreview(nextSnapshot);
-              saveFloorPlanPreview(nextSnapshot);
+              if (threadId) {
+                saveFloorPlanPreview(nextSnapshot);
+              }
             }}
           />
           <CopilotSidebar />

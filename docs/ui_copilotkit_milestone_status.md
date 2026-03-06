@@ -14,6 +14,15 @@ Updated: 2026-03-06
 - Milestone 6: persistent floor-plan preview panel beside chat, fed by `render_floor_plan` tool outputs
   with per-thread local persistence in UI state.
 
+## Floor-plan preview reliability note
+
+- Floor-plan preview updates are propagated in two paths:
+  - direct callback from tool renderer (`onFloorPlanRendered`)
+  - browser event bridge (`ikea-floorplan-rendered`) consumed by `ui/src/app/page.tsx`
+- The event bridge exists to keep preview updates robust across AG-UI replay/rerender timing,
+  where render callbacks can be deferred or replayed.
+- Shared bridge helpers live in `ui/src/lib/floorPlanPreviewEvents.ts`.
+
 ## Temporary thread fallback behavior
 
 - Main UI now keeps a stable thread id in URL (`?thread=...`) and localStorage, and passes it to `CopilotKit`.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import type { ReactElement } from "react";
 import { useDefaultRenderTool, useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
@@ -11,6 +12,7 @@ import {
   type RoomPhotoAnalysisToolResult,
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { AttachmentRef } from "@/lib/attachments";
+import { publishFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type ImageToolOutput = {
@@ -58,13 +60,26 @@ type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
 
 function parseResult(result: unknown): unknown {
   if (typeof result !== "string") {
-    return result;
+    return unwrapToolReturnValue(result);
   }
   try {
-    return JSON.parse(result) as unknown;
+    return unwrapToolReturnValue(JSON.parse(result) as unknown);
   } catch {
     return result;
   }
+}
+
+function unwrapToolReturnValue(result: unknown): unknown {
+  if (typeof result !== "object" || result === null) {
+    return result;
+  }
+  if ("return_value" in result) {
+    return (result as { return_value: unknown }).return_value;
+  }
+  if ("result" in result) {
+    return (result as { result: unknown }).result;
+  }
+  return result;
 }
 
 function normalizeAttachmentRef(parsed: ParsedAttachmentRef): AttachmentRef {
@@ -167,6 +182,98 @@ type CopilotToolRenderersProps = {
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
 };
 
+type FloorPlanSnapshot = Omit<FloorPlanPreviewState, "threadId">;
+
+type FloorPlanRenderBridgeProps = {
+  status: "queued" | "executing" | "complete" | "failed";
+  result: unknown;
+  onFloorPlanRendered?: (snapshot: FloorPlanSnapshot) => void;
+};
+
+function FloorPlanRenderBridge({
+  status,
+  result,
+  onFloorPlanRendered,
+}: FloorPlanRenderBridgeProps): ReactElement {
+  const failureMessage = extractToolFailureMessage(result);
+  const imageOutput = parseImageToolOutput(result);
+  const floorPlanResult = parseFloorPlanResult(result);
+
+  const snapshot = useMemo<FloorPlanSnapshot | null>(() => {
+    if (status !== "complete" || failureMessage || !imageOutput) {
+      return null;
+    }
+    return {
+      caption: floorPlanResult?.caption ?? imageOutput.caption,
+      images: imageOutput.images,
+      sceneRevision: floorPlanResult?.scene_revision ?? 0,
+      sceneLevel: floorPlanResult?.scene_level ?? "baseline",
+      warnings: floorPlanResult?.warnings ?? [],
+      legendItems: floorPlanResult?.legend_items ?? [],
+    };
+  }, [failureMessage, floorPlanResult, imageOutput, status]);
+
+  useEffect(() => {
+    if (!snapshot) {
+      return;
+    }
+    publishFloorPlanRendered(snapshot);
+    onFloorPlanRendered?.(snapshot);
+  }, [onFloorPlanRendered, snapshot]);
+
+  if (status !== "complete") {
+    return (
+      <div className="rounded border bg-white p-2">
+        <p className="text-sm text-gray-700">Rendering floor plan...</p>
+      </div>
+    );
+  }
+  if (failureMessage) {
+    return (
+      <div className="rounded border bg-white p-2">
+        <DefaultToolCallRenderer
+          name="render_floor_plan"
+          status="failed"
+          result={undefined}
+          args={undefined}
+          errorMessage={failureMessage}
+        />
+      </div>
+    );
+  }
+  if (!imageOutput) {
+    if (floorPlanResult) {
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="render_floor_plan"
+            status="complete"
+            result={floorPlanResult}
+            args={undefined}
+            errorMessage={undefined}
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="rounded border bg-white p-2">
+        <DefaultToolCallRenderer
+          name="render_floor_plan"
+          status="failed"
+          result={undefined}
+          args={undefined}
+          errorMessage="Tool returned an invalid floor-plan payload."
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="rounded border bg-white p-2">
+      <ImageToolOutputRenderer caption={imageOutput.caption} images={imageOutput.images} />
+    </div>
+  );
+}
+
 export function CopilotToolRenderers({
   onFloorPlanRendered,
 }: CopilotToolRenderersProps): ReactElement | null {
@@ -241,75 +348,14 @@ export function CopilotToolRenderers({
     name: "render_floor_plan",
     parameters: z.unknown(),
     render: ({ status, result }) => {
-      if (status !== "complete") {
-        return (
-          <div className="rounded border bg-white p-2">
-            <p className="text-sm text-gray-700">Rendering floor plan...</p>
-          </div>
-        );
-      }
-      const failureMessage = extractToolFailureMessage(result);
-      if (failureMessage) {
-        return (
-          <div className="rounded border bg-white p-2">
-            <DefaultToolCallRenderer
-              name="render_floor_plan"
-              status="failed"
-              result={undefined}
-              args={undefined}
-              errorMessage={failureMessage}
-            />
-          </div>
-        );
-      }
-      const imageOutput = parseImageToolOutput(result);
-      const floorPlanResult = parseFloorPlanResult(result);
-      if (!imageOutput) {
-        if (floorPlanResult) {
-          onFloorPlanRendered?.({
-            caption: floorPlanResult.caption,
-            images: floorPlanResult.images.map(normalizeAttachmentRef),
-            sceneRevision: floorPlanResult.scene_revision,
-            sceneLevel: floorPlanResult.scene_level,
-            warnings: floorPlanResult.warnings ?? [],
-            legendItems: floorPlanResult.legend_items ?? [],
-          });
-          return (
-            <div className="rounded border bg-white p-2">
-              <DefaultToolCallRenderer
-                name="render_floor_plan"
-                status="complete"
-                result={floorPlanResult}
-                args={undefined}
-                errorMessage={undefined}
-              />
-            </div>
-          );
-        }
-        return (
-          <div className="rounded border bg-white p-2">
-            <DefaultToolCallRenderer
-              name="render_floor_plan"
-              status="failed"
-              result={undefined}
-              args={undefined}
-              errorMessage="Tool returned an invalid floor-plan payload."
-            />
-          </div>
-        );
-      }
-      onFloorPlanRendered?.({
-        caption: floorPlanResult?.caption ?? imageOutput.caption,
-        images: imageOutput.images,
-        sceneRevision: floorPlanResult?.scene_revision ?? 0,
-        sceneLevel: floorPlanResult?.scene_level ?? "baseline",
-        warnings: floorPlanResult?.warnings ?? [],
-        legendItems: floorPlanResult?.legend_items ?? [],
-      });
+      const mappedStatus =
+        status === "inProgress" ? "queued" : status === "executing" ? "executing" : "complete";
       return (
-        <div className="rounded border bg-white p-2">
-          <ImageToolOutputRenderer caption={imageOutput.caption} images={imageOutput.images} />
-        </div>
+        <FloorPlanRenderBridge
+          status={mappedStatus}
+          result={result}
+          {...(onFloorPlanRendered ? { onFloorPlanRendered } : {})}
+        />
       );
     },
   });
