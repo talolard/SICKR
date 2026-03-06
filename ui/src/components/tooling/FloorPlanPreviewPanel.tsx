@@ -2,19 +2,35 @@
 
 import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
+import { useRef } from "react";
 
-import { FloorPlanScene3D } from "@/components/tooling/FloorPlanScene3D";
+import {
+  FloorPlanScene3D,
+  type FloorPlanScene3DHandle,
+  type FloorPlanScene3DSnapshot,
+} from "@/components/tooling/FloorPlanScene3D";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
+import type { Room3DSnapshotContext } from "@/lib/threadStore";
 
 type FloorPlanPreviewPanelProps = {
   preview: FloorPlanPreviewState | null;
+  onSnapshotCaptured?: (
+    snapshot: Omit<Room3DSnapshotContext, "snapshot_id" | "attachment"> & {
+      image_data_url: string;
+    },
+  ) => Promise<void>;
 };
 
 export function FloorPlanPreviewPanel({
   preview,
+  onSnapshotCaptured,
 }: FloorPlanPreviewPanelProps): ReactElement {
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"2d" | "3d">("2d");
+  const [snapshotComment, setSnapshotComment] = useState<string>("");
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const scene3dRef = useRef<FloorPlanScene3DHandle | null>(null);
 
   const primaryImage = useMemo(() => {
     if (!preview) {
@@ -40,6 +56,34 @@ export function FloorPlanPreviewPanel({
       ? (preview.scene.fixtures ?? []).filter((fixture) => fixture.fixture_kind === "light")
           .length
       : 0;
+
+  const captureSnapshot = async (): Promise<void> => {
+    if (!preview?.scene || !onSnapshotCaptured) {
+      return;
+    }
+    setCaptureError(null);
+    setIsCapturing(true);
+    try {
+      const captured: FloorPlanScene3DSnapshot | undefined = scene3dRef.current?.capturePng();
+      if (!captured) {
+        throw new Error("3D camera is not ready yet.");
+      }
+      await onSnapshotCaptured({
+        image_data_url: captured.image_data_url,
+        comment: snapshotComment.trim() || null,
+        captured_at: captured.captured_at,
+        camera: captured.camera,
+        lighting: captured.lighting,
+      });
+      setSnapshotComment("");
+    } catch (error) {
+      setCaptureError(
+        error instanceof Error ? error.message : "Snapshot capture failed unexpectedly.",
+      );
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   return (
     <section className="rounded-lg border bg-white p-4">
@@ -90,11 +134,51 @@ export function FloorPlanPreviewPanel({
         </div>
       ) : preview.scene ? (
         <div className="mt-3 space-y-2">
-          <FloorPlanScene3D scene={preview.scene} />
+          <FloorPlanScene3D ref={scene3dRef} scene={preview.scene} />
           <p className="text-xs text-amber-800" data-testid="lighting-emphasis-caption">
             Lighting emphasis markers: {lightFixtureCount} fixture
             {lightFixtureCount === 1 ? "" : "s"} highlighted.
           </p>
+          <div className="space-y-2 rounded border border-gray-200 p-2">
+            <label className="block text-xs text-gray-700" htmlFor="snapshot-comment">
+              Snapshot comment (optional)
+            </label>
+            <textarea
+              className="w-full rounded border border-gray-300 p-2 text-sm"
+              id="snapshot-comment"
+              onChange={(event) => setSnapshotComment(event.target.value)}
+              placeholder="What should the agent focus on in this perspective?"
+              value={snapshotComment}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                disabled={isCapturing || !onSnapshotCaptured}
+                onClick={() => {
+                  void captureSnapshot();
+                }}
+                type="button"
+              >
+                {isCapturing ? "Capturing..." : "Capture PNG"}
+              </button>
+              {captureError ? (
+                <button
+                  className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700"
+                  onClick={() => {
+                    void captureSnapshot();
+                  }}
+                  type="button"
+                >
+                  Retry capture
+                </button>
+              ) : null}
+            </div>
+            {captureError ? (
+              <p className="text-xs text-red-700" data-testid="snapshot-capture-error">
+                {captureError}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : (
         <div

@@ -16,6 +16,11 @@ import {
   loadFloorPlanPreview,
   saveFloorPlanPreview,
 } from "@/lib/floorPlanPreviewStore";
+import {
+  type Room3DSnapshotContext,
+  loadRoom3DSnapshots,
+  saveRoom3DSnapshots,
+} from "@/lib/threadStore";
 
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
@@ -39,6 +44,7 @@ export default function Home(): ReactElement {
   } = useThreadSession();
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
+  const [room3dSnapshots, setRoom3dSnapshots] = useState<Room3DSnapshotContext[]>([]);
   const attachmentFilesRef = useRef<Record<string, File>>({});
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
@@ -63,14 +69,16 @@ export default function Home(): ReactElement {
       ...previousState,
       session_id: threadId,
       attachments: readyAttachments,
+      room_3d_snapshots: room3dSnapshots,
     });
-  }, [agent, attachments, threadId]);
+  }, [agent, attachments, room3dSnapshots, threadId]);
 
   useEffect(() => {
     if (!threadId) {
       return;
     }
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
+    setRoom3dSnapshots(loadRoom3DSnapshots(threadId));
   }, [threadId]);
 
   useEffect(() => {
@@ -128,8 +136,8 @@ export default function Home(): ReactElement {
     );
   };
 
-  const uploadAttachment = async (localId: string, file: File): Promise<void> => {
-    await new Promise<void>((resolve, reject) => {
+  const uploadAttachment = async (localId: string, file: File): Promise<AttachmentRef | null> => {
+    return new Promise<AttachmentRef>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/attachments");
       xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
@@ -152,13 +160,14 @@ export default function Home(): ReactElement {
         }
         const payload = JSON.parse(xhr.responseText) as AttachmentRef;
         setAttachmentReady(localId, payload);
-        resolve();
+        resolve(payload);
       };
       xhr.send(file);
     }).catch((uploadError) => {
       const message =
         uploadError instanceof Error ? uploadError.message : "Upload failed unexpectedly.";
       setAttachmentError(localId, message);
+      return null;
     });
   };
 
@@ -183,6 +192,64 @@ export default function Home(): ReactElement {
         return;
       }
       void uploadAttachment(pendingAttachment.localId, file);
+    });
+  };
+
+  const dataUrlToFile = (dataUrl: string, fileName: string): File => {
+    const [prefix, payload] = dataUrl.split(",", 2);
+    if (!prefix || !payload) {
+      throw new Error("Snapshot payload is malformed.");
+    }
+    const mimeMatch = prefix.match(/^data:(.*?);base64$/);
+    const mimeType = mimeMatch?.[1] ?? "image/png";
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new File([bytes], fileName, { type: mimeType });
+  };
+
+  const handleRoom3DSnapshotCaptured = async (
+    snapshot: Omit<Room3DSnapshotContext, "snapshot_id" | "attachment"> & {
+      image_data_url: string;
+    },
+  ): Promise<void> => {
+    const localId = crypto.randomUUID();
+    const fileName = `room-3d-snapshot-${localId.slice(0, 8)}.png`;
+    const file = dataUrlToFile(snapshot.image_data_url, fileName);
+    attachmentFilesRef.current[localId] = file;
+    setAttachments((current) => [
+      ...current,
+      {
+        localId,
+        fileName,
+        mimeType: "image/png",
+        progress: 0,
+        status: "uploading",
+      },
+    ]);
+    const uploaded = await uploadAttachment(localId, file);
+    if (!uploaded || !threadId) {
+      return;
+    }
+    setRoom3dSnapshots((current) => {
+      const next: Room3DSnapshotContext[] = [
+        ...current,
+        {
+          snapshot_id: `snapshot-${localId}`,
+          attachment: {
+            ...uploaded,
+            uri: resolveAttachmentUri(uploaded.uri),
+          },
+          comment: snapshot.comment,
+          captured_at: snapshot.captured_at,
+          camera: snapshot.camera,
+          lighting: snapshot.lighting,
+        },
+      ];
+      saveRoom3DSnapshots(threadId, next);
+      return next;
     });
   };
 
@@ -265,7 +332,10 @@ export default function Home(): ReactElement {
         </p>
       </header>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <FloorPlanPreviewPanel preview={floorPlanPreview} />
+        <FloorPlanPreviewPanel
+          onSnapshotCaptured={handleRoom3DSnapshotCaptured}
+          preview={floorPlanPreview}
+        />
         <section className="flex min-h-[60vh] flex-col gap-4">
           <AttachmentComposer
             attachments={attachments}

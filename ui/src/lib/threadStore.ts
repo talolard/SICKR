@@ -1,5 +1,22 @@
 import type { PendingAttachment } from "@/lib/attachments";
+import type { AttachmentRef } from "@/lib/attachments";
 import type { ToolCallEntry } from "@/lib/toolEvents";
+
+export type Room3DSnapshotContext = {
+  snapshot_id: string;
+  attachment: AttachmentRef;
+  comment: string | null;
+  captured_at: string;
+  camera: {
+    position_m: [number, number, number];
+    target_m: [number, number, number];
+    fov_deg: number;
+  };
+  lighting: {
+    light_fixture_ids: string[];
+    emphasized_light_count: number;
+  };
+};
 
 type ThreadSnapshot = {
   threadId: string;
@@ -19,6 +36,7 @@ const ACTIVE_THREAD_KEY = "copilotkit_ui_active_thread";
 const THREAD_PREFIX = "copilotkit_ui_thread_";
 const THREAD_IDS_KEY = "copilotkit_ui_thread_ids";
 const RESUMABLE_THREAD_IDS_KEY = "copilotkit_ui_resumable_thread_ids_tmp";
+const ROOM_3D_SNAPSHOT_PREFIX = "copilotkit_ui_room3d_snapshots_";
 
 function threadKey(threadId: string): string {
   return `${THREAD_PREFIX}${threadId}`;
@@ -108,6 +126,41 @@ export function saveResumableThreadIds(threadIds: string[]): void {
     return;
   }
   window.sessionStorage.setItem(RESUMABLE_THREAD_IDS_KEY, JSON.stringify(threadIds));
+}
+
+function room3dSnapshotKey(threadId: string): string {
+  return `${ROOM_3D_SNAPSHOT_PREFIX}${threadId}`;
+}
+
+export function loadRoom3DSnapshots(threadId: string): Room3DSnapshotContext[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const raw = window.localStorage.getItem(room3dSnapshotKey(threadId));
+  if (!raw) {
+    return [];
+  }
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.filter(
+    (value): value is Room3DSnapshotContext =>
+      typeof value === "object" &&
+      value !== null &&
+      "snapshot_id" in value &&
+      "attachment" in value,
+  );
+}
+
+export function saveRoom3DSnapshots(
+  threadId: string,
+  snapshots: Room3DSnapshotContext[],
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(room3dSnapshotKey(threadId), JSON.stringify(snapshots));
 }
 
 export type { ThreadSnapshot };

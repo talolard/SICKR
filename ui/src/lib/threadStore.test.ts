@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   loadResumableThreadIds,
+  loadRoom3DSnapshots,
   loadThreadIds,
   loadActiveThreadId,
   loadThreadSnapshot,
   saveResumableThreadIds,
+  saveRoom3DSnapshots,
   saveThreadIds,
   saveActiveThreadId,
   saveThreadSnapshot,
@@ -44,5 +46,37 @@ describe("threadStore", () => {
 
     expect(loadThreadIds()).toEqual(["thread-1", "thread-2"]);
     expect(loadResumableThreadIds()).toEqual(["thread-2"]);
+  });
+
+  it("persists room 3d snapshot context per thread", () => {
+    saveRoom3DSnapshots("thread-1", [
+      {
+        snapshot_id: "snap-1",
+        attachment: {
+          attachment_id: "asset-1",
+          mime_type: "image/png",
+          uri: "/attachments/asset-1",
+          width: null,
+          height: null,
+          file_name: "snapshot.png",
+        },
+        comment: "focus on ceiling lights",
+        captured_at: "2026-03-06T22:00:00Z",
+        camera: {
+          position_m: [1, 1.5, 2],
+          target_m: [1, 0.8, 1],
+          fov_deg: 55,
+        },
+        lighting: {
+          light_fixture_ids: ["light-1"],
+          emphasized_light_count: 1,
+        },
+      },
+    ]);
+
+    const loaded = loadRoom3DSnapshots("thread-1");
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.snapshot_id).toBe("snap-1");
+    expect(loaded[0]?.comment).toContain("ceiling");
   });
 });

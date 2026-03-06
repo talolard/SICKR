@@ -1,14 +1,33 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { useMemo } from "react";
-import type { ReactElement } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
+import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import type { MutableRefObject, ReactElement } from "react";
+import type { PerspectiveCamera, WebGLRenderer } from "three";
 
 import type { FloorPlanScene } from "@/lib/floorPlanScene";
 
 type FloorPlanScene3DProps = {
   scene: FloorPlanScene;
+};
+
+export type FloorPlanScene3DSnapshot = {
+  captured_at: string;
+  image_data_url: string;
+  camera: {
+    position_m: [number, number, number];
+    target_m: [number, number, number];
+    fov_deg: number;
+  };
+  lighting: {
+    light_fixture_ids: string[];
+    emphasized_light_count: number;
+  };
+};
+
+export type FloorPlanScene3DHandle = {
+  capturePng: () => FloorPlanScene3DSnapshot;
 };
 
 type Segment3D = {
@@ -154,9 +173,19 @@ function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
     <>
       <ambientLight intensity={0.65} />
       <directionalLight intensity={0.45} position={[2.5, 3, 2.5]} />
-      <pointLight intensity={0.25} position={[geometry.roomLengthM * 0.5, geometry.roomHeightM, geometry.roomDepthM * 0.5]} />
+      <pointLight
+        intensity={0.25}
+        position={[
+          geometry.roomLengthM * 0.5,
+          geometry.roomHeightM,
+          geometry.roomDepthM * 0.5,
+        ]}
+      />
 
-      <mesh position={[geometry.roomLengthM * 0.5, 0, geometry.roomDepthM * 0.5]} receiveShadow>
+      <mesh
+        position={[geometry.roomLengthM * 0.5, 0, geometry.roomDepthM * 0.5]}
+        receiveShadow
+      >
         <boxGeometry args={[geometry.roomLengthM, 0.02, geometry.roomDepthM]} />
         <meshStandardMaterial color="#ece9e1" />
       </mesh>
@@ -178,14 +207,23 @@ function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
       {geometry.windows.map((window) => (
         <mesh key={window.id} position={window.center} rotation={[0, -window.angleRad, 0]}>
           <boxGeometry args={[window.lengthM, window.heightM, window.thicknessM]} />
-          <meshStandardMaterial color="#94caff" emissive="#15364e" transparent opacity={0.55} />
+          <meshStandardMaterial
+            color="#94caff"
+            emissive="#15364e"
+            transparent
+            opacity={0.55}
+          />
         </mesh>
       ))}
 
       {geometry.placements.map((placement) => (
         <mesh key={placement.id} position={placement.center}>
           <boxGeometry args={placement.size} />
-          <meshStandardMaterial color={placement.color} roughness={0.65} metalness={0.1} />
+          <meshStandardMaterial
+            color={placement.color}
+            roughness={0.65}
+            metalness={0.1}
+          />
         </mesh>
       ))}
 
@@ -200,39 +238,115 @@ function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
         <group key={fixture.id}>
           <mesh position={fixture.position}>
             <sphereGeometry args={[0.07, 16, 16]} />
-            <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={1.7} />
+            <meshStandardMaterial
+              color="#fbbf24"
+              emissive="#f59e0b"
+              emissiveIntensity={1.7}
+            />
           </mesh>
           <pointLight
             color="#ffd37a"
             intensity={0.65}
             distance={3}
-            position={[fixture.position[0], fixture.position[1] + 0.05, fixture.position[2]]}
+            position={[
+              fixture.position[0],
+              fixture.position[1] + 0.05,
+              fixture.position[2],
+            ]}
           />
         </group>
       ))}
-
-      <OrbitControls makeDefault />
     </>
   );
 }
 
-export function FloorPlanScene3D({ scene }: FloorPlanScene3DProps): ReactElement {
-  const geometry = useMemo(() => toSceneGeometry(scene), [scene]);
-  const hasWebGl = typeof window !== "undefined" && "WebGLRenderingContext" in window;
+function CaptureBridge({
+  glRef,
+  cameraRef,
+}: {
+  glRef: MutableRefObject<WebGLRenderer | null>;
+  cameraRef: MutableRefObject<PerspectiveCamera | null>;
+}): null {
+  const { gl, camera } = useThree();
+  glRef.current = gl;
+  cameraRef.current = camera as PerspectiveCamera;
+  return null;
+}
 
-  if (!hasWebGl) {
+export const FloorPlanScene3D = forwardRef<FloorPlanScene3DHandle, FloorPlanScene3DProps>(
+  function FloorPlanScene3D({ scene }: FloorPlanScene3DProps, ref): ReactElement {
+    const geometry = useMemo(() => toSceneGeometry(scene), [scene]);
+    const hasWebGl =
+      typeof window !== "undefined" && "WebGLRenderingContext" in window;
+    const glRef = useRef<WebGLRenderer | null>(null);
+    const cameraRef = useRef<PerspectiveCamera | null>(null);
+    const lightFixtureIds = useMemo(
+      () =>
+        (scene.fixtures ?? [])
+          .filter((fixture) => fixture.fixture_kind === "light")
+          .map((fixture) => fixture.fixture_id),
+      [scene.fixtures],
+    );
+
+    useImperativeHandle(ref, () => ({
+      capturePng: (): FloorPlanScene3DSnapshot => {
+        const renderer = glRef.current;
+        const camera = cameraRef.current;
+        if (!renderer || !camera) {
+          throw new Error("3D renderer is not ready yet.");
+        }
+        return {
+          captured_at: new Date().toISOString(),
+          image_data_url: renderer.domElement.toDataURL("image/png"),
+          camera: {
+            position_m: [
+              Number(camera.position.x.toFixed(3)),
+              Number(camera.position.y.toFixed(3)),
+              Number(camera.position.z.toFixed(3)),
+            ],
+            target_m: [
+              Number((geometry.roomLengthM * 0.5).toFixed(3)),
+              Number((geometry.roomHeightM * 0.5).toFixed(3)),
+              Number((geometry.roomDepthM * 0.5).toFixed(3)),
+            ],
+            fov_deg: Number(camera.fov.toFixed(2)),
+          },
+          lighting: {
+            light_fixture_ids: lightFixtureIds,
+            emphasized_light_count: lightFixtureIds.length,
+          },
+        };
+      },
+    }));
+
+    if (!hasWebGl) {
+      return (
+        <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+          3D preview unavailable in this environment.
+        </div>
+      );
+    }
+
     return (
-      <div className="rounded border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
-        3D preview unavailable in this environment.
+      <div
+        className="h-[420px] w-full rounded border border-gray-200 bg-[#e8edf2]"
+        data-testid="floor-plan-3d-canvas"
+      >
+        <Canvas
+          camera={{
+            position: [
+              geometry.roomLengthM * 0.5,
+              geometry.roomHeightM * 0.85,
+              geometry.roomDepthM * 1.25,
+            ],
+            fov: 55,
+          }}
+        >
+          <CaptureBridge cameraRef={cameraRef} glRef={glRef} />
+          <RoomScene geometry={geometry} />
+          <OrbitControls makeDefault />
+        </Canvas>
       </div>
     );
-  }
-
-  return (
-    <div className="h-[420px] w-full rounded border border-gray-200 bg-[#e8edf2]" data-testid="floor-plan-3d-canvas">
-      <Canvas camera={{ position: [geometry.roomLengthM * 0.5, geometry.roomHeightM * 0.85, geometry.roomDepthM * 1.25], fov: 55 }}>
-        <RoomScene geometry={geometry} />
-      </Canvas>
-    </div>
-  );
-}
+  },
+);
