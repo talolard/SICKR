@@ -48,6 +48,7 @@ class _MilvusStub:
 class _CatalogStub:
     def __init__(self, results: list[RetrievalResult]) -> None:
         self._results = results
+        self.last_result_limit: int | None = None
 
     def hydrate_candidates(
         self,
@@ -57,6 +58,7 @@ class _CatalogStub:
         result_limit: int,
     ) -> list[RetrievalResult]:
         _ = (candidates, filters, result_limit)
+        self.last_result_limit = result_limit
         return self._results
 
 
@@ -125,11 +127,12 @@ def test_graph_returns_empty_matches_when_no_results() -> None:
 
 
 def test_graph_returns_ranked_results() -> None:
+    catalog = _CatalogStub(results=[_sample_result()])
     runtime = _RuntimeStub(
         settings=_SettingsStub(),
         embedder=_EmbedderStub(),
         milvus_service=_MilvusStub(),
-        catalog_repository=_CatalogStub(results=[_sample_result()]),
+        catalog_repository=catalog,
         reranker=_RerankerStub(),
     )
     graph = build_chat_graph()
@@ -143,3 +146,26 @@ def test_graph_returns_ranked_results() -> None:
     assert output.request_id != ""
     assert len(output.product_matches) == 1
     assert output.product_matches[0].product_id == "1-DE"
+    assert output.product_matches[0].product_name == "Lamp"
+    assert output.product_matches[0].product_type == "Lamp"
+    assert catalog.last_result_limit == 200
+
+
+def test_graph_uses_result_limit_override_from_parse_node() -> None:
+    catalog = _CatalogStub(results=[_sample_result()])
+    runtime = _RuntimeStub(
+        settings=_SettingsStub(),
+        embedder=_EmbedderStub(),
+        milvus_service=_MilvusStub(),
+        catalog_repository=catalog,
+        reranker=_RerankerStub(),
+    )
+    graph = build_chat_graph()
+
+    _ = graph.run_sync(
+        ParseUserIntentNode(user_message="need a lamp", result_limit=80),
+        state=ChatGraphState(),
+        deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
+    ).output
+
+    assert catalog.last_result_limit == 80

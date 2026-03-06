@@ -8,6 +8,8 @@ from ikea_agent.shared.types import ShortRetrievalResult
 def test_short_retrieval_result_contract_shape_is_stable() -> None:
     result = ShortRetrievalResult(
         product_id="prod-001",
+        product_name="PAX wardrobe",
+        product_type="Wardrobe",
         description_text="Wardrobe",
         main_category="Storage",
         sub_category="Wardrobes",
@@ -21,6 +23,8 @@ def test_short_retrieval_result_contract_shape_is_stable() -> None:
 
     assert list(serialized.keys()) == [
         "product_id",
+        "product_name",
+        "product_type",
         "description_text",
         "main_category",
         "sub_category",

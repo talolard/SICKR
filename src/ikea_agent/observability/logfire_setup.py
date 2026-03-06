@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from logging import getLogger
+from pathlib import Path
 from threading import Lock
 from typing import Literal
 
@@ -53,7 +54,12 @@ def instrument_fastapi_app(app: FastAPI) -> None:
 
 
 def _warn_if_logfire_export_disabled(settings: AppSettings) -> None:
-    has_token = bool(settings.logfire_token or os.getenv("LOGFIRE_TOKEN"))
+    has_token = bool(
+        settings.logfire_token
+        or os.getenv("LOGFIRE_TOKEN")
+        or os.getenv("APP_LOGFIRE_TOKEN")
+        or _logfire_credentials_file().exists()
+    )
     if has_token:
         return
     logger.warning(
@@ -63,3 +69,7 @@ def _warn_if_logfire_export_disabled(settings: AppSettings) -> None:
             "hint": "Set LOGFIRE_TOKEN or APP_LOGFIRE_TOKEN to enable remote export.",
         },
     )
+
+
+def _logfire_credentials_file() -> Path:
+    return Path.cwd() / ".logfire" / "logfire_credentials.json"

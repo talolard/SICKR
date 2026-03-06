@@ -9,6 +9,16 @@
   - `logfire.instrument_pydantic_ai()`
   - `logfire.instrument_fastapi(app)`
 
+## Local Setup
+
+- Export a token in your shell or `.env`:
+  - `LOGFIRE_TOKEN=...` (preferred)
+  - `APP_LOGFIRE_TOKEN=...` (legacy alias, still supported)
+- Verify CLI auth/project wiring from this repo:
+  - `uv run logfire whoami`
+  - `uv run logfire projects list`
+- If the app logs `logfire_export_disabled_no_token`, traces will stay local and not appear in Logfire.
+
 ## Native Coverage (Current)
 
 With native PydanticAI + FastAPI instrumentation enabled, we rely on Logfire to capture:

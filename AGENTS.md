@@ -237,6 +237,8 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 - Do not add custom event taxonomies unless a concrete query/debug gap is proven.
 - In discovery mode, missing observability fields should warn and create follow-up work;
   hard CI failure for observability schema is deferred.
+- For span-level debugging and telemetry-to-code correlation, use the local skill:
+  `~/.codex/skills/logfire-span-triage` (script + checklist for repeatable trace/span triage).
 
 ## Git Identity
 

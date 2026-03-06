@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 
@@ -25,9 +28,11 @@ def _reset_logfire_flags(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_configure_logfire_warns_and_continues_when_token_missing(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     _reset_logfire_flags(monkeypatch)
     monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
+    monkeypatch.delenv("APP_LOGFIRE_TOKEN", raising=False)
     configure_call: dict[str, object] | None = None
     pydantic_ai_instrumented = 0
     warned = 0
@@ -57,6 +62,10 @@ def test_configure_logfire_warns_and_continues_when_token_missing(
         _fake_instrument_pydantic_ai,
     )
     monkeypatch.setattr(logfire_setup.logger, "warning", _fake_warning)
+    missing_credentials_file = tmp_path / "missing-logfire-credentials.json"
+    monkeypatch.setattr(
+        logfire_setup, "_logfire_credentials_file", lambda: missing_credentials_file
+    )
 
     logfire_setup.configure_logfire(_settings(token=None))
 
@@ -91,6 +100,36 @@ def test_configure_logfire_does_not_warn_when_token_present(
     assert calls["warned"] == 0
 
 
+def test_configure_logfire_does_not_warn_when_cli_credentials_exist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _reset_logfire_flags(monkeypatch)
+    monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
+    monkeypatch.delenv("APP_LOGFIRE_TOKEN", raising=False)
+    calls: dict[str, int] = {"warned": 0}
+
+    def _fake_warning(
+        _message: str,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        _ = args
+        _ = kwargs
+        calls["warned"] += 1
+
+    monkeypatch.setattr(logfire_setup.logfire, "configure", lambda **_kwargs: None)
+    monkeypatch.setattr(logfire_setup.logfire, "instrument_pydantic_ai", lambda: None)
+    monkeypatch.setattr(logfire_setup.logger, "warning", _fake_warning)
+    fake_credentials_file = tmp_path / "logfire_credentials.json"
+    fake_credentials_file.write_text('{"token":"dummy"}')
+    monkeypatch.setattr(logfire_setup, "_logfire_credentials_file", lambda: fake_credentials_file)
+
+    logfire_setup.configure_logfire(_settings(token=None))
+
+    assert calls["warned"] == 0
+
+
 def test_instrument_fastapi_app_calls_logfire(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -105,3 +144,12 @@ def test_instrument_fastapi_app_calls_logfire(
     logfire_setup.instrument_fastapi_app(app)
 
     assert captured["app"] is app
+
+
+def test_settings_accepts_app_logfire_token_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_LOGFIRE_TOKEN", "alias-value")
+    monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
+
+    settings = AppSettings()
+
+    assert settings.logfire_token == os.getenv("APP_LOGFIRE_TOKEN")

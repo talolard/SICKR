@@ -48,6 +48,7 @@ class ParseUserIntentNode(BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResul
     """Initialize graph state for one incoming user chat message."""
 
     user_message: str
+    result_limit: int | None = None
 
     async def run(
         self, ctx: GraphRunContext[ChatGraphState, ChatGraphDeps]
@@ -55,21 +56,28 @@ class ParseUserIntentNode(BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResul
         """Normalize and store the user message in graph state."""
 
         ctx.state.user_message = self.user_message.strip()
-        return RetrieveCandidatesNode()
+        return RetrieveCandidatesNode(result_limit=self.result_limit)
 
 
 @dataclass(frozen=True, slots=True)
 class RetrieveCandidatesNode(BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResult]):
     """Run semantic retrieval against product embeddings."""
 
+    result_limit: int | None = None
+
     async def run(
         self, ctx: GraphRunContext[ChatGraphState, ChatGraphDeps]
     ) -> BaseNode[ChatGraphState, ChatGraphDeps, ChatGraphResult]:
         """Embed query, run Milvus search, and hydrate candidates from DuckDB."""
 
+        target_limit = (
+            max(1, self.result_limit)
+            if self.result_limit is not None
+            else max(200, ctx.deps.runtime.settings.default_query_limit)
+        )
         request = RetrievalRequest(
             query_text=ctx.state.user_message,
-            result_limit=max(200, ctx.deps.runtime.settings.default_query_limit),
+            result_limit=target_limit,
             filters=ctx.state.filters or RetrievalFilters(),
         )
         query_vector = await embed_query(ctx.deps.runtime, request.query_text)

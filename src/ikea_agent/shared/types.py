@@ -83,6 +83,8 @@ class RetrievalResult:
 
         return ShortRetrievalResult(
             product_id=self.canonical_product_key,
+            product_name=self.product_name,
+            product_type=self.product_type,
             description_text=self.description_text,
             main_category=self.main_category,
             sub_category=self.sub_category,
@@ -98,6 +100,8 @@ class ShortRetrievalResult:
     """Lightweight retrieval result for agent tools."""
 
     product_id: str
+    product_name: str
+    product_type: str | None
     description_text: str | None
     main_category: str | None
     sub_category: str | None
@@ -112,6 +116,8 @@ class ShortRetrievalResult:
 
         return ShortRetrievalResult(
             product_id=result.canonical_product_key,
+            product_name=result.product_name,
+            product_type=result.product_type,
             description_text=result.description_text,
             main_category=result.main_category,
             sub_category=result.sub_category,
@@ -120,6 +126,27 @@ class ShortRetrievalResult:
             height_cm=result.height_cm,
             price_eur=result.price_eur,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResultDiversityWarning:
+    """Machine-readable warning for concentrated or repetitive search outputs."""
+
+    kind: Literal["high_family_concentration"]
+    message: str
+    dominant_family: str
+    dominant_share: float
+    analyzed_result_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class SearchGraphToolResult:
+    """Structured output returned by `run_search_graph` for agent consumption."""
+
+    results: list[ShortRetrievalResult]
+    total_candidates: int
+    returned_count: int
+    warning: SearchResultDiversityWarning | None = None
 
 
 @dataclass(frozen=True, slots=True)
