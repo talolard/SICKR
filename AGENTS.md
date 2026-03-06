@@ -233,6 +233,10 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 
 - Use shared logger configuration from `src/ikea_agent/logging_config.py`.
 - Include query/request IDs in pipeline logs where available.
+- Default to native Logfire instrumentation (`instrument_pydantic_ai`, `instrument_fastapi`).
+- Do not add custom event taxonomies unless a concrete query/debug gap is proven.
+- In discovery mode, missing observability fields should warn and create follow-up work;
+  hard CI failure for observability schema is deferred.
 
 ## Git Identity
 
