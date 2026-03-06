@@ -16,6 +16,7 @@ from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.shared.types import ImageToolOutput
+from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
@@ -116,6 +117,7 @@ def create_app(
     deps = ChatAgentDeps(
         runtime=chat_runtime,
         attachment_store=attachment_store,
+        floor_plan_scene_store=FloorPlanSceneStore(),
         state=ChatAgentState(),
     )
     _register_attachment_routes(app, attachment_store)

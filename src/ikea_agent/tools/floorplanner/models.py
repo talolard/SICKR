@@ -1,359 +1,378 @@
-"""Agent-friendly typed floor-plan wrappers around Renovation elements."""
+"""Typed scene contracts for the in-repo SVG floor-plan renderer.
+
+These models replace renovation-specific wrappers with a scene-first contract designed
+for iterative agent updates. The scene keeps geometric numbers in structured fields,
+while rendering output remains an artifact concern.
+"""
 
 from __future__ import annotations
 
-from math import cos, radians, sin
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-_CM_PER_METER = 100.0
-_MIN_WALL_COUNT = 3
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 
 class FloorPlannerValidationError(ValueError):
-    """Raised when a floor-plan payload is inconsistent for rendering."""
+    """Raised when a scene payload is structurally inconsistent."""
 
 
-class PointCm(BaseModel):
-    """Cartesian point represented in centimeters."""
+class Point2DCm(BaseModel):
+    """2D Cartesian point in centimeters."""
 
-    x_cm: float = Field(description="X coordinate in centimeters.")
-    y_cm: float = Field(description="Y coordinate in centimeters.")
-
-    def to_meters_tuple(self) -> tuple[float, float]:
-        """Convert centimeters to meters for Renovation APIs."""
-
-        return (self.x_cm / _CM_PER_METER, self.y_cm / _CM_PER_METER)
+    x_cm: float
+    y_cm: float
 
 
-class _BaseElementCm(BaseModel):
-    """Common element fields expected from the agent."""
+class Size3DCm(BaseModel):
+    """Axis-aligned size in centimeters."""
 
-    name: str = Field(
-        min_length=1,
-        description=(
-            "Stable caller-defined identifier for this element. Used for tracking and "
-            "debugging tool calls across retries."
-        ),
-    )
-    anchor_point_cm: PointCm = Field(
-        description=(
-            "Element start point in centimeters for the 2D plan (x/y only). "
-            "If your source data is a room object with wall segments, convert each segment "
-            "into explicit wall/door/window elements and use the segment start as anchor."
-        )
-    )
-    orientation_angle_deg: float = Field(
-        default=0.0,
-        description=(
-            "Counterclockwise orientation angle in degrees from the X axis. "
-            "Use 0 for horizontal-right, 90 for vertical-up, 180 for horizontal-left, "
-            "and -90 for vertical-down."
-        ),
-    )
+    x_cm: float = Field(gt=0.0)
+    y_cm: float = Field(gt=0.0)
+    z_cm: float = Field(gt=0.0)
 
 
-class WallElementCm(_BaseElementCm):
-    """Renovation `wall` element with agent-friendly defaults."""
+class RoomDimensionsCm(BaseModel):
+    """Room envelope dimensions in centimeters."""
 
-    type: Literal["wall"] = "wall"
-    length_cm: float = Field(
-        gt=0.0,
-        description="Wall length in centimeters.",
-    )
-    thickness_cm: float = Field(
-        default=10.0,
-        gt=0.0,
-        description="Wall thickness in centimeters. Defaults to 10 cm.",
-    )
-    color: str | None = Field(
-        default=None,
-        description="Optional drawing color (any matplotlib color string).",
-    )
-
-    def to_renovation_element(self) -> dict[str, object]:
-        """Convert to Renovation kwargs in meters."""
-
-        element: dict[str, object] = {
-            "type": self.type,
-            "anchor_point": self.anchor_point_cm.to_meters_tuple(),
-            "length": self.length_cm / _CM_PER_METER,
-            "thickness": self.thickness_cm / _CM_PER_METER,
-            "orientation_angle": self.orientation_angle_deg,
-        }
-        if self.color is not None:
-            element["color"] = self.color
-        return element
-
-    def extent_points_cm(self) -> tuple[PointCm, PointCm]:
-        """Return two points that approximate the wall segment extent."""
-
-        angle_rad = radians(self.orientation_angle_deg)
-        end_x = self.anchor_point_cm.x_cm + cos(angle_rad) * self.length_cm
-        end_y = self.anchor_point_cm.y_cm + sin(angle_rad) * self.length_cm
-        return (self.anchor_point_cm, PointCm(x_cm=end_x, y_cm=end_y))
+    length_x_cm: float = Field(gt=0.0)
+    depth_y_cm: float = Field(gt=0.0)
+    height_z_cm: float = Field(gt=0.0)
 
 
-class DoorElementCm(_BaseElementCm):
-    """Renovation `door` element with defaults suitable for quick agent calls."""
+class WallSegmentCm(BaseModel):
+    """One wall segment in top-down coordinates."""
 
-    type: Literal["door"] = "door"
-    doorway_width_cm: float = Field(
-        default=90.0,
-        gt=0.0,
-        description="Doorway width in centimeters. Defaults to 90 cm.",
-    )
-    door_width_cm: float = Field(
-        default=80.0,
-        gt=0.0,
-        description="Door leaf width in centimeters. Defaults to 80 cm.",
-    )
-    thickness_cm: float = Field(
-        default=5.0,
-        gt=0.0,
-        description="Door frame thickness in centimeters. Defaults to 5 cm.",
-    )
-    to_the_right: bool = Field(
-        default=False,
-        description="Whether the door opens to the right from the hinge reference.",
-    )
-    color: str | None = Field(
-        default=None,
-        description="Optional drawing color (any matplotlib color string).",
-    )
+    wall_id: str = Field(min_length=1)
+    start_cm: Point2DCm
+    end_cm: Point2DCm
+    thickness_cm: float = Field(default=10.0, gt=0.0)
+    color: str | None = None
+
+
+class DoorOpeningCm(BaseModel):
+    """Door opening represented as a wall segment and swing metadata."""
+
+    opening_id: str = Field(min_length=1)
+    start_cm: Point2DCm
+    end_cm: Point2DCm
+    opens_towards: str | None = None
+    panel_length_cm: float | None = Field(default=None, gt=0.0)
+
+
+class WindowOpeningCm(BaseModel):
+    """Window opening represented as a wall segment with optional vertical range."""
+
+    opening_id: str = Field(min_length=1)
+    start_cm: Point2DCm
+    end_cm: Point2DCm
+    z_min_cm: float | None = Field(default=None, ge=0.0)
+    z_max_cm: float | None = Field(default=None, ge=0.0)
+    panel_count: int = Field(default=1, ge=1)
+    frame_cm: float = Field(default=0.0, ge=0.0)
 
     @model_validator(mode="after")
-    def validate_widths(self) -> DoorElementCm:
-        """Ensure door width is valid, auto-adjusting omitted defaults when needed."""
+    def validate_vertical_range(self) -> WindowOpeningCm:
+        """Keep optional z-range coherent when present."""
 
-        fields_set = getattr(self, "__pydantic_fields_set__", set())
-        if "door_width_cm" not in fields_set and self.door_width_cm > self.doorway_width_cm:
-            # If caller omitted door_width_cm, keep payload ergonomic by matching doorway width.
-            self.door_width_cm = self.doorway_width_cm
-
-        if self.door_width_cm > self.doorway_width_cm:
-            msg = "door_width_cm must be less than or equal to doorway_width_cm"
+        if (
+            self.z_min_cm is not None
+            and self.z_max_cm is not None
+            and self.z_max_cm < self.z_min_cm
+        ):
+            msg = "z_max_cm must be greater than or equal to z_min_cm"
             raise FloorPlannerValidationError(msg)
         return self
 
-    def to_renovation_element(self) -> dict[str, object]:
-        """Convert to Renovation kwargs in meters."""
 
-        element: dict[str, object] = {
-            "type": self.type,
-            "anchor_point": self.anchor_point_cm.to_meters_tuple(),
-            "doorway_width": self.doorway_width_cm / _CM_PER_METER,
-            "door_width": self.door_width_cm / _CM_PER_METER,
-            "thickness": self.thickness_cm / _CM_PER_METER,
-            "orientation_angle": self.orientation_angle_deg,
-            "to_the_right": self.to_the_right,
-        }
-        if self.color is not None:
-            element["color"] = self.color
-        return element
+class ArchitectureScene(BaseModel):
+    """Room shell and openings used by all scene levels."""
 
-    def extent_points_cm(self) -> tuple[PointCm, PointCm]:
-        """Return two points that approximate doorway extent for layout bounds."""
+    dimensions_cm: RoomDimensionsCm
+    walls: list[WallSegmentCm] = Field(min_length=3)
+    doors: list[DoorOpeningCm] = Field(default_factory=list)
+    windows: list[WindowOpeningCm] = Field(default_factory=list)
+    outline_cm: list[Point2DCm] | None = None
 
-        angle_rad = radians(self.orientation_angle_deg)
-        end_x = self.anchor_point_cm.x_cm + cos(angle_rad) * self.doorway_width_cm
-        end_y = self.anchor_point_cm.y_cm + sin(angle_rad) * self.doorway_width_cm
-        return (self.anchor_point_cm, PointCm(x_cm=end_x, y_cm=end_y))
+    @field_validator("walls")
+    @classmethod
+    def unique_wall_ids(cls, walls: list[WallSegmentCm]) -> list[WallSegmentCm]:
+        """Ensure wall ids remain stable for downstream references."""
 
-
-class WindowElementCm(_BaseElementCm):
-    """Renovation `window` element with practical defaults."""
-
-    type: Literal["window"] = "window"
-    length_cm: float = Field(
-        default=120.0,
-        gt=0.0,
-        description="Window length in centimeters. Defaults to 120 cm.",
-    )
-    overall_thickness_cm: float = Field(
-        default=10.0,
-        gt=0.0,
-        description="Total window thickness in centimeters. Defaults to 10 cm.",
-    )
-    single_line_thickness_cm: float = Field(
-        default=3.0,
-        gt=0.0,
-        description="Thickness of each outer line in centimeters. Defaults to 3 cm.",
-    )
-    color: str | None = Field(
-        default=None,
-        description="Optional drawing color (any matplotlib color string).",
-    )
-
-    @model_validator(mode="after")
-    def validate_thicknesses(self) -> WindowElementCm:
-        """Ensure a visible interior gap for the window can be drawn."""
-
-        if self.single_line_thickness_cm * 2 >= self.overall_thickness_cm:
-            msg = (
-                "single_line_thickness_cm must be less than half of overall_thickness_cm "
-                "for window rendering"
-            )
+        ids = [wall.wall_id for wall in walls]
+        if len(ids) != len(set(ids)):
+            msg = "Wall ids must be unique"
             raise FloorPlannerValidationError(msg)
-        return self
-
-    def to_renovation_element(self) -> dict[str, object]:
-        """Convert to Renovation kwargs in meters."""
-
-        element: dict[str, object] = {
-            "type": self.type,
-            "anchor_point": self.anchor_point_cm.to_meters_tuple(),
-            "length": self.length_cm / _CM_PER_METER,
-            "overall_thickness": self.overall_thickness_cm / _CM_PER_METER,
-            "single_line_thickness": self.single_line_thickness_cm / _CM_PER_METER,
-            "orientation_angle": self.orientation_angle_deg,
-        }
-        if self.color is not None:
-            element["color"] = self.color
-        return element
-
-    def extent_points_cm(self) -> tuple[PointCm, PointCm]:
-        """Return two points that approximate window span for layout bounds."""
-
-        angle_rad = radians(self.orientation_angle_deg)
-        end_x = self.anchor_point_cm.x_cm + cos(angle_rad) * self.length_cm
-        end_y = self.anchor_point_cm.y_cm + sin(angle_rad) * self.length_cm
-        return (self.anchor_point_cm, PointCm(x_cm=end_x, y_cm=end_y))
+        return walls
 
 
-FloorPlanElementCm = Annotated[
-    WallElementCm | DoorElementCm | WindowElementCm,
-    Field(discriminator="type"),
+class FurniturePlacementCm(BaseModel):
+    """Generic top-down placement with optional vertical semantics."""
+
+    placement_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    kind: str = Field(default="generic")
+    position_cm: Point2DCm
+    size_cm: Size3DCm
+    z_cm: float = Field(default=0.0, ge=0.0)
+    color: str | None = None
+    wall_mounted: bool = False
+    stacked_on_placement_id: str | None = None
+    label: str | None = None
+    notes: str | None = None
+
+
+class ElectricalSocketCm(BaseModel):
+    """Socket marker in 2D with optional mounting height."""
+
+    fixture_id: str = Field(min_length=1)
+    x_cm: float
+    y_cm: float
+    z_cm: float = Field(default=0.0, ge=0.0)
+    label: str | None = None
+
+
+class LightFixtureCm(BaseModel):
+    """Light marker in 2D with optional mounting height."""
+
+    fixture_id: str = Field(min_length=1)
+    x_cm: float
+    y_cm: float
+    z_cm: float = Field(default=0.0, ge=0.0)
+    label: str | None = None
+
+
+ElectricalFixtureCm = Annotated[
+    ElectricalSocketCm | LightFixtureCm, Field(discriminator="fixture_kind")
 ]
 
 
-class FloorPlanRequest(BaseModel):
-    """Minimal agent-facing payload for floor-plan rendering."""
+class SocketFixture(ElectricalSocketCm):
+    """Discriminated socket fixture."""
+
+    fixture_kind: Literal["socket"] = "socket"
+
+
+class LightFixture(LightFixtureCm):
+    """Discriminated light fixture."""
+
+    fixture_kind: Literal["light"] = "light"
+
+
+SceneFixture = Annotated[SocketFixture | LightFixture, Field(discriminator="fixture_kind")]
+
+
+class BaselineFloorPlanScene(BaseModel):
+    """Baseline scene for initial user confirmation before fine detail placement."""
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "elements": [
-                        {
-                            "type": "wall",
-                            "name": "south_wall",
-                            "anchor_point_cm": {"x_cm": 0.0, "y_cm": 0.0},
-                            "length_cm": 340.0,
+                    "scene_level": "baseline",
+                    "architecture": {
+                        "dimensions_cm": {
+                            "length_x_cm": 340.0,
+                            "depth_y_cm": 260.0,
+                            "height_z_cm": 260.0,
                         },
+                        "walls": [
+                            {
+                                "wall_id": "bottom",
+                                "start_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                                "end_cm": {"x_cm": 340.0, "y_cm": 0.0},
+                            },
+                            {
+                                "wall_id": "right",
+                                "start_cm": {"x_cm": 340.0, "y_cm": 0.0},
+                                "end_cm": {"x_cm": 340.0, "y_cm": 190.0},
+                            },
+                            {
+                                "wall_id": "left",
+                                "start_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                                "end_cm": {"x_cm": 0.0, "y_cm": 260.0},
+                            },
+                        ],
+                    },
+                    "placements": [
                         {
-                            "type": "door",
-                            "name": "entry_door",
-                            "anchor_point_cm": {"x_cm": 20.0, "y_cm": 0.0},
-                            "orientation_angle_deg": 90.0,
-                        },
-                        {
-                            "type": "wall",
-                            "name": "inset_vertical",
-                            "anchor_point_cm": {"x_cm": 320.0, "y_cm": 260.0},
-                            "length_cm": 70.0,
-                            "orientation_angle_deg": -90.0,
-                        },
-                        {
-                            "type": "wall",
-                            "name": "inset_horizontal",
-                            "anchor_point_cm": {"x_cm": 320.0, "y_cm": 190.0},
-                            "length_cm": 20.0,
-                            "orientation_angle_deg": 0.0,
-                        },
-                    ]
+                            "placement_id": "desk",
+                            "name": "Desk",
+                            "kind": "generic",
+                            "position_cm": {"x_cm": 220.0, "y_cm": 0.0},
+                            "size_cm": {"x_cm": 100.0, "y_cm": 60.0, "z_cm": 75.0},
+                        }
+                    ],
                 }
             ]
         }
     )
 
-    elements: list[FloorPlanElementCm] = Field(
-        min_length=1,
-        description=(
-            "Flattened 2D floor-plan primitives to render. Provide at least three walls "
-            "as explicit wall elements, and model non-rectangular corners as extra wall segments. "
-            "This tool does not accept high-level `room/walls/features/furniture` objects "
-            "directly; first translate those into `elements`."
-        ),
-    )
-    layout_padding_cm: float = Field(
-        default=50.0,
-        ge=0.0,
-        description=(
-            "Padding around inferred element bounds used when auto-generating layout. "
-            "Increase when labels or thick walls are clipped. Defaults to 50 cm."
-        ),
-    )
-    include_image_bytes: bool = Field(
-        default=False,
-        description=(
-            "If true, include PNG bytes as binary content in `ToolReturn` so UIs that "
-            "support binary tool content can render the image inline."
-        ),
-    )
+    scene_level: Literal["baseline"] = "baseline"
+    architecture: ArchitectureScene
+    placements: list[FurniturePlacementCm] = Field(default_factory=list)
 
-    @field_validator("elements")
+    @field_validator("placements")
     @classmethod
-    def validate_unique_names(cls, elements: list[FloorPlanElementCm]) -> list[FloorPlanElementCm]:
-        """Ensure element names are unique for reliable tool-call traceability."""
+    def unique_placement_ids(
+        cls, placements: list[FurniturePlacementCm]
+    ) -> list[FurniturePlacementCm]:
+        """Keep placement ids unique so change-sets remain deterministic."""
 
-        names = [element.name for element in elements]
-        if len(names) != len(set(names)):
-            msg = "Element names must be unique"
+        ids = [placement.placement_id for placement in placements]
+        if len(ids) != len(set(ids)):
+            msg = "Placement ids must be unique"
             raise FloorPlannerValidationError(msg)
-        return elements
+        return placements
+
+
+class DetailedFloorPlanScene(BaseModel):
+    """Detailed scene extends baseline with fixtures and optional tagged extras."""
+
+    scene_level: Literal["detailed"] = "detailed"
+    architecture: ArchitectureScene
+    placements: list[FurniturePlacementCm] = Field(default_factory=list)
+    fixtures: list[SceneFixture] = Field(default_factory=list)
+    tagged_items: list[FurniturePlacementCm] = Field(default_factory=list)
+
+    @field_validator("placements")
+    @classmethod
+    def unique_placement_ids(
+        cls, placements: list[FurniturePlacementCm]
+    ) -> list[FurniturePlacementCm]:
+        """Keep placement ids unique so change-sets remain deterministic."""
+
+        ids = [placement.placement_id for placement in placements]
+        if len(ids) != len(set(ids)):
+            msg = "Placement ids must be unique"
+            raise FloorPlannerValidationError(msg)
+        return placements
+
+
+FloorPlanScene = Annotated[
+    BaselineFloorPlanScene | DetailedFloorPlanScene,
+    Field(discriminator="scene_level"),
+]
+
+
+class SceneChangeSet(BaseModel):
+    """Incremental mutations that can be applied on top of current scene state."""
+
+    replace_scene: FloorPlanScene | None = None
+    upsert_placements: list[FurniturePlacementCm] = Field(default_factory=list)
+    remove_placement_ids: list[str] = Field(default_factory=list)
+    upsert_fixtures: list[SceneFixture] = Field(default_factory=list)
+    remove_fixture_ids: list[str] = Field(default_factory=list)
+
+
+class FloorPlanRenderRequest(BaseModel):
+    """Render request that supports either full scene replacement or incremental updates."""
+
+    scene: FloorPlanScene | None = Field(
+        default=None,
+        description=(
+            "Full scene payload. Provide this for initial rendering or a complete replacement."
+        ),
+    )
+    changes: SceneChangeSet | None = Field(
+        default=None,
+        description=(
+            "Incremental scene mutations. Use this for add/update/remove placement workflows."
+        ),
+    )
+    render_preset: Literal["confirm", "detailed"] = "confirm"
+    include_image_bytes: bool = Field(
+        default=True,
+        description=(
+            "If true, include PNG bytes in ToolReturn binary content for model-side vision use."
+        ),
+    )
 
     @model_validator(mode="after")
-    def validate_contains_walls(self) -> FloorPlanRequest:
-        """Ensure enough walls exist to define a meaningful room context."""
+    def validate_payload_shape(self) -> FloorPlanRenderRequest:
+        """Require scene or changes so calls cannot be empty."""
 
-        if self.count_elements("wall") < _MIN_WALL_COUNT:
-            msg = "At least three wall elements are required"
+        if self.scene is None and self.changes is None:
+            msg = "At least one of `scene` or `changes` must be provided"
             raise FloorPlannerValidationError(msg)
         return self
 
-    def count_elements(self, element_type: str) -> int:
-        """Count elements by Renovation type."""
 
-        return sum(1 for element in self.elements if element.type == element_type)
+class RenderWarning(BaseModel):
+    """Structured render warning with machine-friendly severity."""
 
-    def _infer_layout_m(self) -> dict[str, float | int | tuple[float, float] | None]:
-        """Infer a reasonable Renovation layout from element extents plus padding."""
+    severity: Literal["info", "warn", "error"]
+    code: str
+    message: str
+    entity_id: str | None = None
 
-        points_cm: list[PointCm] = []
-        for element in self.elements:
-            points_cm.extend(element.extent_points_cm())
 
-        min_x = min(point.x_cm for point in points_cm) - self.layout_padding_cm
-        max_x = max(point.x_cm for point in points_cm) + self.layout_padding_cm
-        min_y = min(point.y_cm for point in points_cm) - self.layout_padding_cm
-        max_y = max(point.y_cm for point in points_cm) + self.layout_padding_cm
+class FloorPlanRenderOutput(BaseModel):
+    """Typed result returned by the scene renderer tool."""
 
-        return {
-            "bottom_left_corner": (min_x / _CM_PER_METER, min_y / _CM_PER_METER),
-            "top_right_corner": (max_x / _CM_PER_METER, max_y / _CM_PER_METER),
-            "scale_numerator": 1,
-            "scale_denominator": 40,
-            "grid_major_step": 0.5,
-            "grid_minor_step": 0.1,
-        }
+    caption: str
+    scene_revision: int
+    scene_level: Literal["baseline", "detailed"]
+    output_svg_path: str
+    output_png_path: str
+    warnings: list[RenderWarning]
+    legend_items: list[str]
+    scale_major_step_cm: int
+    scene: FloorPlanScene
 
-    def to_renovation_settings(self, png_dir: str) -> dict[str, object]:
-        """Convert request into Renovation settings dictionary."""
 
-        return {
-            "project": {
-                "dpi": 160,
-                "pdf_file": None,
-                "png_dir": png_dir,
-            },
-            "default_layout": self._infer_layout_m(),
-            "reusable_elements": {},
-            "floor_plans": [
-                {
-                    "title": {"text": "Floor Plan", "font_size": 16},
-                    "elements": [element.to_renovation_element() for element in self.elements],
-                }
-            ],
-        }
+def infer_outline_from_dimensions(dimensions: RoomDimensionsCm) -> list[Point2DCm]:
+    """Return a rectangle outline from room dimensions when no explicit outline exists."""
+
+    return [
+        Point2DCm(x_cm=0.0, y_cm=0.0),
+        Point2DCm(x_cm=dimensions.length_x_cm, y_cm=0.0),
+        Point2DCm(x_cm=dimensions.length_x_cm, y_cm=dimensions.depth_y_cm),
+        Point2DCm(x_cm=0.0, y_cm=dimensions.depth_y_cm),
+    ]
+
+
+def clone_scene(scene: FloorPlanScene) -> FloorPlanScene:
+    """Create an immutable-style deep copy of a scene object."""
+
+    scene_adapter = TypeAdapter(FloorPlanScene)
+    return scene_adapter.validate_python(scene.model_dump(mode="python"))
+
+
+def apply_changes(scene: FloorPlanScene, changes: SceneChangeSet) -> FloorPlanScene:
+    """Apply a change-set and return a new scene instance without mutating inputs."""
+
+    if changes.replace_scene is not None:
+        working: FloorPlanScene = clone_scene(changes.replace_scene)
+    else:
+        working = clone_scene(scene)
+
+    placement_map = {item.placement_id: item for item in working.placements}
+    for placement_id in changes.remove_placement_ids:
+        placement_map.pop(placement_id, None)
+    for item in changes.upsert_placements:
+        placement_map[item.placement_id] = item
+    working.placements = list(placement_map.values())
+
+    if isinstance(working, DetailedFloorPlanScene):
+        fixture_map = {fixture.fixture_id: fixture for fixture in working.fixtures}
+        for fixture_id in changes.remove_fixture_ids:
+            fixture_map.pop(fixture_id, None)
+        for fixture in changes.upsert_fixtures:
+            fixture_map[fixture.fixture_id] = fixture
+        working.fixtures = list(fixture_map.values())
+
+    return working
+
+
+def scene_to_summary(scene: FloorPlanScene) -> dict[str, Any]:
+    """Return a compact summary useful for tool messages and tests."""
+
+    fixture_count = len(scene.fixtures) if isinstance(scene, DetailedFloorPlanScene) else 0
+    return {
+        "scene_level": scene.scene_level,
+        "wall_count": len(scene.architecture.walls),
+        "door_count": len(scene.architecture.doors),
+        "window_count": len(scene.architecture.windows),
+        "placement_count": len(scene.placements),
+        "fixture_count": fixture_count,
+    }

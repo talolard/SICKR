@@ -11,6 +11,8 @@ Updated: 2026-03-06
 - Milestone 3: generated image artifact output (`ImageToolOutput`) and inline image viewer modal.
 - Milestone 4: long-running progress updates + run-level status container + local cancellation UX.
 - Milestone 5: thread/session persistence, URL thread routing, resume-on-refresh, thread isolation.
+- Milestone 6: persistent floor-plan preview panel beside chat, fed by `render_floor_plan` tool outputs
+  with per-thread local persistence in UI state.
 
 ## Temporary thread fallback behavior
 

@@ -2,87 +2,104 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-from pydantic_ai import BinaryContent, ToolReturn
+from pydantic_ai import ToolReturn
+from pydantic_ai.messages import BinaryContent
 
-from ikea_agent.tools.floorplanner.models import FloorPlanRequest
-from ikea_agent.tools.floorplanner.renderer import FloorPlannerRenderError, FloorPlanRenderResult
-from ikea_agent.tools.floorplanner.tool import FloorPlannerToolResult, render_floor_plan
+from ikea_agent.tools.floorplanner.models import BaselineFloorPlanScene, FloorPlanRenderRequest
+from ikea_agent.tools.floorplanner.tool import render_floor_plan
 
 
-def _minimal_request() -> FloorPlanRequest:
-    return FloorPlanRequest.model_validate(
+def _scene() -> BaselineFloorPlanScene:
+    return BaselineFloorPlanScene.model_validate(
         {
-            "elements": [
-                {
-                    "type": "wall",
-                    "name": "tiny_wall_1",
-                    "anchor_point_cm": {"x_cm": 0.0, "y_cm": 0.0},
-                    "length_cm": 100.0,
-                    "thickness_cm": 10.0,
+            "scene_level": "baseline",
+            "architecture": {
+                "dimensions_cm": {
+                    "length_x_cm": 340.0,
+                    "depth_y_cm": 260.0,
+                    "height_z_cm": 260.0,
                 },
-                {
-                    "type": "wall",
-                    "name": "tiny_wall_2",
-                    "anchor_point_cm": {"x_cm": 100.0, "y_cm": 0.0},
-                    "length_cm": 100.0,
-                    "thickness_cm": 10.0,
-                    "orientation_angle_deg": 90.0,
-                },
-                {
-                    "type": "wall",
-                    "name": "tiny_wall_3",
-                    "anchor_point_cm": {"x_cm": 100.0, "y_cm": 100.0},
-                    "length_cm": 100.0,
-                    "thickness_cm": 10.0,
-                    "orientation_angle_deg": 180.0,
-                },
-            ],
+                "walls": [
+                    {
+                        "wall_id": "w1",
+                        "start_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                        "end_cm": {"x_cm": 340.0, "y_cm": 0.0},
+                    },
+                    {
+                        "wall_id": "w2",
+                        "start_cm": {"x_cm": 340.0, "y_cm": 0.0},
+                        "end_cm": {"x_cm": 340.0, "y_cm": 260.0},
+                    },
+                    {
+                        "wall_id": "w3",
+                        "start_cm": {"x_cm": 340.0, "y_cm": 260.0},
+                        "end_cm": {"x_cm": 0.0, "y_cm": 260.0},
+                    },
+                ],
+            },
+            "placements": [],
         }
     )
 
 
-def test_render_floor_plan_returns_success_result(tmp_path: Path) -> None:
-    request = _minimal_request()
+def test_render_floor_plan_returns_scene_and_output(tmp_path: Path) -> None:
+    request = FloorPlanRenderRequest(scene=_scene(), include_image_bytes=False)
 
-    result = render_floor_plan(request, output_dir=tmp_path)
-
-    assert isinstance(result, FloorPlannerToolResult)
-    assert result.element_names == ["tiny_wall_1", "tiny_wall_2", "tiny_wall_3"]
-    assert result.output_png_path == str(tmp_path / "floor_plan.png")
-
-
-def test_render_floor_plan_returns_tool_return_when_requested(tmp_path: Path) -> None:
-    request = _minimal_request().model_copy(update={"include_image_bytes": True})
-
-    result = render_floor_plan(request, output_dir=tmp_path)
-
-    assert isinstance(result, ToolReturn)
-    assert result.metadata is not None
-    assert result.metadata["element_names"] == ["tiny_wall_1", "tiny_wall_2", "tiny_wall_3"]
-    assert isinstance(result.content, list)
-    assert len(result.content) == 1
-    assert isinstance(result.content[0], BinaryContent)
-
-
-def test_render_floor_plan_raises_value_error_from_renderer(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = _minimal_request()
-
-    def _raise_render_error(
-        self: object,
-        request: FloorPlanRequest,
-        output_dir: Path,
-    ) -> FloorPlanRenderResult:
-        _ = (self, request, output_dir)
-        msg = "renderer exploded"
-        raise FloorPlannerRenderError(msg)
-
-    monkeypatch.setattr(
-        "ikea_agent.tools.floorplanner.renderer.FloorPlannerRenderer.render",
-        _raise_render_error,
+    scene, output, tool_return = render_floor_plan(
+        request,
+        scene_revision=1,
+        current_scene=None,
+        output_dir=tmp_path,
     )
 
-    with pytest.raises(ValueError, match="Floor plan rendering failed"):
-        render_floor_plan(request, output_dir=Path("artifacts/unused"))
+    assert scene.scene_level == "baseline"
+    assert output.scene_revision == 1
+    assert output.output_svg_path == str(tmp_path / "floor_plan.svg")
+    assert output.output_png_path == str(tmp_path / "floor_plan.png")
+    assert tool_return is None
+
+
+def test_render_floor_plan_can_return_tool_return(tmp_path: Path) -> None:
+    request = FloorPlanRenderRequest(scene=_scene(), include_image_bytes=True)
+
+    _scene_obj, _output, tool_return = render_floor_plan(
+        request,
+        scene_revision=2,
+        current_scene=None,
+        output_dir=tmp_path,
+    )
+
+    assert isinstance(tool_return, ToolReturn)
+    assert tool_return.metadata is not None
+    assert tool_return.metadata["scene_revision"] == 2
+    assert isinstance(tool_return.content, list)
+    assert len(tool_return.content) == 1
+    assert isinstance(tool_return.content[0], BinaryContent)
+
+
+def test_render_floor_plan_applies_incremental_changes(tmp_path: Path) -> None:
+    base_scene = _scene()
+    request = FloorPlanRenderRequest(
+        changes={
+            "upsert_placements": [
+                {
+                    "placement_id": "desk",
+                    "name": "Desk",
+                    "kind": "generic",
+                    "position_cm": {"x_cm": 220.0, "y_cm": 0.0},
+                    "size_cm": {"x_cm": 100.0, "y_cm": 60.0, "z_cm": 75.0},
+                }
+            ]
+        },
+        include_image_bytes=False,
+    )
+
+    scene, output, _tool_return = render_floor_plan(
+        request,
+        scene_revision=3,
+        current_scene=base_scene,
+        output_dir=tmp_path,
+    )
+
+    assert len(scene.placements) == 1
+    assert output.scene_revision == 3

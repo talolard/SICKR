@@ -8,6 +8,12 @@ import { AttachmentComposer } from "@/components/attachments/AttachmentComposer"
 import { useThreadSession } from "@/app/CopilotKitProviders";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
+import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
+import {
+  type FloorPlanPreviewState,
+  loadFloorPlanPreview,
+  saveFloorPlanPreview,
+} from "@/lib/floorPlanPreviewStore";
 
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
@@ -30,6 +36,7 @@ export default function Home(): ReactElement {
     clearWarning,
   } = useThreadSession();
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const attachmentFilesRef = useRef<Record<string, File>>({});
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
@@ -56,6 +63,13 @@ export default function Home(): ReactElement {
       attachments: readyAttachments,
     });
   }, [agent, attachments, threadId]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    setFloorPlanPreview(loadFloorPlanPreview(threadId));
+  }, [threadId]);
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
     setAttachments((current) =>
@@ -179,7 +193,7 @@ export default function Home(): ReactElement {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 p-6">
+    <main className="mx-auto flex min-h-screen max-w-[1700px] flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">IKEA Agent</h1>
         <p className="text-sm text-gray-600">
@@ -225,17 +239,34 @@ export default function Home(): ReactElement {
           Debug harness: <a className="underline" href="/debug/agui-harness">/debug/agui-harness</a>
         </p>
       </header>
-      <AttachmentComposer
-        attachments={attachments}
-        onFilesSelected={handleFilesSelected}
-        onRemoveAttachment={handleRemoveAttachment}
-        onRetryAttachment={handleRetryAttachment}
-      />
-      {pendingUploads ? (
-        <p className="text-sm text-amber-700">Finish uploading images before sending.</p>
-      ) : null}
-      <CopilotToolRenderers />
-      <CopilotSidebar />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <FloorPlanPreviewPanel preview={floorPlanPreview} />
+        <section className="flex min-h-[60vh] flex-col gap-4">
+          <AttachmentComposer
+            attachments={attachments}
+            onFilesSelected={handleFilesSelected}
+            onRemoveAttachment={handleRemoveAttachment}
+            onRetryAttachment={handleRetryAttachment}
+          />
+          {pendingUploads ? (
+            <p className="text-sm text-amber-700">Finish uploading images before sending.</p>
+          ) : null}
+          <CopilotToolRenderers
+            onFloorPlanRendered={(snapshot) => {
+              if (!threadId) {
+                return;
+              }
+              const nextSnapshot: FloorPlanPreviewState = {
+                ...snapshot,
+                threadId,
+              };
+              setFloorPlanPreview(nextSnapshot);
+              saveFloorPlanPreview(nextSnapshot);
+            }}
+          />
+          <CopilotSidebar />
+        </section>
+      </div>
     </main>
   );
 }

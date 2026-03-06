@@ -144,7 +144,11 @@ export function CopilotKitProviders({
 
   return (
     <ThreadSessionContext.Provider value={contextValue}>
-      <CopilotKit runtimeUrl="/api/copilotkit" agent="ikea_agent" threadId={threadId ?? undefined}>
+      <CopilotKit
+        runtimeUrl="/api/copilotkit"
+        agent="ikea_agent"
+        {...(threadId ? { threadId } : {})}
+      >
         {children}
       </CopilotKit>
     </ThreadSessionContext.Provider>

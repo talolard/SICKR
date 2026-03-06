@@ -1,202 +1,540 @@
-"""Renderer integration for generating floor-plan images with renovation."""
+"""In-repo floor-plan renderer that emits deterministic SVG and PNG artifacts."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
 
-import matplotlib as mpl
-from pydantic import BaseModel
+from PIL import Image, ImageDraw
 
-# Renovation ultimately draws through matplotlib. On macOS, a GUI backend
-# instantiated from a worker thread crashes the process; force headless rendering.
-mpl.use("Agg", force=True)
-
-from renovation.elements import create_elements_registry
-from renovation.floor_plan import FloorPlan
-from renovation.project import Project
-
-from ikea_agent.tools.floorplanner.models import FloorPlanRequest
+from ikea_agent.tools.floorplanner.models import (
+    DetailedFloorPlanScene,
+    FloorPlanScene,
+    FurniturePlacementCm,
+    Point2DCm,
+    RenderWarning,
+    infer_outline_from_dimensions,
+)
 
 
 class FloorPlannerRenderError(RuntimeError):
-    """Raised when floor-plan rendering fails."""
+    """Raised when scene rendering fails."""
 
 
-class FloorPlanRenderResult(BaseModel):
-    """Structured metadata returned after successful rendering."""
-
-    output_png: Path
-    wall_count: int
-    door_count: int
-    window_count: int
-
-
-class FloorPlanRenderSvgResult(BaseModel):
-    """Structured metadata returned after successful SVG rendering."""
+@dataclass(frozen=True, slots=True)
+class FloorPlannerRenderArtifacts:
+    """Disk artifacts and lightweight metadata emitted by one render pass."""
 
     output_svg: Path
-    wall_count: int
-    door_count: int
-    window_count: int
+    output_png: Path
+    warnings: list[RenderWarning]
+    legend_items: list[str]
+    scale_major_step_cm: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Transform:
+    scale: float
+    plan_origin_x: float
+    plan_origin_y: float
+    plan_height_px: float
+
+    def to_px(self, point: Point2DCm) -> tuple[float, float]:
+        x = self.plan_origin_x + point.x_cm * self.scale
+        y = self.plan_origin_y + self.plan_height_px - point.y_cm * self.scale
+        return (x, y)
 
 
 class FloorPlannerRenderer:
-    """Render typed floor-plan payloads to local PNG artifacts."""
+    """Render top-down + elevation visuals for typed floor-plan scenes."""
 
-    def render(self, request: FloorPlanRequest, output_dir: Path) -> FloorPlanRenderResult:
-        """Render one floor plan and return metadata and output file path."""
+    _canvas_width_px = 1800
+    _canvas_height_px = 1040
+    _left_margin_px = 70
+    _top_margin_px = 70
+    _plan_width_px = 1180
+    _plan_height_px = 900
+    _elevation_x_px = 1300
+    _elevation_width_px = 420
+    _elevation_floor_y_px = 900
+    _major_grid_step_cm = 50
+
+    def render(self, scene: FloorPlanScene, output_dir: Path) -> FloorPlannerRenderArtifacts:
+        """Render one scene to SVG and PNG files under output directory."""
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        settings = cast("_RenovationSettings", request.to_renovation_settings(str(output_dir)))
+        svg_path = output_dir / "floor_plan.svg"
+        png_path = output_dir / "floor_plan.png"
 
-        try:
-            self._render_png_from_settings(settings)
-        except Exception as exc:  # pragma: no cover - protected by integration tests
-            msg = f"Failed to render floor plan: {exc}"
-            raise FloorPlannerRenderError(msg) from exc
+        warnings = self._collect_warnings(scene)
+        legend_items = self._legend_items(scene)
 
-        output_png = _resolve_renderer_output(output_dir)
-        if output_png is None:
-            msg = f"Renderer did not produce any PNG output in: {output_dir}"
-            raise FloorPlannerRenderError(msg)
+        transform = self._compute_transform(scene)
+        svg_text = self._render_svg(scene, transform, warnings, legend_items)
+        svg_path.write_text(svg_text, encoding="utf-8")
 
-        final_png = output_dir / "floor_plan.png"
-        if final_png.exists():
-            final_png.unlink()
-        output_png.replace(final_png)
+        image = self._render_png(scene, transform, warnings, legend_items)
+        image.save(png_path)
 
-        return FloorPlanRenderResult(
-            output_png=final_png,
-            wall_count=request.count_elements("wall"),
-            door_count=request.count_elements("door"),
-            window_count=request.count_elements("window"),
+        return FloorPlannerRenderArtifacts(
+            output_svg=svg_path,
+            output_png=png_path,
+            warnings=warnings,
+            legend_items=legend_items,
+            scale_major_step_cm=self._major_grid_step_cm,
         )
 
-    def render_svg(self, request: FloorPlanRequest, output_dir: Path) -> FloorPlanRenderSvgResult:
-        """Render one floor plan as SVG and return metadata and output file path."""
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-        settings = cast("_RenovationSettings", request.to_renovation_settings(str(output_dir)))
-
-        try:
-            self._render_svg_from_settings(settings)
-        except Exception as exc:  # pragma: no cover - protected by integration tests
-            msg = f"Failed to render floor plan: {exc}"
-            raise FloorPlannerRenderError(msg) from exc
-
-        output_svg = _resolve_renderer_output_svg(output_dir)
-        if output_svg is None:
-            msg = f"Renderer did not produce any SVG output in: {output_dir}"
-            raise FloorPlannerRenderError(msg)
-
-        final_svg = output_dir / "floor_plan.svg"
-        if final_svg.exists():
-            final_svg.unlink()
-        output_svg.replace(final_svg)
-
-        return FloorPlanRenderSvgResult(
-            output_svg=final_svg,
-            wall_count=request.count_elements("wall"),
-            door_count=request.count_elements("door"),
-            window_count=request.count_elements("window"),
+    def _compute_transform(self, scene: FloorPlanScene) -> _Transform:
+        dimensions = scene.architecture.dimensions_cm
+        scale_x = (self._plan_width_px - 2 * self._left_margin_px) / max(
+            dimensions.length_x_cm, 1.0
+        )
+        scale_y = (self._plan_height_px - 2 * self._top_margin_px) / max(dimensions.depth_y_cm, 1.0)
+        scale = min(scale_x, scale_y)
+        return _Transform(
+            scale=scale,
+            plan_origin_x=self._left_margin_px,
+            plan_origin_y=self._top_margin_px,
+            plan_height_px=self._plan_height_px - 2 * self._top_margin_px,
         )
 
-    def _render_png_from_settings(self, settings: _RenovationSettings) -> None:
-        floor_plans = _create_floor_plans_from_settings(settings)
-        project_settings = settings["project"]
-        project = Project(floor_plans, project_settings["dpi"])
-        project.render_to_png(project_settings["png_dir"])
+    def _render_svg(  # noqa: C901
+        self,
+        scene: FloorPlanScene,
+        transform: _Transform,
+        warnings: list[RenderWarning],
+        legend_items: list[str],
+    ) -> str:
+        outline = scene.architecture.outline_cm or infer_outline_from_dimensions(
+            scene.architecture.dimensions_cm
+        )
 
-    def _render_svg_from_settings(self, settings: _RenovationSettings) -> None:
-        floor_plans = _create_floor_plans_from_settings(settings)
-        project_settings = settings["project"]
-        output_dir = Path(project_settings["png_dir"])
-        output_dir.mkdir(parents=True, exist_ok=True)
+        parts: list[str] = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{self._canvas_width_px}" '
+            f'height="{self._canvas_height_px}" '
+            f'viewBox="0 0 {self._canvas_width_px} {self._canvas_height_px}">',
+            '<rect x="0" y="0" width="100%" height="100%" fill="#fcfcfb"/>',
+            '<g id="grid">',
+        ]
 
-        for i, floor_plan in enumerate(floor_plans):
-            title = floor_plan.title or f"{i}.svg"
-            if not title.endswith("svg"):
-                title += ".svg"
-            floor_plan.fig.savefig(output_dir / title, format="svg", dpi=project_settings["dpi"])
+        dimensions = scene.architecture.dimensions_cm
+        for x_cm in range(0, int(dimensions.length_x_cm) + 1, self._major_grid_step_cm):
+            x_px, _ = transform.to_px(Point2DCm(x_cm=float(x_cm), y_cm=0.0))
+            parts.append(
+                f'<line x1="{x_px:.1f}" y1="{self._top_margin_px}" x2="{x_px:.1f}" '
+                f'y2="{self._plan_height_px - self._top_margin_px}" '
+                'stroke="#ece8e1" stroke-width="1"/>'
+            )
+            parts.append(
+                f'<text x="{x_px:.1f}" y="{self._plan_height_px - self._top_margin_px + 20}" '
+                'font-size="12" text-anchor="middle" fill="#6b7280">'
+                f"{x_cm}</text>"
+            )
 
+        for y_cm in range(0, int(dimensions.depth_y_cm) + 1, self._major_grid_step_cm):
+            _, y_px = transform.to_px(Point2DCm(x_cm=0.0, y_cm=float(y_cm)))
+            parts.append(
+                f'<line x1="{self._left_margin_px}" y1="{y_px:.1f}" '
+                f'x2="{self._plan_width_px - self._left_margin_px}" y2="{y_px:.1f}" '
+                'stroke="#ece8e1" stroke-width="1"/>'
+            )
+            parts.append(
+                f'<text x="{self._left_margin_px - 14}" y="{y_px + 4:.1f}" '
+                'font-size="12" text-anchor="end" fill="#6b7280">'
+                f"{y_cm}</text>"
+            )
 
-def _resolve_renderer_output(output_dir: Path) -> Path | None:
-    png_files = sorted(output_dir.glob("*.png"))
-    if not png_files:
-        return None
-    return png_files[0]
+        parts.append("</g>")
 
+        parts.append('<g id="architecture">')
+        outline_points = " ".join(
+            f"{transform.to_px(point)[0]:.1f},{transform.to_px(point)[1]:.1f}" for point in outline
+        )
+        parts.append(
+            f'<polygon points="{outline_points}" fill="#ffffff" stroke="#2d2b29" '
+            'stroke-width="3" stroke-opacity="0.75"/>'
+        )
 
-def _resolve_renderer_output_svg(output_dir: Path) -> Path | None:
-    svg_files = sorted(output_dir.glob("*.svg"))
-    if not svg_files:
-        return None
-    return svg_files[0]
+        for wall in scene.architecture.walls:
+            x1, y1 = transform.to_px(wall.start_cm)
+            x2, y2 = transform.to_px(wall.end_cm)
+            color = wall.color or "#1f2937"
+            width = max(2.0, wall.thickness_cm * transform.scale * 0.05)
+            parts.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                f'stroke="{color}" stroke-width="{width:.1f}" stroke-linecap="round"/>'
+            )
 
+        for door in scene.architecture.doors:
+            x1, y1 = transform.to_px(door.start_cm)
+            x2, y2 = transform.to_px(door.end_cm)
+            parts.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                'stroke="#b91c1c" stroke-width="4"/>'
+            )
+            mx = (x1 + x2) / 2
+            my = (y1 + y2) / 2
+            parts.append(
+                f'<text x="{mx:.1f}" y="{my - 8:.1f}" font-size="11" '
+                'text-anchor="middle" fill="#b91c1c">door</text>'
+            )
 
-class _ProjectSettings(TypedDict):
-    dpi: int
-    pdf_file: str | None
-    png_dir: str
+        for window in scene.architecture.windows:
+            x1, y1 = transform.to_px(window.start_cm)
+            x2, y2 = transform.to_px(window.end_cm)
+            parts.append(
+                f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
+                'stroke="#0369a1" stroke-width="5" stroke-linecap="round"/>'
+            )
 
+        parts.append("</g>")
 
-class _LayoutSettings(TypedDict):
-    bottom_left_corner: tuple[float, float]
-    top_right_corner: tuple[float, float]
-    scale_numerator: int
-    scale_denominator: int
-    grid_major_step: float
-    grid_minor_step: float
+        parts.append('<g id="placements">')
+        for placement in scene.placements:
+            parts.extend(self._placement_svg(placement, transform))
+        parts.append("</g>")
 
+        if isinstance(scene, DetailedFloorPlanScene):
+            parts.append('<g id="fixtures">')
+            for fixture in scene.fixtures:
+                x_px, y_px = transform.to_px(Point2DCm(x_cm=fixture.x_cm, y_cm=fixture.y_cm))
+                color = "#7c3aed" if fixture.fixture_kind == "light" else "#0f766e"
+                parts.append(
+                    f'<circle cx="{x_px:.1f}" cy="{y_px:.1f}" r="8" fill="{color}" '
+                    'fill-opacity="0.7"/>'
+                )
+                parts.append(
+                    f'<text x="{x_px + 12:.1f}" y="{y_px + 4:.1f}" font-size="11" fill="{color}">'
+                    f"{fixture.fixture_kind}</text>"
+                )
+            parts.append("</g>")
 
-class _TitleSettings(TypedDict):
-    text: str
-    font_size: int
+        parts.extend(self._elevation_svg(scene))
+        parts.extend(self._legend_svg(legend_items, warnings))
 
+        parts.append(
+            f'<text x="{self._left_margin_px}" y="35" font-size="22" fill="#111827" '
+            'font-weight="600">Floor Plan (Top + Elevation)</text>'
+        )
+        parts.append("</svg>")
+        return "\n".join(parts)
 
-class _FloorPlanSettings(TypedDict, total=False):
-    title: _TitleSettings
-    layout: _LayoutSettings
-    inherited_elements: list[str]
-    elements: list[dict[str, object]]
+    def _placement_svg(self, placement: FurniturePlacementCm, transform: _Transform) -> list[str]:
+        x1, y1 = transform.to_px(placement.position_cm)
+        x2, y2 = transform.to_px(
+            Point2DCm(
+                x_cm=placement.position_cm.x_cm + placement.size_cm.x_cm,
+                y_cm=placement.position_cm.y_cm + placement.size_cm.y_cm,
+            )
+        )
+        left = min(x1, x2)
+        top = min(y1, y2)
+        width = abs(x2 - x1)
+        height = abs(y2 - y1)
+        color = placement.color or "#64748b"
+        stroke_dash = (
+            ' stroke-dasharray="7 4"' if placement.wall_mounted or placement.z_cm > 0 else ""
+        )
+        label = placement.label or placement.name
 
+        lines = [
+            f'<rect x="{left:.1f}" y="{top:.1f}" width="{width:.1f}" height="{height:.1f}" '
+            f'fill="{color}" fill-opacity="0.35" stroke="#1f2937" '
+            f'stroke-width="1.5"{stroke_dash}/>',
+            f'<text x="{left + width / 2:.1f}" y="{top + height / 2:.1f}" '
+            'font-size="12" text-anchor="middle" dominant-baseline="middle" fill="#0f172a">'
+            f"{label}</text>",
+        ]
 
-class _RenovationSettings(TypedDict):
-    project: _ProjectSettings
-    default_layout: _LayoutSettings
-    reusable_elements: dict[str, list[dict[str, object]]]
-    floor_plans: list[_FloorPlanSettings]
+        if placement.z_cm > 0 or placement.wall_mounted:
+            lines.append(
+                f'<text x="{left + width / 2:.1f}" y="{top + height + 14:.1f}" '
+                'font-size="11" text-anchor="middle" fill="#334155">'
+                f"z={placement.z_cm:.0f} cm</text>"
+            )
 
+        return lines
 
-def _create_floor_plans_from_settings(settings: _RenovationSettings) -> list[FloorPlan]:
-    elements_registry = create_elements_registry()
-    floor_plans: list[FloorPlan] = []
+    def _elevation_svg(self, scene: FloorPlanScene) -> list[str]:
+        parts = [
+            '<g id="elevation">',
+            f'<rect x="{self._elevation_x_px}" y="{self._top_margin_px}" '
+            f'width="{self._elevation_width_px}" '
+            f'height="{self._plan_height_px - 2 * self._top_margin_px}" '
+            'fill="#ffffff" stroke="#d6d3d1" stroke-width="1.5"/>',
+            f'<line x1="{self._elevation_x_px}" y1="{self._elevation_floor_y_px}" '
+            f'x2="{self._elevation_x_px + self._elevation_width_px}" '
+            f'y2="{self._elevation_floor_y_px}" '
+            'stroke="#1f2937" stroke-width="2"/>',
+            f'<text x="{self._elevation_x_px + self._elevation_width_px / 2:.1f}" '
+            f'y="{self._top_margin_px - 14:.1f}" font-size="14" '
+            'text-anchor="middle" fill="#111827">'
+            "Elevation (X/Z)</text>",
+        ]
 
-    default_layout = settings["default_layout"]
-    reusable = settings["reusable_elements"]
+        room_w = max(scene.architecture.dimensions_cm.length_x_cm, 1.0)
+        room_h = max(scene.architecture.dimensions_cm.height_z_cm, 1.0)
+        x_scale = (self._elevation_width_px - 40) / room_w
+        z_scale = (self._plan_height_px - 2 * self._top_margin_px - 40) / room_h
 
-    for floor_plan_params in settings["floor_plans"]:
-        layout_params = floor_plan_params.get("layout") or default_layout
-        floor_plan = FloorPlan(**layout_params)
+        for idx, placement in enumerate(scene.placements):
+            x_px = self._elevation_x_px + 20 + placement.position_cm.x_cm * x_scale
+            w_px = max(4.0, placement.size_cm.x_cm * x_scale)
+            z_bottom = self._elevation_floor_y_px - placement.z_cm * z_scale
+            h_px = max(3.0, placement.size_cm.z_cm * z_scale)
+            y_px = z_bottom - h_px
+            color = placement.color or "#64748b"
+            dash = ' stroke-dasharray="6 3"' if placement.wall_mounted else ""
+            parts.append(
+                f'<rect x="{x_px:.1f}" y="{y_px:.1f}" width="{w_px:.1f}" height="{h_px:.1f}" '
+                f'fill="{color}" fill-opacity="0.5" stroke="#0f172a" stroke-width="1"{dash}/>'
+            )
+            label_y = y_px - 6 - (idx % 3) * 12
+            parts.append(
+                f'<text x="{x_px + w_px / 2:.1f}" y="{label_y:.1f}" font-size="10" '
+                f'text-anchor="middle" fill="#334155">{placement.name}</text>'
+            )
 
-        title_params = floor_plan_params.get("title")
-        if title_params is not None:
-            floor_plan.add_title(**title_params)
+        parts.append("</g>")
+        return parts
 
-        for set_name in floor_plan_params.get("inherited_elements", []):
-            for element_params in reusable.get(set_name, []):
-                element_type = cast("str", element_params["type"])
-                element_class = elements_registry[element_type]
-                kwargs = {k: v for k, v in element_params.items() if k != "type"}
-                floor_plan.add_element(element_class(**kwargs))
+    def _legend_svg(self, legend_items: list[str], warnings: list[RenderWarning]) -> list[str]:
+        start_x = self._elevation_x_px
+        start_y = self._canvas_height_px - 190
+        parts = [
+            '<g id="legend">',
+            f'<rect x="{start_x}" y="{start_y}" width="{self._elevation_width_px}" height="170" '
+            'fill="#ffffff" stroke="#d6d3d1" stroke-width="1.5"/>',
+            f'<text x="{start_x + 12}" y="{start_y + 22}" font-size="13" fill="#111827" '
+            'font-weight="600">Legend</text>',
+        ]
 
-        for element_params in floor_plan_params.get("elements", []):
-            element_type = cast("str", element_params["type"])
-            element_class = elements_registry[element_type]
-            kwargs = {k: v for k, v in element_params.items() if k != "type"}
-            floor_plan.add_element(element_class(**kwargs))
+        for idx, item in enumerate(legend_items):
+            parts.append(
+                f'<text x="{start_x + 12}" y="{start_y + 42 + idx * 16}" '
+                f'font-size="11" fill="#334155">- {item}</text>'
+            )
 
-        floor_plans.append(floor_plan)
+        warning_offset = start_y + 108
+        parts.append(
+            f'<text x="{start_x + 12}" y="{warning_offset}" font-size="12" fill="#7c2d12" '
+            'font-weight="600">Warnings</text>'
+        )
+        if not warnings:
+            parts.append(
+                f'<text x="{start_x + 12}" y="{warning_offset + 16}" font-size="11" fill="#166534">'
+                "none</text>"
+            )
+        else:
+            for idx, warning in enumerate(warnings[:3]):
+                parts.append(
+                    f'<text x="{start_x + 12}" y="{warning_offset + 16 + idx * 14}" '
+                    f'font-size="10" fill="#7c2d12">{warning.code}: {warning.message}</text>'
+                )
 
-    return floor_plans
+        parts.append("</g>")
+        return parts
+
+    def _render_png(
+        self,
+        scene: FloorPlanScene,
+        transform: _Transform,
+        warnings: list[RenderWarning],
+        legend_items: list[str],
+    ) -> Image.Image:
+        image = Image.new("RGB", (self._canvas_width_px, self._canvas_height_px), "#fcfcfb")
+        draw = ImageDraw.Draw(image)
+
+        dimensions = scene.architecture.dimensions_cm
+        for x_cm in range(0, int(dimensions.length_x_cm) + 1, self._major_grid_step_cm):
+            x_px, _ = transform.to_px(Point2DCm(x_cm=float(x_cm), y_cm=0.0))
+            draw.line(
+                (
+                    x_px,
+                    self._top_margin_px,
+                    x_px,
+                    self._plan_height_px - self._top_margin_px,
+                ),
+                fill="#ece8e1",
+                width=1,
+            )
+
+        for y_cm in range(0, int(dimensions.depth_y_cm) + 1, self._major_grid_step_cm):
+            _, y_px = transform.to_px(Point2DCm(x_cm=0.0, y_cm=float(y_cm)))
+            draw.line(
+                (
+                    self._left_margin_px,
+                    y_px,
+                    self._plan_width_px - self._left_margin_px,
+                    y_px,
+                ),
+                fill="#ece8e1",
+                width=1,
+            )
+
+        outline = scene.architecture.outline_cm or infer_outline_from_dimensions(
+            scene.architecture.dimensions_cm
+        )
+        outline_px = [transform.to_px(point) for point in outline]
+        draw.polygon(outline_px, outline="#2d2b29", fill="#ffffff", width=3)
+
+        for wall in scene.architecture.walls:
+            x1, y1 = transform.to_px(wall.start_cm)
+            x2, y2 = transform.to_px(wall.end_cm)
+            draw.line((x1, y1, x2, y2), fill=wall.color or "#1f2937", width=4)
+
+        for door in scene.architecture.doors:
+            x1, y1 = transform.to_px(door.start_cm)
+            x2, y2 = transform.to_px(door.end_cm)
+            draw.line((x1, y1, x2, y2), fill="#b91c1c", width=5)
+
+        for window in scene.architecture.windows:
+            x1, y1 = transform.to_px(window.start_cm)
+            x2, y2 = transform.to_px(window.end_cm)
+            draw.line((x1, y1, x2, y2), fill="#0369a1", width=6)
+
+        for placement in scene.placements:
+            x1, y1 = transform.to_px(placement.position_cm)
+            x2, y2 = transform.to_px(
+                Point2DCm(
+                    x_cm=placement.position_cm.x_cm + placement.size_cm.x_cm,
+                    y_cm=placement.position_cm.y_cm + placement.size_cm.y_cm,
+                )
+            )
+            left = min(x1, x2)
+            top = min(y1, y2)
+            right = max(x1, x2)
+            bottom = max(y1, y2)
+            fill = placement.color or "#64748b"
+            draw.rectangle((left, top, right, bottom), outline="#1f2937", width=2, fill=fill)
+
+        self._render_png_elevation(draw, scene)
+        self._render_png_legend(draw, legend_items, warnings)
+
+        draw.text((self._left_margin_px, 28), "Floor Plan (Top + Elevation)", fill="#111827")
+        return image
+
+    def _render_png_elevation(self, draw: ImageDraw.ImageDraw, scene: FloorPlanScene) -> None:
+        draw.rectangle(
+            (
+                self._elevation_x_px,
+                self._top_margin_px,
+                self._elevation_x_px + self._elevation_width_px,
+                self._plan_height_px - self._top_margin_px,
+            ),
+            outline="#d6d3d1",
+            width=2,
+            fill="#ffffff",
+        )
+        draw.line(
+            (
+                self._elevation_x_px,
+                self._elevation_floor_y_px,
+                self._elevation_x_px + self._elevation_width_px,
+                self._elevation_floor_y_px,
+            ),
+            fill="#1f2937",
+            width=2,
+        )
+
+        room_w = max(scene.architecture.dimensions_cm.length_x_cm, 1.0)
+        room_h = max(scene.architecture.dimensions_cm.height_z_cm, 1.0)
+        x_scale = (self._elevation_width_px - 40) / room_w
+        z_scale = (self._plan_height_px - 2 * self._top_margin_px - 40) / room_h
+
+        for placement in scene.placements:
+            x_px = self._elevation_x_px + 20 + placement.position_cm.x_cm * x_scale
+            w_px = max(4.0, placement.size_cm.x_cm * x_scale)
+            z_bottom = self._elevation_floor_y_px - placement.z_cm * z_scale
+            h_px = max(3.0, placement.size_cm.z_cm * z_scale)
+            y_px = z_bottom - h_px
+            fill = placement.color or "#64748b"
+            draw.rectangle(
+                (x_px, y_px, x_px + w_px, y_px + h_px), outline="#0f172a", fill=fill, width=1
+            )
+
+    def _render_png_legend(
+        self,
+        draw: ImageDraw.ImageDraw,
+        legend_items: list[str],
+        warnings: list[RenderWarning],
+    ) -> None:
+        start_x = self._elevation_x_px
+        start_y = self._canvas_height_px - 190
+
+        draw.rectangle(
+            (start_x, start_y, start_x + self._elevation_width_px, start_y + 170),
+            outline="#d6d3d1",
+            fill="#ffffff",
+            width=2,
+        )
+        draw.text((start_x + 12, start_y + 8), "Legend", fill="#111827")
+        for idx, item in enumerate(legend_items):
+            draw.text((start_x + 12, start_y + 28 + idx * 16), f"- {item}", fill="#334155")
+
+        draw.text((start_x + 12, start_y + 102), "Warnings", fill="#7c2d12")
+        if not warnings:
+            draw.text((start_x + 12, start_y + 120), "none", fill="#166534")
+        else:
+            for idx, warning in enumerate(warnings[:3]):
+                draw.text(
+                    (start_x + 12, start_y + 120 + idx * 14),
+                    f"{warning.code}: {warning.message}",
+                    fill="#7c2d12",
+                )
+
+    def _collect_warnings(self, scene: FloorPlanScene) -> list[RenderWarning]:
+        dims = scene.architecture.dimensions_cm
+        warnings: list[RenderWarning] = []
+        for placement in scene.placements:
+            if placement.position_cm.x_cm < 0 or placement.position_cm.y_cm < 0:
+                warnings.append(
+                    RenderWarning(
+                        severity="warn",
+                        code="placement_negative_position",
+                        message="Placement has a negative x/y coordinate.",
+                        entity_id=placement.placement_id,
+                    )
+                )
+            if placement.position_cm.x_cm + placement.size_cm.x_cm > dims.length_x_cm:
+                warnings.append(
+                    RenderWarning(
+                        severity="warn",
+                        code="placement_out_of_bounds_x",
+                        message="Placement extends beyond room x-length.",
+                        entity_id=placement.placement_id,
+                    )
+                )
+            if placement.position_cm.y_cm + placement.size_cm.y_cm > dims.depth_y_cm:
+                warnings.append(
+                    RenderWarning(
+                        severity="warn",
+                        code="placement_out_of_bounds_y",
+                        message="Placement extends beyond room y-depth.",
+                        entity_id=placement.placement_id,
+                    )
+                )
+            if placement.z_cm + placement.size_cm.z_cm > dims.height_z_cm:
+                warnings.append(
+                    RenderWarning(
+                        severity="warn",
+                        code="placement_out_of_bounds_z",
+                        message="Placement extends beyond room z-height.",
+                        entity_id=placement.placement_id,
+                    )
+                )
+
+        return warnings
+
+    def _legend_items(self, scene: FloorPlanScene) -> list[str]:
+        items = [
+            "Walls: dark strokes",
+            "Doors: red segments",
+            "Windows: blue segments",
+            "Dashed furniture: mounted/elevated",
+            "Right panel: X/Z elevation",
+            f"Scale grid: {self._major_grid_step_cm} cm",
+        ]
+        if isinstance(scene, DetailedFloorPlanScene) and scene.fixtures:
+            items.append("Fixtures: teal sockets, violet lights")
+        return items

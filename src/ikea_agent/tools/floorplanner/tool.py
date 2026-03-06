@@ -1,14 +1,21 @@
-"""Agent-facing floor-plan tool using Renovation-backed rendering."""
+"""Agent-facing floor-plan scene tool helpers."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
 from pydantic_ai import BinaryContent, ToolReturn
 
-from ikea_agent.tools.floorplanner.models import FloorPlanRequest
+from ikea_agent.tools.floorplanner.models import (
+    FloorPlannerValidationError,
+    FloorPlanRenderOutput,
+    FloorPlanRenderRequest,
+    FloorPlanScene,
+    apply_changes,
+    scene_to_summary,
+)
 from ikea_agent.tools.floorplanner.renderer import (
+    FloorPlannerRenderArtifacts,
     FloorPlannerRenderer,
     FloorPlannerRenderError,
 )
@@ -16,54 +23,90 @@ from ikea_agent.tools.floorplanner.renderer import (
 DEFAULT_FLOOR_PLANS_DIR = Path("artifacts/floor_plans")
 
 
-class FloorPlannerToolResult(BaseModel):
-    """Typed return payload for successful floor-plan rendering."""
+def resolve_scene(
+    *,
+    current_scene: FloorPlanScene | None,
+    request: FloorPlanRenderRequest,
+) -> FloorPlanScene:
+    """Resolve target scene from current state and request payload."""
 
-    output_png_path: str
-    element_names: list[str]
-    wall_count: int
-    door_count: int
-    window_count: int
-    message: str
+    if request.scene is not None:
+        resolved = request.scene
+    elif current_scene is not None:
+        resolved = current_scene
+    else:
+        msg = "No existing scene found. Provide `scene` in request for initial render."
+        raise FloorPlannerValidationError(msg)
+
+    if request.changes is not None:
+        resolved = apply_changes(resolved, request.changes)
+    return resolved
+
+
+def build_render_output(
+    *,
+    scene: FloorPlanScene,
+    render_result: FloorPlannerRenderArtifacts,
+    scene_revision: int,
+) -> FloorPlanRenderOutput:
+    """Create typed render output from scene and renderer artifacts."""
+
+    summary = scene_to_summary(scene)
+    caption = (
+        "Rendered floor plan scene. "
+        f"Walls: {summary['wall_count']}, doors: {summary['door_count']}, "
+        f"windows: {summary['window_count']}, placements: {summary['placement_count']}."
+    )
+    return FloorPlanRenderOutput(
+        caption=caption,
+        scene_revision=scene_revision,
+        scene_level=scene.scene_level,
+        output_svg_path=str(render_result.output_svg),
+        output_png_path=str(render_result.output_png),
+        warnings=render_result.warnings,
+        legend_items=render_result.legend_items,
+        scale_major_step_cm=render_result.scale_major_step_cm,
+        scene=scene,
+    )
 
 
 def render_floor_plan(
-    request: FloorPlanRequest,
+    request: FloorPlanRenderRequest,
+    *,
+    scene_revision: int,
+    current_scene: FloorPlanScene | None,
     output_dir: Path = DEFAULT_FLOOR_PLANS_DIR,
-) -> FloorPlannerToolResult | ToolReturn:
-    """Render a floor plan and return a typed result or rich `ToolReturn`."""
+) -> tuple[FloorPlanScene, FloorPlanRenderOutput, ToolReturn | None]:
+    """Render a floor plan scene and optionally include PNG binary content."""
 
+    scene = resolve_scene(current_scene=current_scene, request=request)
     renderer = FloorPlannerRenderer()
+
     try:
-        render_result = renderer.render(request, output_dir)
+        render_result = renderer.render(scene, output_dir)
     except FloorPlannerRenderError as exc:
         msg = f"Floor plan rendering failed: {exc}"
         raise ValueError(msg) from exc
 
-    result = FloorPlannerToolResult(
-        output_png_path=str(render_result.output_png),
-        element_names=[element.name for element in request.elements],
-        wall_count=render_result.wall_count,
-        door_count=render_result.door_count,
-        window_count=render_result.window_count,
-        message=(
-            "Rendered floor plan. Ask the user to confirm whether shape and openings "
-            "match their intent before proceeding."
-        ),
+    output = build_render_output(
+        scene=scene,
+        render_result=render_result,
+        scene_revision=scene_revision,
     )
 
-    if not request.include_image_bytes:
-        return result
+    tool_return: ToolReturn | None = None
+    if request.include_image_bytes:
+        png_bytes = render_result.output_png.read_bytes()
+        tool_return = ToolReturn(
+            return_value=output.model_dump(mode="json"),
+            content=[BinaryContent(data=png_bytes, media_type="image/png")],
+            metadata={
+                "scene_revision": output.scene_revision,
+                "scene_level": output.scene_level,
+                "output_svg_path": output.output_svg_path,
+                "output_png_path": output.output_png_path,
+                "warning_count": len(output.warnings),
+            },
+        )
 
-    image_bytes = render_result.output_png.read_bytes()
-    return ToolReturn(
-        return_value=result.model_dump(),
-        content=[BinaryContent(data=image_bytes, media_type="image/png")],
-        metadata={
-            "output_png_path": result.output_png_path,
-            "element_names": result.element_names,
-            "wall_count": result.wall_count,
-            "door_count": result.door_count,
-            "window_count": result.window_count,
-        },
-    )
+    return (scene, output, tool_return)

@@ -224,17 +224,17 @@ class FalImageAnalysisCore:
     ) -> list[DetectedObject]:
         """Convert flexible response payloads into a stable detection list."""
 
-        candidates: list[dict[str, Any]] = []
-        for key in ("detections", "objects", "predictions", "results"):
-            value = payload.get(key)
-            if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-                candidates = value
-                break
+        candidates = FalImageAnalysisCore._extract_detection_candidates(payload)
 
         detections: list[DetectedObject] = []
         for item in candidates:
             label = str(item.get("label") or item.get("class_name") or item.get("name") or "object")
-            bbox_value = item.get("bbox") or item.get("bounding_box") or item.get("box")
+            bbox_value = (
+                item.get("bbox")
+                or item.get("bounding_box")
+                or item.get("box")
+                or (item if all(key in item for key in ("x", "y", "w", "h")) else None)
+            )
             bbox = FalImageAnalysisCore._parse_bbox_px(
                 bbox_value,
                 image_width=image_width,
@@ -259,27 +259,19 @@ class FalImageAnalysisCore:
         image_width: int,
         image_height: int,
     ) -> tuple[int, int, int, int] | None:
-        if isinstance(value, list) and len(value) >= BBOX_COORDINATE_COUNT:
-            bbox_floats = value[:BBOX_COORDINATE_COUNT]
-        elif isinstance(value, dict):
-            keys = (
-                ("x1", "y1", "x2", "y2"),
-                ("left", "top", "right", "bottom"),
-            )
-            bbox_floats = None
-            for x1_key, y1_key, x2_key, y2_key in keys:
-                if all(key in value for key in (x1_key, y1_key, x2_key, y2_key)):
-                    bbox_floats = [value[x1_key], value[y1_key], value[x2_key], value[y2_key]]
-                    break
-            if bbox_floats is None:
-                return None
-        else:
+        extracted = FalImageAnalysisCore._extract_raw_bbox_numbers(value)
+        if extracted is None:
+            return None
+        bbox_floats, is_xywh = extracted
+
+        parsed_floats = FalImageAnalysisCore._coerce_bbox_numbers(bbox_floats)
+        if parsed_floats is None:
             return None
 
-        try:
-            x1_raw, y1_raw, x2_raw, y2_raw = [float(number) for number in bbox_floats]
-        except (TypeError, ValueError):
-            return None
+        x1_raw, y1_raw, x2_raw, y2_raw = parsed_floats
+        if is_xywh:
+            x2_raw = x1_raw + x2_raw
+            y2_raw = y1_raw + y2_raw
 
         x1 = max(0, min(round(x1_raw), image_width))
         y1 = max(0, min(round(y1_raw), image_height))
@@ -288,6 +280,43 @@ class FalImageAnalysisCore:
         if x2 <= x1 or y2 <= y1:
             return None
         return (x1, y1, x2, y2)
+
+    @staticmethod
+    def _extract_raw_bbox_numbers(value: object) -> tuple[list[object], bool] | None:
+        if isinstance(value, list) and len(value) >= BBOX_COORDINATE_COUNT:
+            return value[:BBOX_COORDINATE_COUNT], False
+        if isinstance(value, dict):
+            bbox_floats, is_xywh = FalImageAnalysisCore._bbox_floats_from_dict(value)
+            if bbox_floats is not None:
+                return bbox_floats, is_xywh
+        return None
+
+    @staticmethod
+    def _coerce_bbox_numbers(bbox_floats: list[object]) -> list[float] | None:
+        parsed_floats: list[float] = []
+        for number in bbox_floats:
+            if not isinstance(number, (int, float, str)):
+                return None
+            try:
+                parsed_floats.append(float(number))
+            except ValueError:
+                return None
+        if len(parsed_floats) != BBOX_COORDINATE_COUNT:
+            return None
+        return parsed_floats
+
+    @staticmethod
+    def _bbox_floats_from_dict(value: dict[str, object]) -> tuple[list[object] | None, bool]:
+        xyxy_key_sets = (
+            ("x1", "y1", "x2", "y2"),
+            ("left", "top", "right", "bottom"),
+        )
+        for x1_key, y1_key, x2_key, y2_key in xyxy_key_sets:
+            if all(key in value for key in (x1_key, y1_key, x2_key, y2_key)):
+                return [value[x1_key], value[y1_key], value[x2_key], value[y2_key]], False
+        if all(key in value for key in ("x", "y", "w", "h")):
+            return [value["x"], value["y"], value["w"], value["h"]], True
+        return None, False
 
     @staticmethod
     def _filename_from_url(url: str) -> str | None:
@@ -306,3 +335,19 @@ class FalImageAnalysisCore:
         if not fal_key:
             msg = "Missing fal API key. Set FAL_KEY or FAI_AI_API_KEY in environment."
             raise ImageAnalysisError(msg)
+
+    @staticmethod
+    def _extract_detection_candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
+        candidate_keys = ("detections", "objects", "predictions", "results")
+        for key in candidate_keys:
+            value = payload.get(key)
+            if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+                return value
+            if (
+                key == "results"
+                and isinstance(value, dict)
+                and isinstance(value.get("bboxes"), list)
+                and all(isinstance(item, dict) for item in value["bboxes"])
+            ):
+                return value["bboxes"]
+        return []

@@ -71,3 +71,23 @@ def test_parse_object_detections_normalizes_boxes() -> None:
     assert [item.label for item in detections] == ["chair", "table"]
     assert detections[0].bbox_xyxy_px == (10, 20, 110, 120)
     assert detections[0].bbox_xyxy_norm == (0.025, 0.066667, 0.275, 0.4)
+
+
+def test_parse_object_detections_supports_results_bboxes_xywh() -> None:
+    payload = {
+        "results": {
+            "bboxes": [
+                {"label": "bed", "x": 220.2, "y": 141.2, "w": 907.2, "h": 643.2},
+            ]
+        }
+    }
+
+    detections = FalImageAnalysisCore.parse_object_detections(
+        payload,
+        image_width=1200,
+        image_height=800,
+    )
+
+    assert len(detections) == 1
+    assert detections[0].label == "bed"
+    assert detections[0].bbox_xyxy_px == (220, 141, 1127, 784)

@@ -11,6 +11,7 @@ import {
   type RoomPhotoAnalysisToolResult,
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { AttachmentRef } from "@/lib/attachments";
+import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type ImageToolOutput = {
   caption: string;
@@ -36,12 +37,21 @@ const roomPhotoAnalysisSchema = z.object({
   room_hints: z.array(z.string()),
 });
 const floorPlanResultSchema = z.object({
-  output_png_path: z.string(),
-  element_names: z.array(z.string()),
-  wall_count: z.number(),
-  door_count: z.number(),
-  window_count: z.number(),
-  message: z.string(),
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  scene_revision: z.number(),
+  scene_level: z.enum(["baseline", "detailed"]),
+  warnings: z
+    .array(
+      z.object({
+        severity: z.enum(["info", "warn", "error"]),
+        code: z.string(),
+        message: z.string(),
+        entity_id: z.string().nullable().optional(),
+      }),
+    )
+    .optional(),
+  legend_items: z.array(z.string()).optional(),
 });
 
 type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
@@ -153,7 +163,13 @@ function parseFloorPlanResult(result: unknown): z.infer<typeof floorPlanResultSc
   return validated.success ? validated.data : null;
 }
 
-export function CopilotToolRenderers(): ReactElement | null {
+type CopilotToolRenderersProps = {
+  onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
+};
+
+export function CopilotToolRenderers({
+  onFloorPlanRendered,
+}: CopilotToolRenderersProps): ReactElement | null {
   useDefaultRenderTool({
     render: ({ name, status, result, parameters }) => {
       const parsedResult = parseResult(result);
@@ -247,9 +263,17 @@ export function CopilotToolRenderers(): ReactElement | null {
         );
       }
       const imageOutput = parseImageToolOutput(result);
+      const floorPlanResult = parseFloorPlanResult(result);
       if (!imageOutput) {
-        const floorPlanResult = parseFloorPlanResult(result);
         if (floorPlanResult) {
+          onFloorPlanRendered?.({
+            caption: floorPlanResult.caption,
+            images: floorPlanResult.images.map(normalizeAttachmentRef),
+            sceneRevision: floorPlanResult.scene_revision,
+            sceneLevel: floorPlanResult.scene_level,
+            warnings: floorPlanResult.warnings ?? [],
+            legendItems: floorPlanResult.legend_items ?? [],
+          });
           return (
             <div className="rounded border bg-white p-2">
               <DefaultToolCallRenderer
@@ -274,6 +298,14 @@ export function CopilotToolRenderers(): ReactElement | null {
           </div>
         );
       }
+      onFloorPlanRendered?.({
+        caption: floorPlanResult?.caption ?? imageOutput.caption,
+        images: imageOutput.images,
+        sceneRevision: floorPlanResult?.scene_revision ?? 0,
+        sceneLevel: floorPlanResult?.scene_level ?? "baseline",
+        warnings: floorPlanResult?.warnings ?? [],
+        legendItems: floorPlanResult?.legend_items ?? [],
+      });
       return (
         <div className="rounded border bg-white p-2">
           <ImageToolOutputRenderer caption={imageOutput.caption} images={imageOutput.images} />

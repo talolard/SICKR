@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.shared.types import AttachmentRef
+from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 
 class ChatAgentState(BaseModel):
@@ -28,4 +29,5 @@ class ChatAgentDeps:
 
     runtime: ChatRuntime
     attachment_store: AttachmentStore
+    floor_plan_scene_store: FloorPlanSceneStore
     state: ChatAgentState
