@@ -9,6 +9,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from ikea_agent.config import get_settings
+from ikea_agent.persistence.models import Base
 from ikea_agent.shared import alembic_duckdb  # noqa: F401
 from ikea_agent.shared.sqlalchemy_db import build_duckdb_sqlalchemy_url
 
@@ -17,14 +18,16 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Runtime models are added in follow-up tasks; keep metadata placeholder here.
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def _resolve_database_url() -> str:
     override_url = os.getenv("ALEMBIC_DATABASE_URL")
     if override_url:
         return override_url
+    configured_url = config.get_main_option("sqlalchemy.url")
+    if configured_url:
+        return configured_url
     return build_duckdb_sqlalchemy_url(get_settings().duckdb_path)
 
 

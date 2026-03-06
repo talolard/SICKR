@@ -58,3 +58,31 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Full `make tidy` was not run at this stage to avoid reformatting unrelated in-progress work already present in the working tree.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.2` and introduce SQLAlchemy models + migrations for thread/run/asset/analysis/search persistence tables.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.2` completed
+- Read this file at task start.
+- Added SQLAlchemy persistence models:
+  - `src/ikea_agent/persistence/models.py`
+  - `src/ikea_agent/persistence/__init__.py`
+- Wired Alembic metadata target to persistence models:
+  - `migrations/env.py` now imports `Base.metadata`.
+- Added migration revision creating durable persistence tables:
+  - `migrations/versions/20260306_0002_conversation_persistence_tables.py`
+  - Tables created under `app` schema:
+    - `threads`, `agent_runs`, `message_archives`, `assets`, `floor_plan_revisions`,
+      `analysis_runs`, `analysis_detections`, `search_runs`, `search_results`
+  - Includes ownership field (`owner_id`) for single-user-now / multi-user-ready scope.
+- Added migration validation test:
+  - `tests/shared/test_migrations.py`
+- Migrations created/updated:
+  - Added `20260306_0002` revision on top of `20260306_0001`.
+  - Updated `alembic.ini` (`path_separator = os`) and `migrations/env.py` DB URL resolution to respect CLI-configured URL.
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/persistence/models.py migrations/env.py migrations/versions/20260306_0002_conversation_persistence_tables.py tests/shared/test_migrations.py`
+  - `uv run pytest tests/shared/test_migrations.py tests/shared/test_sqlalchemy_db.py -q` (3 passed)
+  - `ALEMBIC_DATABASE_URL="duckdb:///$(pwd)/.tmp_untracked/alembic_validation_l18_2.duckdb" uv run alembic upgrade head` (succeeded)
+- Risks / known gaps:
+  - JSON payload columns are text for portability in this phase; typed JSON operators are not yet leveraged.
+  - Runtime read/write paths are not yet switched to these tables; integration starts in next tasks.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.3` and migrate active runtime retrieval/bootstrap SQL paths to SQLAlchemy wiring.
