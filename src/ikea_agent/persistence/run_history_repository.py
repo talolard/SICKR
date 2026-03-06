@@ -48,12 +48,6 @@ class RunHistoryRepository:
                     last_activity_at=now,
                 )
                 session.add(thread)
-            else:
-                session.execute(
-                    update(ThreadRecord)
-                    .where(ThreadRecord.thread_id == thread_id)
-                    .values(updated_at=now, last_activity_at=now)
-                )
             session.flush()
 
             existing_run_id = session.execute(
@@ -120,6 +114,12 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
+            existing_run_id = session.execute(
+                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
+            ).scalar_one_or_none()
+            if existing_run_id is None:
+                session.commit()
+                return
             session.execute(
                 update(AgentRunRecord)
                 .where(AgentRunRecord.run_id == run_id)
@@ -171,6 +171,12 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
+            existing_run_id = session.execute(
+                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
+            ).scalar_one_or_none()
+            if existing_run_id is None:
+                session.commit()
+                return
             session.execute(
                 update(AgentRunRecord)
                 .where(AgentRunRecord.run_id == run_id)

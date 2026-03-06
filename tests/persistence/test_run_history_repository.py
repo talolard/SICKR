@@ -90,3 +90,46 @@ def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
 
     assert run_row.status == "failed"
     assert run_row.error_message == "boom"
+
+
+def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        thread_id="thread-c",
+        run_id="run-c-1",
+        parent_run_id=None,
+        user_prompt_text="first",
+        agui_input_messages_json="[]",
+    )
+    repository.record_run_start(
+        thread_id="thread-c",
+        run_id="run-c-2",
+        parent_run_id=None,
+        user_prompt_text="second",
+        agui_input_messages_json="[]",
+    )
+
+    with session_factory() as session:
+        run_ids = session.execute(
+            select(AgentRunRecord.run_id).where(AgentRunRecord.thread_id == "thread-c")
+        ).scalars().all()
+
+    assert set(run_ids) == {"run-c-1", "run-c-2"}
+
+
+def test_record_run_complete_missing_run_is_noop(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_complete(
+        run_id="missing-run",
+        pydantic_all_messages_json=b"[]",
+        pydantic_new_messages_json=b"[]",
+    )
+
+    with session_factory() as session:
+        archives = session.execute(select(MessageArchiveRecord.run_id)).scalars().all()
+
+    assert archives == []
