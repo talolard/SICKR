@@ -57,3 +57,11 @@ def test_scene_store_increments_revision() -> None:
 
     assert first.revision == 1
     assert second.revision == 2
+
+
+def test_scene_store_accepts_explicit_revision() -> None:
+    store = FloorPlanSceneStore()
+
+    snapshot = store.set_with_revision("session-1", _scene(), revision=7)
+
+    assert snapshot.revision == 7

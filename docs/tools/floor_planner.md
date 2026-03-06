@@ -48,7 +48,13 @@ Then proceed with incremental placement updates via `changes`.
 ## YAML Interop
 - `load_floor_plan_scene_yaml(yaml_text, scene_level=...)` parses YAML into typed scene state.
 - `export_floor_plan_scene_yaml()` exports current scene state as YAML.
+- `confirm_floor_plan_revision(revision=None, confirmation_note=...)` marks a revision as user-approved.
 - YAML is an interop/edit format; numeric truth remains in structured scene fields.
+
+## Durable Revision Persistence
+- Revisions are persisted per thread in `app.floor_plan_revisions` with scene JSON + summary JSON.
+- `render_floor_plan` stores linked `svg_asset_id` / `png_asset_id` so UI can query artifacts.
+- `export_floor_plan_scene_yaml` can restore latest persisted revision after process restart.
 
 ## Sample Data
 Representative payloads and checks are in:

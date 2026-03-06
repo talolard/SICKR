@@ -22,6 +22,7 @@ from ikea_agent.chat.graph import (
 )
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.config import get_settings
+from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.shared.types import (
     AttachmentRef,
     ImageToolOutput,
@@ -84,6 +85,7 @@ Use `export_floor_plan_scene_yaml` when user asks to save/export current scene.
 If `render_floor_plan` fails, fix arguments and retry up to two times,
 then ask for clarification.
 After rendering a floor plan, ask the user to confirm whether it matches their room.
+When the user confirms, call `confirm_floor_plan_revision`.
 """
 
 
@@ -217,6 +219,12 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             "branch_from_session_id": ctx.deps.state.branch_from_session_id,
         }
 
+    def _floor_plan_repository(ctx: RunContext[ChatAgentDeps]) -> FloorPlanRepository | None:
+        runtime = ctx.deps.runtime
+        if not hasattr(runtime, "session_factory"):
+            return None
+        return FloorPlanRepository(runtime.session_factory)
+
     @agent.tool
     async def run_search_graph(
         ctx: RunContext[ChatAgentDeps],
@@ -296,7 +304,16 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
     ) -> dict[str, object] | ToolReturn:
         """Render and/or update the active floor-plan scene with SVG+PNG outputs."""
 
+        repository = _floor_plan_repository(ctx)
         snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
+        if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
+            persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
+            if persisted_snapshot is not None:
+                snapshot = ctx.deps.floor_plan_scene_store.set_with_revision(
+                    ctx.deps.state.session_id,
+                    persisted_snapshot.scene,
+                    revision=persisted_snapshot.revision,
+                )
         current_scene = snapshot.scene if snapshot is not None else None
         next_revision = 1 if snapshot is None else snapshot.revision + 1
 
@@ -340,12 +357,27 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             created_by_tool="render_floor_plan",
             kind="floor_plan_svg",
         )
-        persisted = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
         summary = scene_to_summary(scene)
+        in_memory_snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
+        scene_revision = in_memory_snapshot.revision
+        if repository is not None and ctx.deps.state.thread_id is not None:
+            persisted_snapshot = repository.save_revision(
+                thread_id=ctx.deps.state.thread_id,
+                scene=scene,
+                summary=summary,
+                svg_asset_id=stored_svg.ref.attachment_id,
+                png_asset_id=stored_png.ref.attachment_id,
+            )
+            ctx.deps.floor_plan_scene_store.set_with_revision(
+                ctx.deps.state.session_id,
+                scene,
+                revision=persisted_snapshot.revision,
+            )
+            scene_revision = persisted_snapshot.revision
         payload: dict[str, object] = {
             "caption": output.caption,
             "images": [stored_svg.ref, stored_png.ref],
-            "scene_revision": persisted.revision,
+            "scene_revision": scene_revision,
             "scene_level": output.scene_level,
             "warnings": [warning.model_dump(mode="json") for warning in output.warnings],
             "legend_items": output.legend_items,
@@ -357,7 +389,7 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             "render_floor_plan_completed",
             extra={
                 "output_attachment_id": stored_png.ref.attachment_id,
-                "scene_revision": persisted.revision,
+                "scene_revision": scene_revision,
                 "wall_count": summary["wall_count"],
                 "door_count": summary["door_count"],
                 "window_count": summary["window_count"],
@@ -375,7 +407,7 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
                     )
                 ],
                 metadata={
-                    "scene_revision": persisted.revision,
+                    "scene_revision": scene_revision,
                     "attachment_ids": [
                         stored_svg.ref.attachment_id,
                         stored_png.ref.attachment_id,
@@ -392,9 +424,23 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
     ) -> dict[str, object]:
         """Load YAML into typed floor-plan scene state for iterative rendering."""
 
+        repository = _floor_plan_repository(ctx)
         scene = parse_scene_yaml(yaml_text, scene_level=scene_level)
-        snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
         summary = scene_to_summary(scene)
+        snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
+        if repository is not None and ctx.deps.state.thread_id is not None:
+            persisted_snapshot = repository.save_revision(
+                thread_id=ctx.deps.state.thread_id,
+                scene=scene,
+                summary=summary,
+                svg_asset_id=None,
+                png_asset_id=None,
+            )
+            snapshot = ctx.deps.floor_plan_scene_store.set_with_revision(
+                ctx.deps.state.session_id,
+                scene,
+                revision=persisted_snapshot.revision,
+            )
         return {
             "message": "Loaded floor-plan scene YAML into session state.",
             "scene_revision": snapshot.revision,
@@ -406,13 +452,58 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
     def export_floor_plan_scene_yaml(ctx: RunContext[ChatAgentDeps]) -> dict[str, object]:
         """Export current typed floor-plan scene state to YAML text."""
 
+        repository = _floor_plan_repository(ctx)
         snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
+        if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
+            persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
+            if persisted_snapshot is not None:
+                snapshot = ctx.deps.floor_plan_scene_store.set_with_revision(
+                    ctx.deps.state.session_id,
+                    persisted_snapshot.scene,
+                    revision=persisted_snapshot.revision,
+                )
         if snapshot is None:
             raise ValueError("No floor-plan scene is loaded for this session.")
         return {
             "scene_revision": snapshot.revision,
             "yaml": dump_scene_yaml(snapshot.scene),
             "scene_summary": scene_to_summary(snapshot.scene),
+        }
+
+    @agent.tool
+    def confirm_floor_plan_revision(
+        ctx: RunContext[ChatAgentDeps],
+        revision: int | None = None,
+        confirmation_note: str | None = None,
+    ) -> dict[str, object]:
+        """Persist explicit user confirmation for a floor-plan revision."""
+
+        repository = _floor_plan_repository(ctx)
+        thread_id = ctx.deps.state.thread_id
+        if repository is None or thread_id is None:
+            raise ValueError("Floor-plan persistence is unavailable for this runtime.")
+
+        confirmed = repository.confirm_revision(
+            thread_id=thread_id,
+            revision=revision,
+            run_id=ctx.deps.state.run_id,
+            confirmation_note=confirmation_note,
+        )
+        if confirmed is None:
+            raise ValueError("No floor-plan revision found to confirm.")
+
+        ctx.deps.floor_plan_scene_store.set_with_revision(
+            ctx.deps.state.session_id,
+            confirmed.scene,
+            revision=confirmed.revision,
+        )
+        return {
+            "message": "Floor-plan revision marked as confirmed.",
+            "scene_revision": confirmed.revision,
+            "confirmed_at": confirmed.confirmed_at,
+            "confirmation_note": confirmed.confirmation_note,
+            "scene_summary": confirmed.summary,
+            "scene": confirmed.scene.model_dump(mode="json"),
         }
 
     @agent.tool

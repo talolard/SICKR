@@ -37,6 +37,18 @@ class FloorPlanSceneStore:
         key = session_id or "__anonymous__"
         current = self._by_session.get(key)
         revision = 1 if current is None else current.revision + 1
+        return self.set_with_revision(session_id, scene, revision=revision)
+
+    def set_with_revision(
+        self,
+        session_id: str | None,
+        scene: FloorPlanScene,
+        *,
+        revision: int,
+    ) -> SceneSnapshot:
+        """Store a snapshot with an explicit revision number."""
+
+        key = session_id or "__anonymous__"
         snapshot = SceneSnapshot(revision=revision, scene=clone_scene(scene))
         self._by_session[key] = snapshot
         return SceneSnapshot(revision=snapshot.revision, scene=clone_scene(snapshot.scene))

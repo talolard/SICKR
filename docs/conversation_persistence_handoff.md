@@ -185,3 +185,35 @@ This file is the continuity log for the conversation persistence epic and all ch
   - AG-UI per-request context currently uses shared deps object plus contextvars; concurrency behavior should be revisited when introducing multi-worker load.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.6` and persist floor-plan revisions/confirmations to DB with restart continuity.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.6` completed
+- Read this file at task start.
+- Added durable floor-plan revision repository:
+  - `src/ikea_agent/persistence/floor_plan_repository.py`
+  - Supports revision save/load/latest and explicit confirmation updates.
+- Updated floor-plan agent tools for persistence + restart continuity:
+  - `src/ikea_agent/chat/agent.py`
+  - `render_floor_plan` now hydrates latest persisted revision when in-memory state is empty.
+  - `render_floor_plan` persists scene JSON + summary + linked SVG/PNG asset ids per thread.
+  - `load_floor_plan_scene_yaml` persists loaded scenes as new revisions.
+  - `export_floor_plan_scene_yaml` restores from DB when memory is empty.
+  - Added `confirm_floor_plan_revision` tool for explicit accepted-revision capture.
+- Updated scene store to accept explicit revision numbers:
+  - `src/ikea_agent/tools/floorplanner/scene_store.py`
+  - Added `set_with_revision(...)` for DB-driven continuity.
+- Updated floor-planner docs:
+  - `docs/tools/floor_planner.md` now documents confirmation tool and durable revisions.
+- Added tests:
+  - `tests/persistence/test_floor_plan_repository.py` (restart continuity + confirmation capture)
+  - `tests/tools/test_floor_planner_scene_store.py` explicit revision behavior.
+- Migrations created/updated:
+  - No new migration revision for this task (uses existing `floor_plan_revisions` schema).
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/persistence/floor_plan_repository.py src/ikea_agent/chat/agent.py tests/persistence/test_floor_plan_repository.py tests/tools/test_floor_planner_scene_store.py`
+  - `uv run pytest tests/persistence/test_floor_plan_repository.py tests/tools/test_floor_planner_scene_store.py tests/tools/test_floor_planner_tool.py tests/chat/test_runtime.py -q` (11 passed)
+  - `uv run pytest tests/chat/test_api.py tests/chat/test_deps.py tests/tools/test_floor_planner_scene_store.py tests/persistence/test_floor_plan_repository.py -q` (12 passed)
+- Risks / known gaps:
+  - Repository degrades missing asset FK references to `None` for safety; expected production flow persists assets first so linkage remains intact.
+  - Timestamp fields are returned as ISO-like strings from repository projections to avoid DuckDB timezone decoding issues in this environment.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.7` and persist image-analysis runs/detections/derived artifacts with thread/image associations.
