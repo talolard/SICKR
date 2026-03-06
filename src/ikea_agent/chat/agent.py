@@ -13,7 +13,7 @@ from pydantic_ai import Agent, BinaryContent, ModelRetry, RunContext, ToolReturn
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
 from pydantic_ai.providers.google import GoogleProvider
 
-from ikea_agent.chat.deps import ChatAgentDeps
+from ikea_agent.chat.deps import ChatAgentDeps, Room3DSnapshotContext
 from ikea_agent.chat.graph import (
     ChatGraphDeps,
     ChatGraphState,
@@ -25,6 +25,7 @@ from ikea_agent.config import get_settings
 from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.persistence.search_repository import SearchRepository
+from ikea_agent.persistence.room_3d_repository import Room3DRepository, Room3DSnapshotEntry
 from ikea_agent.shared.types import (
     AttachmentRef,
     ImageToolOutput,
@@ -88,7 +89,35 @@ If `render_floor_plan` fails, fix arguments and retry up to two times,
 then ask for clarification.
 After rendering a floor plan, ask the user to confirm whether it matches their room.
 When the user confirms, call `confirm_floor_plan_revision`.
+Use `list_room_3d_snapshot_context` when users reference captured 3D snapshots or perspective notes.
 """
+
+
+def build_room_3d_snapshot_context_payload(
+    *,
+    state_snapshots: list[Room3DSnapshotContext],
+    persisted_snapshots: list[Room3DSnapshotEntry],
+) -> dict[str, object]:
+    """Build one stable payload that merges UI and persisted 3D snapshot context."""
+
+    persisted_payload = [
+        {
+            "room_3d_snapshot_id": snapshot.room_3d_snapshot_id,
+            "snapshot_asset_id": snapshot.snapshot_asset_id,
+            "room_3d_asset_id": snapshot.room_3d_asset_id,
+            "camera": snapshot.camera,
+            "lighting": snapshot.lighting,
+            "comment": snapshot.comment,
+            "created_at": snapshot.created_at,
+        }
+        for snapshot in persisted_snapshots
+    ]
+    return {
+        "state_snapshots": [snapshot.model_dump(mode="json") for snapshot in state_snapshots],
+        "persisted_snapshots": persisted_payload,
+        "state_count": len(state_snapshots),
+        "persisted_count": len(persisted_payload),
+    }
 
 
 def agent_instructions() -> str:
@@ -239,6 +268,12 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             return None
         return SearchRepository(runtime.session_factory)
 
+    def _room_3d_repository(ctx: RunContext[ChatAgentDeps]) -> Room3DRepository | None:
+        runtime = ctx.deps.runtime
+        if not hasattr(runtime, "session_factory"):
+            return None
+        return Room3DRepository(runtime.session_factory)
+
     @agent.tool
     async def run_search_graph(
         ctx: RunContext[ChatAgentDeps],
@@ -305,6 +340,28 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             },
         )
         return ctx.deps.state.attachments
+
+    @agent.tool
+    def list_room_3d_snapshot_context(ctx: RunContext[ChatAgentDeps]) -> dict[str, object]:
+        """Return captured 3D snapshot context from state and persisted thread records."""
+
+        persisted: list[Room3DSnapshotEntry] = []
+        repository = _room_3d_repository(ctx)
+        if repository is not None and ctx.deps.state.thread_id is not None:
+            persisted = repository.list_room_3d_snapshots(thread_id=ctx.deps.state.thread_id)
+        payload = build_room_3d_snapshot_context_payload(
+            state_snapshots=ctx.deps.state.room_3d_snapshots,
+            persisted_snapshots=persisted,
+        )
+        logger.info(
+            "list_room_3d_snapshot_context",
+            extra={
+                "state_snapshot_count": payload["state_count"],
+                "persisted_snapshot_count": payload["persisted_count"],
+                **_telemetry_context(ctx),
+            },
+        )
+        return payload
 
     @agent.tool_plain
     def generate_floor_plan_preview_image() -> ImageToolOutput:

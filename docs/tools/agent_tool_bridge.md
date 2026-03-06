@@ -13,6 +13,7 @@ Tools are exposed directly in the active chat agent module.
 - `run_search_graph(...)` via `@agent.tool`
 - `list_uploaded_images(...)` via `@agent.tool`
 - `generate_floor_plan_preview_image()` via `@agent.tool_plain`
+- `list_room_3d_snapshot_context()` via `@agent.tool`
 - `render_floor_plan(request: FloorPlanRenderRequest)` via `@agent.tool_plain`
 - `load_floor_plan_scene_yaml(yaml_text: str, scene_level: Literal["baseline", "detailed"])`
   via `@agent.tool_plain`
@@ -49,6 +50,11 @@ Image analysis tools delegate to `ikea_agent.tools.image_analysis.tool`.
 
 The tool also accepts an optional `candidate_pool_limit` argument so the model can expand
 retrieval depth before diversification when search is too narrow.
+
+`list_room_3d_snapshot_context` returns a merged payload:
+- `state_snapshots`: UI-provided `room_3d_snapshots` from AG-UI shared state
+- `persisted_snapshots`: durable thread-scoped snapshot metadata from persistence
+- `state_count` / `persisted_count`: stable summary counters for prompt/tool reasoning
 
 ## Why This Shape
 - Testability: tool function behavior is tested independently from model/provider wiring.
