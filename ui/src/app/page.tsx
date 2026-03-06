@@ -16,6 +16,7 @@ import {
   loadFloorPlanPreview,
   saveFloorPlanPreview,
 } from "@/lib/floorPlanPreviewStore";
+import { createRoom3DSnapshot } from "@/lib/api/room3dClient";
 import {
   type Room3DSnapshotContext,
   loadRoom3DSnapshots,
@@ -233,11 +234,25 @@ export default function Home(): ReactElement {
     if (!uploaded || !threadId) {
       return;
     }
+    let persistedSnapshotId = `snapshot-${localId}`;
+    try {
+      const persisted = await createRoom3DSnapshot(threadId, {
+        snapshot_asset_id: uploaded.attachment_id,
+        room_3d_asset_id: null,
+        camera: snapshot.camera,
+        lighting: snapshot.lighting,
+        comment: snapshot.comment,
+        run_id: null,
+      });
+      persistedSnapshotId = persisted.room_3d_snapshot_id;
+    } catch {
+      // Keep local snapshot context even when persistence API is temporarily unavailable.
+    }
     setRoom3dSnapshots((current) => {
       const next: Room3DSnapshotContext[] = [
         ...current,
         {
-          snapshot_id: `snapshot-${localId}`,
+          snapshot_id: persistedSnapshotId,
           attachment: {
             ...uploaded,
             uri: resolveAttachmentUri(uploaded.uri),

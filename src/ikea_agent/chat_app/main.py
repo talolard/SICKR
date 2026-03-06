@@ -30,6 +30,10 @@ from ikea_agent.chat_app.thread_api_models import (
     ThreadDetailItem,
     ThreadListItem,
     ThreadTitleUpdateRequest,
+    Room3DAssetCreateRequest,
+    Room3DAssetListItem,
+    Room3DSnapshotCreateRequest,
+    Room3DSnapshotListItem,
 )
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
@@ -205,6 +209,7 @@ def _register_thread_data_routes(  # noqa: C901
     app: FastAPI,
     *,
     thread_query_repository: ThreadQueryRepository,
+    room_3d_repository: Room3DRepository | None,
 ) -> None:
     @app.get("/api/threads", response_model=list[ThreadListItem])
     async def list_threads() -> list[ThreadListItem]:
@@ -256,6 +261,106 @@ def _register_thread_data_routes(  # noqa: C901
         return thread_query_repository.list_detections_for_image(
             thread_id=thread_id,
             input_asset_id=asset_id,
+        )
+
+    @app.get(
+        "/api/threads/{thread_id}/room-3d-assets",
+        response_model=list[Room3DAssetListItem],
+    )
+    async def list_thread_room_3d_assets(thread_id: str) -> list[Room3DAssetListItem]:
+        if room_3d_repository is None:
+            return []
+        return [
+            Room3DAssetListItem(
+                room_3d_asset_id=item.room_3d_asset_id,
+                thread_id=item.thread_id,
+                run_id=item.run_id,
+                source_asset_id=item.source_asset_id,
+                usd_format=item.usd_format,
+                metadata=item.metadata,
+                created_at=item.created_at,
+            )
+            for item in room_3d_repository.list_room_3d_assets(thread_id=thread_id)
+        ]
+
+    @app.post(
+        "/api/threads/{thread_id}/room-3d-assets",
+        response_model=Room3DAssetListItem,
+    )
+    async def create_thread_room_3d_asset(
+        thread_id: str,
+        payload: Room3DAssetCreateRequest,
+    ) -> Room3DAssetListItem:
+        if room_3d_repository is None:
+            raise HTTPException(status_code=503, detail="room_3d persistence is unavailable")
+        created = room_3d_repository.create_room_3d_asset(
+            thread_id=thread_id,
+            source_asset_id=payload.source_asset_id,
+            usd_format=payload.usd_format,
+            metadata=payload.metadata,
+            run_id=payload.run_id,
+        )
+        return Room3DAssetListItem(
+            room_3d_asset_id=created.room_3d_asset_id,
+            thread_id=created.thread_id,
+            run_id=created.run_id,
+            source_asset_id=created.source_asset_id,
+            usd_format=created.usd_format,
+            metadata=created.metadata,
+            created_at=created.created_at,
+        )
+
+    @app.get(
+        "/api/threads/{thread_id}/room-3d-snapshots",
+        response_model=list[Room3DSnapshotListItem],
+    )
+    async def list_thread_room_3d_snapshots(thread_id: str) -> list[Room3DSnapshotListItem]:
+        if room_3d_repository is None:
+            return []
+        return [
+            Room3DSnapshotListItem(
+                room_3d_snapshot_id=item.room_3d_snapshot_id,
+                thread_id=item.thread_id,
+                run_id=item.run_id,
+                snapshot_asset_id=item.snapshot_asset_id,
+                room_3d_asset_id=item.room_3d_asset_id,
+                camera=item.camera,
+                lighting=item.lighting,
+                comment=item.comment,
+                created_at=item.created_at,
+            )
+            for item in room_3d_repository.list_room_3d_snapshots(thread_id=thread_id)
+        ]
+
+    @app.post(
+        "/api/threads/{thread_id}/room-3d-snapshots",
+        response_model=Room3DSnapshotListItem,
+    )
+    async def create_thread_room_3d_snapshot(
+        thread_id: str,
+        payload: Room3DSnapshotCreateRequest,
+    ) -> Room3DSnapshotListItem:
+        if room_3d_repository is None:
+            raise HTTPException(status_code=503, detail="room_3d persistence is unavailable")
+        created = room_3d_repository.create_room_3d_snapshot(
+            thread_id=thread_id,
+            snapshot_asset_id=payload.snapshot_asset_id,
+            room_3d_asset_id=payload.room_3d_asset_id,
+            camera=payload.camera,
+            lighting=payload.lighting,
+            comment=payload.comment,
+            run_id=payload.run_id,
+        )
+        return Room3DSnapshotListItem(
+            room_3d_snapshot_id=created.room_3d_snapshot_id,
+            thread_id=created.thread_id,
+            run_id=created.run_id,
+            snapshot_asset_id=created.snapshot_asset_id,
+            room_3d_asset_id=created.room_3d_asset_id,
+            camera=created.camera,
+            lighting=created.lighting,
+            comment=created.comment,
+            created_at=created.created_at,
         )
 
 
@@ -375,7 +480,11 @@ def create_app(
         room_3d_repository=room_3d_repository,
     )
     if thread_query_repository is not None:
-        _register_thread_data_routes(app, thread_query_repository=thread_query_repository)
+        _register_thread_data_routes(
+            app,
+            thread_query_repository=thread_query_repository,
+            room_3d_repository=room_3d_repository,
+        )
 
     if mount_ag_ui:
         _register_ag_ui_route(

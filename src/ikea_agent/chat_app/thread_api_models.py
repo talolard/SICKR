@@ -88,3 +88,49 @@ class DetectionListItem(BaseModel):
     bbox_y1_norm: float
     bbox_x2_norm: float
     bbox_y2_norm: float
+
+
+class Room3DAssetCreateRequest(BaseModel):
+    """Create request for one room 3D asset binding."""
+
+    source_asset_id: str
+    usd_format: str
+    metadata: dict[str, object]
+    run_id: str | None = None
+
+
+class Room3DAssetListItem(BaseModel):
+    """One persisted room 3D asset row for thread APIs."""
+
+    room_3d_asset_id: str
+    thread_id: str
+    run_id: str | None
+    source_asset_id: str
+    usd_format: str
+    metadata: dict[str, object]
+    created_at: str
+
+
+class Room3DSnapshotCreateRequest(BaseModel):
+    """Create request for one room 3D snapshot metadata row."""
+
+    snapshot_asset_id: str
+    room_3d_asset_id: str | None = None
+    camera: dict[str, object]
+    lighting: dict[str, object]
+    comment: str | None = None
+    run_id: str | None = None
+
+
+class Room3DSnapshotListItem(BaseModel):
+    """One persisted room 3D snapshot row for thread APIs."""
+
+    room_3d_snapshot_id: str
+    thread_id: str
+    run_id: str | None
+    snapshot_asset_id: str
+    room_3d_asset_id: str | None
+    camera: dict[str, object]
+    lighting: dict[str, object]
+    comment: str | None
+    created_at: str

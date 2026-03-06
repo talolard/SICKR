@@ -18,6 +18,8 @@ from ikea_agent.persistence.models import (
     FloorPlanRevisionRecord,
     SearchResultRecord,
     SearchRunRecord,
+    Room3DAssetRecord,
+    Room3DSnapshotRecord,
     ThreadRecord,
     ensure_persistence_schema,
 )
@@ -157,6 +159,30 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 price_eur=199.0,
             )
         )
+        session.add(
+            Room3DAssetRecord(
+                room_3d_asset_id="room3d-asset-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                source_asset_id="asset-api",
+                usd_format="usda",
+                metadata_json='{"default_prim": "/Room"}',
+                created_at=now,
+            )
+        )
+        session.add(
+            Room3DSnapshotRecord(
+                room_3d_snapshot_id="room3d-snapshot-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                snapshot_asset_id="asset-api",
+                room_3d_asset_id="room3d-asset-api",
+                camera_json='{"fov_deg": 55.0}',
+                lighting_json='{"emphasized_light_count": 1}',
+                comment="Desk corner is too dark.",
+                created_at=now,
+            )
+        )
         session.commit()
 
 
@@ -178,6 +204,36 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     revisions_response = client.get("/api/threads/thread-api/floor-plan-revisions")
     analyses_response = client.get("/api/threads/thread-api/analyses")
     detections_response = client.get("/api/threads/thread-api/images/asset-api/detections")
+    room_assets_response = client.get("/api/threads/thread-api/room-3d-assets")
+    room_snapshots_response = client.get("/api/threads/thread-api/room-3d-snapshots")
+    room_asset_create_response = client.post(
+        "/api/threads/thread-api/room-3d-assets",
+        json={
+            "source_asset_id": "asset-api",
+            "usd_format": "usdz",
+            "metadata": {"prim_count": 3},
+            "run_id": "run-api",
+        },
+    )
+    room_snapshot_create_response = client.post(
+        "/api/threads/thread-api/room-3d-snapshots",
+        json={
+            "snapshot_asset_id": "asset-api",
+            "room_3d_asset_id": "room3d-asset-api",
+            "camera": {"fov_deg": 60},
+            "lighting": {"emphasized_light_count": 2},
+            "comment": "Check lighting around the bed.",
+            "run_id": "run-api",
+        },
+    )
+    room_snapshot_invalid_response = client.post(
+        "/api/threads/thread-api/room-3d-snapshots",
+        json={
+            "snapshot_asset_id": "asset-api",
+            "room_3d_asset_id": "room3d-asset-api",
+            # Missing required camera/lighting fields.
+        },
+    )
 
     assert list_response.status_code == 200
     assert detail_response.status_code == 200
@@ -186,6 +242,11 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assert revisions_response.status_code == 200
     assert analyses_response.status_code == 200
     assert detections_response.status_code == 200
+    assert room_assets_response.status_code == 200
+    assert room_snapshots_response.status_code == 200
+    assert room_asset_create_response.status_code == 200
+    assert room_snapshot_create_response.status_code == 200
+    assert room_snapshot_invalid_response.status_code == 422
 
     assert list_response.json()[0]["thread_id"] == "thread-api"
     assert detail_response.json()["asset_count"] == 1
@@ -194,3 +255,7 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assert revisions_response.json()[0]["floor_plan_revision_id"] == "fprev-api"
     assert analyses_response.json()[0]["analysis_id"] == "analysis-api"
     assert detections_response.json()[0]["analysis_detection_id"] == "det-api"
+    assert room_assets_response.json()[0]["room_3d_asset_id"] == "room3d-asset-api"
+    assert room_snapshots_response.json()[0]["room_3d_snapshot_id"] == "room3d-snapshot-api"
+    assert room_asset_create_response.json()["usd_format"] == "usdz"
+    assert room_snapshot_create_response.json()["comment"] == "Check lighting around the bed."
