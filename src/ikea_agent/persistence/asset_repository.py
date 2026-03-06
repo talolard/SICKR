@@ -99,13 +99,6 @@ class AssetRepository:
                     last_activity_at=now,
                 )
             )
-            return
-
-        session.execute(
-            update(ThreadRecord)
-            .where(ThreadRecord.thread_id == thread_id)
-            .values(updated_at=now, last_activity_at=now)
-        )
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

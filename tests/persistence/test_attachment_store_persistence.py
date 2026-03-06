@@ -79,3 +79,35 @@ def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> Non
         ).scalar_one()
 
     assert thread_id == "thread-explicit"
+
+
+def test_save_image_bytes_repeated_writes_same_thread_are_duckdb_fk_safe(
+    tmp_path: Path,
+) -> None:
+    session_factory = _session_factory(tmp_path)
+    store = AttachmentStore(
+        tmp_path / "artifacts",
+        asset_repository=AssetRepository(session_factory),
+    )
+
+    with store.bind_context(thread_id="anonymous-thread", run_id=None):
+        first = store.save_image_bytes(
+            content=b"png-1",
+            mime_type="image/png",
+            filename="first.png",
+            kind="user_upload",
+        )
+        second = store.save_image_bytes(
+            content=b"png-2",
+            mime_type="image/png",
+            filename="second.png",
+            kind="user_upload",
+        )
+
+    with session_factory() as session:
+        thread_count = session.execute(
+            select(AssetRecord.thread_id).where(AssetRecord.thread_id == "anonymous-thread")
+        ).all()
+
+    assert first.ref.attachment_id != second.ref.attachment_id
+    assert len(thread_count) == 2
