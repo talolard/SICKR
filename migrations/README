@@ -1,0 +1,8 @@
+Alembic migrations for runtime database schema.
+
+Commands:
+- Create revision: `uv run alembic revision -m "message"`
+- Upgrade DB: `uv run alembic upgrade head`
+- Downgrade one step: `uv run alembic downgrade -1`
+
+Use `ALEMBIC_DATABASE_URL` to override the target DB URL.

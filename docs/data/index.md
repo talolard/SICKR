@@ -14,6 +14,11 @@ Active runtime uses Milvus Lite collection:
 - `ikea_product_embeddings` (configurable)
 - stores vector records used for semantic candidate retrieval
 
+## Migrations
+
+- Runtime schema migrations use Alembic + SQLAlchemy.
+- See [Runtime DB Migrations](migrations.md) for commands and environment overrides.
+
 ## Data Lifecycle
 
 1. Embedding snapshots live in DuckDB/parquet data artifacts.

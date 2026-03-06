@@ -14,6 +14,7 @@
 - [Data Model and Storage](data/index.md)
 - [Current Graph Data Access](data/current_graph_data_access.md)
 - [Data Patterns](data/data_patterns.md)
+- [Runtime DB Migrations](data/migrations.md)
 
 ## Legacy
 

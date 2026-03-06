@@ -9,6 +9,7 @@ from typing import Literal, Protocol
 import duckdb
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingSettings
+from sqlalchemy import Engine
 
 from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.retrieval.catalog_repository import (
@@ -19,6 +20,7 @@ from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranke
 from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db import connect_db
+from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 logger = getLogger(__name__)
@@ -95,6 +97,7 @@ class ChatRuntime:
     """Container with initialized runtime dependencies for chat execution."""
 
     settings: AppSettings
+    sqlalchemy_engine: Engine
     connection: duckdb.DuckDBPyConnection
     embedder: Embedder
     milvus_service: MilvusAccessService
@@ -137,6 +140,7 @@ def build_chat_runtime() -> ChatRuntime:
     """Build chat runtime with schema bootstrap and service dependencies."""
 
     settings = get_settings()
+    sqlalchemy_engine = create_duckdb_engine(settings.duckdb_path)
     connection = connect_db(settings.duckdb_path)
     ensure_runtime_schema(connection)
     snapshot_repository = EmbeddingSnapshotRepository(connection)
@@ -164,6 +168,7 @@ def build_chat_runtime() -> ChatRuntime:
 
     return ChatRuntime(
         settings=settings,
+        sqlalchemy_engine=sqlalchemy_engine,
         connection=connection,
         embedder=embedder,
         milvus_service=milvus_service,
