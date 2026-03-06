@@ -24,6 +24,10 @@ Core concepts:
   - `baseline`: architecture + placements
   - `detailed`: baseline + fixtures + tagged items
 - Validation is schema-focused and cheap (high-leverage invariants only).
+- Openings validation:
+  - every door/window segment must lie on an existing wall segment
+  - zero-length opening segments are rejected
+- Optional labels are supported on walls/doors/windows and are surfaced in rendering and scene summaries.
 
 ## Rendering Behavior
 - Tool writes deterministic artifacts under floor plan output dir:

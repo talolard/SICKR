@@ -103,6 +103,7 @@ def dump_scene_yaml(scene: FloorPlanScene) -> str:
                     "to": [wall.end_cm.x_cm, wall.end_cm.y_cm],
                     "thickness_cm": wall.thickness_cm,
                     "color": wall.color,
+                    "label": wall.label,
                 }
                 for wall in scene.architecture.walls
             ]
@@ -115,6 +116,7 @@ def dump_scene_yaml(scene: FloorPlanScene) -> str:
                     "to": [door.end_cm.x_cm, door.end_cm.y_cm],
                     "panel_length": door.panel_length_cm,
                     "opens_towards": door.opens_towards,
+                    "label": door.label,
                 }
                 for door in scene.architecture.doors
             ],
@@ -126,6 +128,7 @@ def dump_scene_yaml(scene: FloorPlanScene) -> str:
                     "z_range": [window.z_min_cm, window.z_max_cm],
                     "panel_count": window.panel_count,
                     "frame_cm": window.frame_cm,
+                    "label": window.label,
                 }
                 for window in scene.architecture.windows
             ],
@@ -194,6 +197,7 @@ def _extract_walls(room: dict[str, Any], dimensions: RoomDimensionsCm) -> list[W
                 ),
                 thickness_cm=float(segment.get("thickness_cm", 10.0)),
                 color=segment.get("color"),
+                label=segment.get("label"),
             )
             for index, segment in enumerate(walls_payload["segments"])
         ]
@@ -216,6 +220,7 @@ def _extract_walls(room: dict[str, Any], dimensions: RoomDimensionsCm) -> list[W
                     y_cm=float(bottom.get("at_y", 0.0)),
                 ),
                 color=bottom.get("color"),
+                label=bottom.get("label"),
             )
         )
     if right:
@@ -231,6 +236,7 @@ def _extract_walls(room: dict[str, Any], dimensions: RoomDimensionsCm) -> list[W
                     y_cm=float(right.get("to_y", dimensions.depth_y_cm)),
                 ),
                 color=right.get("color"),
+                label=right.get("label"),
             )
         )
     if top:
@@ -246,6 +252,7 @@ def _extract_walls(room: dict[str, Any], dimensions: RoomDimensionsCm) -> list[W
                     y_cm=float(top.get("at_y", dimensions.depth_y_cm)),
                 ),
                 color=top.get("color"),
+                label=top.get("label"),
             )
         )
     if left:
@@ -260,6 +267,7 @@ def _extract_walls(room: dict[str, Any], dimensions: RoomDimensionsCm) -> list[W
                     y_cm=float(left.get("to_y", dimensions.depth_y_cm)),
                 ),
                 color=left.get("color"),
+                label=left.get("label"),
             )
         )
 
@@ -301,11 +309,36 @@ def _extract_openings(
     dimensions: RoomDimensionsCm,
 ) -> tuple[list[DoorOpeningCm], list[WindowOpeningCm]]:
     features = room.get("features") or {}
-    doors: list[DoorOpeningCm] = []
-    windows: list[WindowOpeningCm] = []
+    doors = _extract_doors(features)
+    windows = _extract_windows(features, dimensions)
+    return (doors, windows)
 
+
+def _extract_doors(features: dict[str, Any]) -> list[DoorOpeningCm]:
+    doors: list[DoorOpeningCm] = []
+    doors_cfg = features.get("doors")
+    if isinstance(doors_cfg, list):
+        for index, item in enumerate(doors_cfg):
+            if not isinstance(item, dict):
+                continue
+            from_pair = item.get("from") or [0.0, 0.0]
+            to_pair = item.get("to") or [0.0, 0.0]
+            doors.append(
+                DoorOpeningCm(
+                    opening_id=str(item.get("id", f"door_{index}")),
+                    start_cm=Point2DCm(x_cm=float(from_pair[0]), y_cm=float(from_pair[1])),
+                    end_cm=Point2DCm(x_cm=float(to_pair[0]), y_cm=float(to_pair[1])),
+                    panel_length_cm=(
+                        _to_float(item.get("panel_length"))
+                        if item.get("panel_length") is not None
+                        else None
+                    ),
+                    opens_towards=item.get("opens_towards"),
+                    label=item.get("label"),
+                )
+            )
     door = features.get("door")
-    if isinstance(door, dict):
+    if isinstance(door, dict) and not doors:
         y_range = door.get("y_range") or [0.0, 0.0]
         y0, y1 = float(y_range[0]), float(y_range[1])
         doors.append(
@@ -315,10 +348,39 @@ def _extract_openings(
                 end_cm=Point2DCm(x_cm=0.0, y_cm=y1),
                 panel_length_cm=float(door.get("panel_length", abs(y1 - y0) or 30.0)),
                 opens_towards=door.get("opens_towards"),
+                label=door.get("label"),
             )
         )
+    return doors
 
+
+def _extract_windows(
+    features: dict[str, Any],
+    dimensions: RoomDimensionsCm,
+) -> list[WindowOpeningCm]:
+    windows: list[WindowOpeningCm] = []
     windows_cfg = features.get("windows")
+    if isinstance(windows_cfg, list):
+        for index, item in enumerate(windows_cfg):
+            if not isinstance(item, dict):
+                continue
+            from_pair = item.get("from") or [dimensions.length_x_cm, 0.0]
+            to_pair = item.get("to") or [dimensions.length_x_cm, dimensions.depth_y_cm]
+            z_range = item.get("z_range") or [None, None]
+            windows.append(
+                WindowOpeningCm(
+                    opening_id=str(item.get("id", f"window_{index}")),
+                    start_cm=Point2DCm(x_cm=float(from_pair[0]), y_cm=float(from_pair[1])),
+                    end_cm=Point2DCm(x_cm=float(to_pair[0]), y_cm=float(to_pair[1])),
+                    z_min_cm=float(z_range[0]) if z_range[0] is not None else None,
+                    z_max_cm=float(z_range[1]) if z_range[1] is not None else None,
+                    panel_count=int(item.get("panel_count", 1)),
+                    frame_cm=_to_float(item.get("frame_cm")),
+                    label=item.get("label"),
+                )
+            )
+        return windows
+
     if isinstance(windows_cfg, dict):
         y_range = windows_cfg.get("range_y") or [0.0, dimensions.depth_y_cm]
         y0, y1 = float(y_range[0]), float(y_range[1])
@@ -333,10 +395,10 @@ def _extract_openings(
                 z_max_cm=float(z_range[1]) if z_range[1] is not None else None,
                 panel_count=int(split.get("panels", 1)),
                 frame_cm=float(split.get("frame_cm", 0.0)),
+                label=windows_cfg.get("label"),
             )
         )
-
-    return (doors, windows)
+    return windows
 
 
 def _extract_furniture(payload: dict[str, Any]) -> list[FurniturePlacementCm]:

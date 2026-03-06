@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { FloorPlanPreviewPanel } from "./FloorPlanPreviewPanel";
 
@@ -44,5 +44,35 @@ describe("FloorPlanPreviewPanel", () => {
     expect(screen.getByText("Latest layout")).toBeInTheDocument();
     expect(screen.getByAltText("Latest floor plan")).toBeInTheDocument();
     expect(screen.getByText(/placement_out_of_bounds_x/i)).toBeInTheDocument();
+  });
+
+  it("closes modal when backdrop is clicked", () => {
+    render(
+      <FloorPlanPreviewPanel
+        preview={{
+          threadId: "thread-2",
+          caption: "Latest layout",
+          sceneRevision: 5,
+          sceneLevel: "detailed",
+          warnings: [],
+          legendItems: [],
+          images: [
+            {
+              attachment_id: "svg-2",
+              mime_type: "image/svg+xml",
+              uri: "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E",
+              width: 640,
+              height: 420,
+              file_name: "floor.svg",
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Open large view"));
+    expect(screen.getByAltText("Floor plan full view")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("floor-plan-backdrop"));
+    expect(screen.queryByAltText("Floor plan full view")).not.toBeInTheDocument();
   });
 });

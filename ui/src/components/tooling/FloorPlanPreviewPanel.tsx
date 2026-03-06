@@ -73,12 +73,19 @@ export function FloorPlanPreviewPanel({
       ) : null}
 
       {selectedUri ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-          <div className="max-w-[90vw] rounded bg-white p-4">
+        <div
+          className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/70 p-6"
+          onClick={() => setSelectedUri(null)}
+          data-testid="floor-plan-backdrop"
+        >
+          <div
+            className="max-w-[90vw] rounded bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <img alt="Floor plan full view" className="max-h-[82vh] max-w-[88vw]" src={selectedUri} />
             <div className="mt-3 flex justify-end">
               <button
-                className="rounded border px-3 py-1 text-sm"
+                className="rounded border bg-white px-3 py-1 text-sm shadow-sm"
                 onClick={() => setSelectedUri(null)}
                 type="button"
               >

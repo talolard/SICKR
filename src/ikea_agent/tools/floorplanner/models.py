@@ -47,6 +47,7 @@ class WallSegmentCm(BaseModel):
     end_cm: Point2DCm
     thickness_cm: float = Field(default=10.0, gt=0.0)
     color: str | None = None
+    label: str | None = None
 
 
 class DoorOpeningCm(BaseModel):
@@ -57,6 +58,16 @@ class DoorOpeningCm(BaseModel):
     end_cm: Point2DCm
     opens_towards: str | None = None
     panel_length_cm: float | None = Field(default=None, gt=0.0)
+    label: str | None = None
+
+    @model_validator(mode="after")
+    def validate_non_zero_span(self) -> DoorOpeningCm:
+        """Ensure door opening has a non-zero span."""
+
+        if self.start_cm.x_cm == self.end_cm.x_cm and self.start_cm.y_cm == self.end_cm.y_cm:
+            msg = "Door opening segment cannot be zero-length"
+            raise FloorPlannerValidationError(msg)
+        return self
 
 
 class WindowOpeningCm(BaseModel):
@@ -69,6 +80,7 @@ class WindowOpeningCm(BaseModel):
     z_max_cm: float | None = Field(default=None, ge=0.0)
     panel_count: int = Field(default=1, ge=1)
     frame_cm: float = Field(default=0.0, ge=0.0)
+    label: str | None = None
 
     @model_validator(mode="after")
     def validate_vertical_range(self) -> WindowOpeningCm:
@@ -80,6 +92,9 @@ class WindowOpeningCm(BaseModel):
             and self.z_max_cm < self.z_min_cm
         ):
             msg = "z_max_cm must be greater than or equal to z_min_cm"
+            raise FloorPlannerValidationError(msg)
+        if self.start_cm.x_cm == self.end_cm.x_cm and self.start_cm.y_cm == self.end_cm.y_cm:
+            msg = "Window opening segment cannot be zero-length"
             raise FloorPlannerValidationError(msg)
         return self
 
@@ -103,6 +118,55 @@ class ArchitectureScene(BaseModel):
             msg = "Wall ids must be unique"
             raise FloorPlannerValidationError(msg)
         return walls
+
+    @model_validator(mode="after")
+    def validate_openings_on_walls(self) -> ArchitectureScene:
+        """Require doors and windows to lie on existing wall segments."""
+
+        for door in self.doors:
+            if not any(
+                _segment_belongs_to_wall(door.start_cm, door.end_cm, wall) for wall in self.walls
+            ):
+                msg = f"Door `{door.opening_id}` must lie on a wall segment."
+                raise FloorPlannerValidationError(msg)
+        for window in self.windows:
+            if not any(
+                _segment_belongs_to_wall(window.start_cm, window.end_cm, wall)
+                for wall in self.walls
+            ):
+                msg = f"Window `{window.opening_id}` must lie on a wall segment."
+                raise FloorPlannerValidationError(msg)
+        return self
+
+
+def _point_on_segment(point: Point2DCm, start: Point2DCm, end: Point2DCm) -> bool:
+    """Return true when point lies on finite segment start->end."""
+
+    epsilon = 1e-3
+    dx = end.x_cm - start.x_cm
+    dy = end.y_cm - start.y_cm
+    length_sq = dx * dx + dy * dy
+    if length_sq <= epsilon:
+        return False
+
+    cross = (point.x_cm - start.x_cm) * dy - (point.y_cm - start.y_cm) * dx
+    if abs(cross) > epsilon * (abs(dx) + abs(dy) + 1.0):
+        return False
+
+    dot = (point.x_cm - start.x_cm) * dx + (point.y_cm - start.y_cm) * dy
+    return -epsilon <= dot <= length_sq + epsilon
+
+
+def _segment_belongs_to_wall(
+    opening_start: Point2DCm,
+    opening_end: Point2DCm,
+    wall: WallSegmentCm,
+) -> bool:
+    """Return true when opening endpoints both lie on the same wall segment."""
+
+    return _point_on_segment(opening_start, wall.start_cm, wall.end_cm) and _point_on_segment(
+        opening_end, wall.start_cm, wall.end_cm
+    )
 
 
 class FurniturePlacementCm(BaseModel):
@@ -375,4 +439,9 @@ def scene_to_summary(scene: FloorPlanScene) -> dict[str, Any]:
         "window_count": len(scene.architecture.windows),
         "placement_count": len(scene.placements),
         "fixture_count": fixture_count,
+        "wall_labels": [wall.label or wall.wall_id for wall in scene.architecture.walls],
+        "door_labels": [door.label or door.opening_id for door in scene.architecture.doors],
+        "window_labels": [
+            window.label or window.opening_id for window in scene.architecture.windows
+        ],
     }

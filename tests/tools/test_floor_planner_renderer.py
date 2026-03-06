@@ -32,10 +32,16 @@ def _scene() -> BaselineFloorPlanScene:
                         "start_cm": {"x_cm": 340.0, "y_cm": 260.0},
                         "end_cm": {"x_cm": 0.0, "y_cm": 260.0},
                     },
+                    {
+                        "wall_id": "w4",
+                        "start_cm": {"x_cm": 0.0, "y_cm": 260.0},
+                        "end_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                    },
                 ],
                 "doors": [
                     {
                         "opening_id": "d1",
+                        "label": "entrance door",
                         "start_cm": {"x_cm": 0.0, "y_cm": 230.0},
                         "end_cm": {"x_cm": 0.0, "y_cm": 260.0},
                     }
@@ -43,6 +49,7 @@ def _scene() -> BaselineFloorPlanScene:
                 "windows": [
                     {
                         "opening_id": "win1",
+                        "label": "kitchen window",
                         "start_cm": {"x_cm": 340.0, "y_cm": 0.0},
                         "end_cm": {"x_cm": 340.0, "y_cm": 190.0},
                     }
@@ -89,3 +96,5 @@ def test_renderer_svg_contains_expected_layers(tmp_path: Path) -> None:
     assert 'id="placements"' in svg_text
     assert 'id="elevation"' in svg_text
     assert 'id="legend"' in svg_text
+    assert "entrance door" in svg_text
+    assert "kitchen window" in svg_text

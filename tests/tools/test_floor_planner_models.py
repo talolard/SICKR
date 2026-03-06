@@ -8,6 +8,7 @@ from ikea_agent.tools.floorplanner.models import (
     FloorPlanRenderRequest,
     SceneChangeSet,
     apply_changes,
+    scene_to_summary,
 )
 from ikea_agent.tools.floorplanner.yaml_codec import dump_scene_yaml, parse_scene_yaml
 
@@ -37,6 +38,11 @@ def _scene_payload() -> dict[str, object]:
                     "start_cm": {"x_cm": 340.0, "y_cm": 260.0},
                     "end_cm": {"x_cm": 0.0, "y_cm": 260.0},
                 },
+                {
+                    "wall_id": "left",
+                    "start_cm": {"x_cm": 0.0, "y_cm": 260.0},
+                    "end_cm": {"x_cm": 0.0, "y_cm": 0.0},
+                },
             ],
         },
         "placements": [
@@ -55,7 +61,7 @@ def test_baseline_scene_accepts_valid_payload() -> None:
     scene = BaselineFloorPlanScene.model_validate(_scene_payload())
 
     assert scene.scene_level == "baseline"
-    assert len(scene.architecture.walls) == 3
+    assert len(scene.architecture.walls) == 4
     assert len(scene.placements) == 1
 
 
@@ -121,3 +127,50 @@ furniture:
     assert reparsed.architecture.dimensions_cm.length_x_cm == 340.0
     assert reparsed.architecture.dimensions_cm.depth_y_cm == 260.0
     assert len(reparsed.placements) == 1
+
+
+def test_architecture_rejects_door_not_on_wall() -> None:
+    payload = _scene_payload()
+    architecture = payload["architecture"]
+    assert isinstance(architecture, dict)
+    architecture["doors"] = [
+        {
+            "opening_id": "floating-door",
+            "start_cm": {"x_cm": 50.0, "y_cm": 50.0},
+            "end_cm": {"x_cm": 80.0, "y_cm": 50.0},
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="must lie on a wall segment"):
+        BaselineFloorPlanScene.model_validate(payload)
+
+
+def test_scene_summary_prefers_labels_for_openings_and_walls() -> None:
+    payload = _scene_payload()
+    architecture = payload["architecture"]
+    assert isinstance(architecture, dict)
+    walls = architecture["walls"]
+    assert isinstance(walls, list)
+    walls[0]["label"] = "bottom wall"
+    architecture["doors"] = [
+        {
+            "opening_id": "main-door",
+            "label": "entrance door",
+            "start_cm": {"x_cm": 0.0, "y_cm": 20.0},
+            "end_cm": {"x_cm": 0.0, "y_cm": 80.0},
+        }
+    ]
+    architecture["windows"] = [
+        {
+            "opening_id": "win-1",
+            "label": "kitchen window",
+            "start_cm": {"x_cm": 340.0, "y_cm": 80.0},
+            "end_cm": {"x_cm": 340.0, "y_cm": 180.0},
+        }
+    ]
+    scene = BaselineFloorPlanScene.model_validate(payload)
+    summary = scene_to_summary(scene)
+
+    assert "bottom wall" in summary["wall_labels"]
+    assert summary["door_labels"] == ["entrance door"]
+    assert summary["window_labels"] == ["kitchen window"]

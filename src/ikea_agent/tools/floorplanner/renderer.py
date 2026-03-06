@@ -164,6 +164,12 @@ class FloorPlannerRenderer:
                 f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
                 f'stroke="{color}" stroke-width="{width:.1f}" stroke-linecap="round"/>'
             )
+            if wall.label:
+                parts.append(
+                    f'<text x="{(x1 + x2) / 2:.1f}" y="{(y1 + y2) / 2 - 8:.1f}" '
+                    'font-size="11" text-anchor="middle" fill="#334155">'
+                    f"{wall.label}</text>"
+                )
 
         for door in scene.architecture.doors:
             x1, y1 = transform.to_px(door.start_cm)
@@ -174,9 +180,10 @@ class FloorPlannerRenderer:
             )
             mx = (x1 + x2) / 2
             my = (y1 + y2) / 2
+            door_label = door.label or "door"
             parts.append(
                 f'<text x="{mx:.1f}" y="{my - 8:.1f}" font-size="11" '
-                'text-anchor="middle" fill="#b91c1c">door</text>'
+                f'text-anchor="middle" fill="#b91c1c">{door_label}</text>'
             )
 
         for window in scene.architecture.windows:
@@ -185,6 +192,11 @@ class FloorPlannerRenderer:
             parts.append(
                 f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
                 'stroke="#0369a1" stroke-width="5" stroke-linecap="round"/>'
+            )
+            window_label = window.label or "window"
+            parts.append(
+                f'<text x="{(x1 + x2) / 2:.1f}" y="{(y1 + y2) / 2 - 8:.1f}" '
+                f'font-size="11" text-anchor="middle" fill="#0369a1">{window_label}</text>'
             )
 
         parts.append("</g>")
