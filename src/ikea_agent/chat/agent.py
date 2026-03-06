@@ -22,6 +22,7 @@ from ikea_agent.chat.graph import (
 )
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.config import get_settings
+from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.shared.types import (
     AttachmentRef,
@@ -224,6 +225,12 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
         if not hasattr(runtime, "session_factory"):
             return None
         return FloorPlanRepository(runtime.session_factory)
+
+    def _analysis_repository(ctx: RunContext[ChatAgentDeps]) -> AnalysisRepository | None:
+        runtime = ctx.deps.runtime
+        if not hasattr(runtime, "session_factory"):
+            return None
+        return AnalysisRepository(runtime.session_factory)
 
     @agent.tool
     async def run_search_graph(
@@ -517,10 +524,22 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             "detect_objects_in_image_start",
             extra=_telemetry_context(ctx),
         )
-        return await run_object_detection(
+        result = await run_object_detection(
             request=request,
             attachment_store=ctx.deps.attachment_store,
         )
+        repository = _analysis_repository(ctx)
+        if repository is not None:
+            repository.record_analysis(
+                tool_name="detect_objects_in_image",
+                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                run_id=ctx.deps.state.run_id,
+                input_asset_id=request.image.attachment_id,
+                request_json=request.model_dump(mode="json"),
+                result_json=result.model_dump(mode="json"),
+                detections=result.detections,
+            )
+        return result
 
     @agent.tool
     async def estimate_depth_map(
@@ -533,10 +552,22 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             "estimate_depth_map_start",
             extra=_telemetry_context(ctx),
         )
-        return await run_depth_estimation(
+        result = await run_depth_estimation(
             request=request,
             attachment_store=ctx.deps.attachment_store,
         )
+        repository = _analysis_repository(ctx)
+        if repository is not None:
+            repository.record_analysis(
+                tool_name="estimate_depth_map",
+                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                run_id=ctx.deps.state.run_id,
+                input_asset_id=request.image.attachment_id,
+                request_json=request.model_dump(mode="json"),
+                result_json=result.model_dump(mode="json"),
+                detections=[],
+            )
+        return result
 
     @agent.tool
     async def segment_image_with_prompt(
@@ -549,10 +580,22 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             "segment_image_with_prompt_start",
             extra=_telemetry_context(ctx),
         )
-        return await run_image_segmentation(
+        result = await run_image_segmentation(
             request=request,
             attachment_store=ctx.deps.attachment_store,
         )
+        repository = _analysis_repository(ctx)
+        if repository is not None:
+            repository.record_analysis(
+                tool_name="segment_image_with_prompt",
+                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                run_id=ctx.deps.state.run_id,
+                input_asset_id=request.image.attachment_id,
+                request_json=request.model_dump(mode="json"),
+                result_json=result.model_dump(mode="json"),
+                detections=[],
+            )
+        return result
 
     @agent.tool
     async def analyze_room_photo(
@@ -573,9 +616,24 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
                 image=AttachmentRefPayload.from_ref(ctx.deps.state.attachments[0])
             )
 
-        return await run_room_photo_analysis(
+        result = await run_room_photo_analysis(
             request=resolved_request,
             attachment_store=ctx.deps.attachment_store,
         )
+        repository = _analysis_repository(ctx)
+        if repository is not None:
+            detections = (
+                result.object_detection.detections if result.object_detection is not None else []
+            )
+            repository.record_analysis(
+                tool_name="analyze_room_photo",
+                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                run_id=ctx.deps.state.run_id,
+                input_asset_id=resolved_request.image.attachment_id,
+                request_json=resolved_request.model_dump(mode="json"),
+                result_json=result.model_dump(mode="json"),
+                detections=detections,
+            )
+        return result
 
     return agent

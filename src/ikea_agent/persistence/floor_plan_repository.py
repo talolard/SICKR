@@ -11,6 +11,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql import Select
 
 from ikea_agent.persistence.models import (
     AgentRunRecord,
@@ -98,12 +99,16 @@ class FloorPlanRepository:
         """Load the highest revision for one thread."""
 
         with self._session_factory() as session:
-            row = session.execute(
-                _snapshot_select_statement()
-                .where(FloorPlanRevisionRecord.thread_id == thread_id)
-                .order_by(FloorPlanRevisionRecord.revision.desc())
-                .limit(1)
-            ).mappings().one_or_none()
+            row = (
+                session.execute(
+                    _snapshot_select_statement()
+                    .where(FloorPlanRevisionRecord.thread_id == thread_id)
+                    .order_by(FloorPlanRevisionRecord.revision.desc())
+                    .limit(1)
+                )
+                .mappings()
+                .one_or_none()
+            )
         if row is None:
             return None
         return _snapshot_from_row(row)
@@ -112,12 +117,16 @@ class FloorPlanRepository:
         """Load a specific revision for one thread."""
 
         with self._session_factory() as session:
-            row = session.execute(
-                _snapshot_select_statement()
-                .where(FloorPlanRevisionRecord.thread_id == thread_id)
-                .where(FloorPlanRevisionRecord.revision == revision)
-                .limit(1)
-            ).mappings().one_or_none()
+            row = (
+                session.execute(
+                    _snapshot_select_statement()
+                    .where(FloorPlanRevisionRecord.thread_id == thread_id)
+                    .where(FloorPlanRevisionRecord.revision == revision)
+                    .limit(1)
+                )
+                .mappings()
+                .one_or_none()
+            )
         if row is None:
             return None
         return _snapshot_from_row(row)
@@ -146,8 +155,7 @@ class FloorPlanRepository:
             session.execute(
                 update(FloorPlanRevisionRecord)
                 .where(
-                    FloorPlanRevisionRecord.floor_plan_revision_id
-                    == target.floor_plan_revision_id
+                    FloorPlanRevisionRecord.floor_plan_revision_id == target.floor_plan_revision_id
                 )
                 .values(
                     confirmed_at=now,
@@ -204,7 +212,7 @@ class FloorPlanRepository:
         ).scalar_one_or_none()
 
 
-def _snapshot_select_statement() -> object:
+def _snapshot_select_statement() -> Select[tuple[object, ...]]:
     return select(
         FloorPlanRevisionRecord.floor_plan_revision_id,
         FloorPlanRevisionRecord.thread_id,
@@ -233,9 +241,7 @@ def _snapshot_from_row(row: RowMapping) -> FloorPlanRevisionSnapshot:
         png_asset_id=str(row["png_asset_id"]) if row["png_asset_id"] is not None else None,
         confirmed_at=str(row["confirmed_at"]) if row["confirmed_at"] is not None else None,
         confirmed_by_run_id=(
-            str(row["confirmed_by_run_id"])
-            if row["confirmed_by_run_id"] is not None
-            else None
+            str(row["confirmed_by_run_id"]) if row["confirmed_by_run_id"] is not None else None
         ),
         confirmation_note=str(row["confirmation_note"])
         if row["confirmation_note"] is not None

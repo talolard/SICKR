@@ -217,3 +217,26 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Timestamp fields are returned as ISO-like strings from repository projections to avoid DuckDB timezone decoding issues in this environment.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.7` and persist image-analysis runs/detections/derived artifacts with thread/image associations.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.7` completed
+- Read this file at task start.
+- Added image-analysis persistence repository:
+  - `src/ikea_agent/persistence/analysis_repository.py`
+  - Persists `analysis_runs` rows and normalized `analysis_detections` linked to source image asset ids.
+  - Handles missing input-asset references safely by skipping persistence.
+- Wired agent image-analysis tools to persist request/result payloads:
+  - `src/ikea_agent/chat/agent.py`
+  - Tools covered: `detect_objects_in_image`, `estimate_depth_map`, `segment_image_with_prompt`, `analyze_room_photo`.
+  - Stores thread/run linkage from shared state and uses source image attachment id for associations.
+- Added tests validating associations by thread and source image:
+  - `tests/persistence/test_analysis_repository.py`
+  - Verifies run row + detection rows and missing-input behavior.
+- Migrations created/updated:
+  - No new migration revision for this task (uses existing `analysis_runs` and `analysis_detections` schema).
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/persistence/analysis_repository.py src/ikea_agent/chat/agent.py tests/persistence/test_analysis_repository.py`
+  - `uv run pytest tests/persistence/test_analysis_repository.py tests/tools/test_image_analysis_tool.py tests/tools/test_image_analysis_core.py tests/chat/test_deps.py -q` (10 passed)
+- Risks / known gaps:
+  - Current association storage is via `result_json` + asset ids; dedicated join tables for derived output assets can be added later if query patterns require stricter relational joins.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.8` and persist semantic search snapshots/results for thread-level replay and inspection.
