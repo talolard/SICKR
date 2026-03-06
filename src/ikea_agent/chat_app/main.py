@@ -18,6 +18,15 @@ from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.thread_api_models import (
+    AnalysisListItem,
+    AssetListItem,
+    DetectionListItem,
+    FloorPlanRevisionListItem,
+    ThreadDetailItem,
+    ThreadListItem,
+    ThreadTitleUpdateRequest,
+)
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
@@ -26,6 +35,7 @@ from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
     extract_last_user_prompt,
 )
+from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 from ikea_agent.shared.types import ImageToolOutput
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
@@ -127,6 +137,64 @@ def _register_generated_image_routes(app: FastAPI, attachment_store: AttachmentS
         return asdict(output)
 
 
+def _register_thread_data_routes(  # noqa: C901
+    app: FastAPI,
+    *,
+    thread_query_repository: ThreadQueryRepository,
+) -> None:
+    @app.get("/api/threads", response_model=list[ThreadListItem])
+    async def list_threads() -> list[ThreadListItem]:
+        return thread_query_repository.list_threads()
+
+    @app.get("/api/threads/{thread_id}", response_model=ThreadDetailItem)
+    async def get_thread(thread_id: str) -> ThreadDetailItem:
+        item = thread_query_repository.get_thread(thread_id=thread_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Thread not found.")
+        return item
+
+    @app.patch("/api/threads/{thread_id}/title", response_model=ThreadDetailItem)
+    async def update_thread_title(
+        thread_id: str,
+        payload: ThreadTitleUpdateRequest,
+    ) -> ThreadDetailItem:
+        item = thread_query_repository.update_thread_title(
+            thread_id=thread_id,
+            title=payload.title,
+        )
+        if item is None:
+            raise HTTPException(status_code=404, detail="Thread not found.")
+        return item
+
+    @app.get("/api/threads/{thread_id}/assets", response_model=list[AssetListItem])
+    async def list_thread_assets(thread_id: str) -> list[AssetListItem]:
+        return thread_query_repository.list_assets(thread_id=thread_id)
+
+    @app.get(
+        "/api/threads/{thread_id}/floor-plan-revisions",
+        response_model=list[FloorPlanRevisionListItem],
+    )
+    async def list_thread_floor_plan_revisions(thread_id: str) -> list[FloorPlanRevisionListItem]:
+        return thread_query_repository.list_floor_plan_revisions(thread_id=thread_id)
+
+    @app.get("/api/threads/{thread_id}/analyses", response_model=list[AnalysisListItem])
+    async def list_thread_analyses(thread_id: str) -> list[AnalysisListItem]:
+        return thread_query_repository.list_analyses(thread_id=thread_id)
+
+    @app.get(
+        "/api/threads/{thread_id}/images/{asset_id}/detections",
+        response_model=list[DetectionListItem],
+    )
+    async def list_thread_detections_for_image(
+        thread_id: str,
+        asset_id: str,
+    ) -> list[DetectionListItem]:
+        return thread_query_repository.list_detections_for_image(
+            thread_id=thread_id,
+            input_asset_id=asset_id,
+        )
+
+
 def _register_ag_ui_route(
     app: FastAPI,
     *,
@@ -219,6 +287,11 @@ def create_app(
         if hasattr(chat_runtime, "session_factory")
         else None
     )
+    thread_query_repository = (
+        ThreadQueryRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
     deps = ChatAgentDeps(
         runtime=chat_runtime,
         attachment_store=attachment_store,
@@ -227,6 +300,8 @@ def create_app(
     )
     _register_attachment_routes(app, attachment_store)
     _register_generated_image_routes(app, attachment_store)
+    if thread_query_repository is not None:
+        _register_thread_data_routes(app, thread_query_repository=thread_query_repository)
 
     if mount_ag_ui:
         _register_ag_ui_route(

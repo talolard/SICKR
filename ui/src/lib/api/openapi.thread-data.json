@@ -1,0 +1,870 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ikea_agent chat runtime",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/attachments": {
+      "post": {
+        "summary": "Upload Attachment",
+        "description": "Upload one image and return a typed attachment reference.",
+        "operationId": "upload_attachment_attachments_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Upload Attachment Attachments Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/attachments/{attachment_id}": {
+      "get": {
+        "summary": "Get Attachment",
+        "description": "Serve one previously uploaded attachment by id.",
+        "operationId": "get_attachment_attachments__attachment_id__get",
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attachment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/generated-images/floor-plan": {
+      "post": {
+        "summary": "Generate Floor Plan Image",
+        "description": "Generate and store a simple floor plan preview artifact.",
+        "operationId": "generate_floor_plan_image_generated_images_floor_plan_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Generate Floor Plan Image Generated Images Floor Plan Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads": {
+      "get": {
+        "summary": "List Threads",
+        "operationId": "list_threads_api_threads_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ThreadListItem"
+                  },
+                  "type": "array",
+                  "title": "Response List Threads Api Threads Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}": {
+      "get": {
+        "summary": "Get Thread",
+        "operationId": "get_thread_api_threads__thread_id__get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDetailItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}/title": {
+      "patch": {
+        "summary": "Update Thread Title",
+        "operationId": "update_thread_title_api_threads__thread_id__title_patch",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadTitleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDetailItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}/assets": {
+      "get": {
+        "summary": "List Thread Assets",
+        "operationId": "list_thread_assets_api_threads__thread_id__assets_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssetListItem"
+                  },
+                  "title": "Response List Thread Assets Api Threads  Thread Id  Assets Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}/floor-plan-revisions": {
+      "get": {
+        "summary": "List Thread Floor Plan Revisions",
+        "operationId": "list_thread_floor_plan_revisions_api_threads__thread_id__floor_plan_revisions_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FloorPlanRevisionListItem"
+                  },
+                  "title": "Response List Thread Floor Plan Revisions Api Threads  Thread Id  Floor Plan Revisions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}/analyses": {
+      "get": {
+        "summary": "List Thread Analyses",
+        "operationId": "list_thread_analyses_api_threads__thread_id__analyses_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalysisListItem"
+                  },
+                  "title": "Response List Thread Analyses Api Threads  Thread Id  Analyses Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/threads/{thread_id}/images/{asset_id}/detections": {
+      "get": {
+        "summary": "List Thread Detections For Image",
+        "operationId": "list_thread_detections_for_image_api_threads__thread_id__images__asset_id__detections_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DetectionListItem"
+                  },
+                  "title": "Response List Thread Detections For Image Api Threads  Thread Id  Images  Asset Id  Detections Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisListItem": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          },
+          "input_asset_id": {
+            "type": "string",
+            "title": "Input Asset Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "run_id",
+          "tool_name",
+          "input_asset_id",
+          "created_at"
+        ],
+        "title": "AnalysisListItem",
+        "description": "One persisted image-analysis run for a thread."
+      },
+      "AssetListItem": {
+        "properties": {
+          "asset_id": {
+            "type": "string",
+            "title": "Asset Id"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "created_by_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Tool"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Name"
+          },
+          "storage_path": {
+            "type": "string",
+            "title": "Storage Path"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_id",
+          "run_id",
+          "created_by_tool",
+          "kind",
+          "mime_type",
+          "file_name",
+          "storage_path",
+          "size_bytes",
+          "created_at"
+        ],
+        "title": "AssetListItem",
+        "description": "One stored asset entry for thread inspection UIs."
+      },
+      "DetectionListItem": {
+        "properties": {
+          "analysis_detection_id": {
+            "type": "string",
+            "title": "Analysis Detection Id"
+          },
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "ordinal": {
+            "type": "integer",
+            "title": "Ordinal"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "bbox_x1_px": {
+            "type": "integer",
+            "title": "Bbox X1 Px"
+          },
+          "bbox_y1_px": {
+            "type": "integer",
+            "title": "Bbox Y1 Px"
+          },
+          "bbox_x2_px": {
+            "type": "integer",
+            "title": "Bbox X2 Px"
+          },
+          "bbox_y2_px": {
+            "type": "integer",
+            "title": "Bbox Y2 Px"
+          },
+          "bbox_x1_norm": {
+            "type": "number",
+            "title": "Bbox X1 Norm"
+          },
+          "bbox_y1_norm": {
+            "type": "number",
+            "title": "Bbox Y1 Norm"
+          },
+          "bbox_x2_norm": {
+            "type": "number",
+            "title": "Bbox X2 Norm"
+          },
+          "bbox_y2_norm": {
+            "type": "number",
+            "title": "Bbox Y2 Norm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_detection_id",
+          "analysis_id",
+          "ordinal",
+          "label",
+          "bbox_x1_px",
+          "bbox_y1_px",
+          "bbox_x2_px",
+          "bbox_y2_px",
+          "bbox_x1_norm",
+          "bbox_y1_norm",
+          "bbox_x2_norm",
+          "bbox_y2_norm"
+        ],
+        "title": "DetectionListItem",
+        "description": "Normalized detection row associated with one input image."
+      },
+      "FloorPlanRevisionListItem": {
+        "properties": {
+          "floor_plan_revision_id": {
+            "type": "string",
+            "title": "Floor Plan Revision Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "scene_level": {
+            "type": "string",
+            "title": "Scene Level"
+          },
+          "svg_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Svg Asset Id"
+          },
+          "png_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Png Asset Id"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "confirmed_by_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed By Run Id"
+          },
+          "confirmation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Note"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "floor_plan_revision_id",
+          "revision",
+          "scene_level",
+          "svg_asset_id",
+          "png_asset_id",
+          "confirmed_at",
+          "confirmed_by_run_id",
+          "confirmation_note",
+          "summary",
+          "created_at"
+        ],
+        "title": "FloorPlanRevisionListItem",
+        "description": "One persisted floor-plan revision entry for a thread."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ThreadDetailItem": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "run_count": {
+            "type": "integer",
+            "title": "Run Count"
+          },
+          "asset_count": {
+            "type": "integer",
+            "title": "Asset Count"
+          },
+          "floor_plan_revision_count": {
+            "type": "integer",
+            "title": "Floor Plan Revision Count"
+          },
+          "analysis_count": {
+            "type": "integer",
+            "title": "Analysis Count"
+          },
+          "search_count": {
+            "type": "integer",
+            "title": "Search Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "title",
+          "status",
+          "last_activity_at",
+          "run_count",
+          "asset_count",
+          "floor_plan_revision_count",
+          "analysis_count",
+          "search_count"
+        ],
+        "title": "ThreadDetailItem",
+        "description": "Thread detail including aggregate child counts."
+      },
+      "ThreadListItem": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "title",
+          "status",
+          "last_activity_at"
+        ],
+        "title": "ThreadListItem",
+        "description": "Lightweight thread summary for thread list UIs."
+      },
+      "ThreadTitleUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ThreadTitleUpdateRequest",
+        "description": "Request payload to set a user-visible thread title."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

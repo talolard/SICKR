@@ -7,6 +7,7 @@ import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { useThreadSession } from "@/app/CopilotKitProviders";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
+import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
 import { subscribeFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
@@ -258,6 +259,7 @@ export default function Home(): ReactElement {
             </button>
           </div>
         ) : null}
+        {threadId ? <ThreadDataPanel threadId={threadId} /> : null}
         <p className="text-xs text-gray-500">
           Debug harness: <a className="underline" href="/debug/agui-harness">/debug/agui-harness</a>
         </p>

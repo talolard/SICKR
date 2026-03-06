@@ -262,3 +262,41 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Query replay currently persists semantic query + filters + ranked outputs, but does not yet persist full intermediate candidate vectors; current snapshot is focused on user-visible auditability.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.9` and expose typed FastAPI thread-data APIs plus generated TypeScript client integration for UI consumption.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.9` completed
+- Read this file at task start.
+- Added typed FastAPI thread-data APIs:
+  - `src/ikea_agent/chat_app/thread_api_models.py`
+  - `src/ikea_agent/persistence/thread_query_repository.py`
+  - `src/ikea_agent/chat_app/main.py`
+  - Routes added:
+    - `GET /api/threads`
+    - `GET /api/threads/{thread_id}`
+    - `PATCH /api/threads/{thread_id}/title`
+    - `GET /api/threads/{thread_id}/assets`
+    - `GET /api/threads/{thread_id}/floor-plan-revisions`
+    - `GET /api/threads/{thread_id}/analyses`
+    - `GET /api/threads/{thread_id}/images/{asset_id}/detections`
+- Added route tests:
+  - `tests/chat/test_thread_api.py`
+  - Seeds thread/run/asset/floor-plan/analysis/search rows and validates all new API responses.
+- Generated TypeScript types from OpenAPI and added typed client wrappers:
+  - OpenAPI snapshot: `ui/src/lib/api/openapi.thread-data.json`
+  - Generated types: `ui/src/lib/api/generated.ts`
+  - Typed client wrapper: `ui/src/lib/api/threadDataClient.ts`
+- Added UI integration for non-chat panel using generated-client types:
+  - `ui/src/components/thread/ThreadDataPanel.tsx`
+  - `ui/src/app/page.tsx` now renders this panel per active thread.
+  - Added backend proxy route:
+    - `ui/src/app/api/thread-data/[...segments]/route.ts`
+- Migrations created/updated:
+  - No new migration revision for this task.
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/chat_app/main.py src/ikea_agent/chat_app/thread_api_models.py src/ikea_agent/persistence/thread_query_repository.py tests/chat/test_thread_api.py`
+  - `uv run pytest tests/chat/test_thread_api.py tests/chat/test_api.py -q` (6 passed)
+  - `pnpm -C ui exec tsc --noEmit` (passed)
+- Risks / known gaps:
+  - OpenAPI generation currently runs via ad-hoc command sequence; adding a dedicated script target would make regeneration more discoverable.
+  - Thread-title updates mutate `app.threads.title` directly; behavior is validated locally but should be monitored under higher-write concurrency.
+- Next step recommendation:
+  - Close epic `tal_maria_ikea-l18` after final tidy/commit and note future enhancements (rooms grouping, richer UI panels) as follow-up beads.
