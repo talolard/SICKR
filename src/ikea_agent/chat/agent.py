@@ -24,6 +24,7 @@ from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
+from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     AttachmentRef,
     ImageToolOutput,
@@ -232,6 +233,12 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
             return None
         return AnalysisRepository(runtime.session_factory)
 
+    def _search_repository(ctx: RunContext[ChatAgentDeps]) -> SearchRepository | None:
+        runtime = ctx.deps.runtime
+        if not hasattr(runtime, "session_factory"):
+            return None
+        return SearchRepository(runtime.session_factory)
+
     @agent.tool
     async def run_search_graph(
         ctx: RunContext[ChatAgentDeps],
@@ -267,12 +274,24 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901, PLR0915
                 **_telemetry_context(ctx),
             },
         )
-        return SearchGraphToolResult(
+        output = SearchGraphToolResult(
             results=diversified.results,
             warning=diversified.warning,
             total_candidates=len(result.output.product_matches),
             returned_count=len(diversified.results),
         )
+        search_repository = _search_repository(ctx)
+        if search_repository is not None:
+            search_repository.record_search_run(
+                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                run_id=ctx.deps.state.run_id,
+                query_text=semantic_query,
+                filters=filters,
+                warning=diversified.warning,
+                total_candidates=len(result.output.product_matches),
+                results=diversified.results,
+            )
+        return output
 
     @agent.tool
     async def list_uploaded_images(ctx: RunContext[ChatAgentDeps]) -> list[AttachmentRef]:

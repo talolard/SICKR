@@ -240,3 +240,25 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Current association storage is via `result_json` + asset ids; dedicated join tables for derived output assets can be added later if query patterns require stricter relational joins.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.8` and persist semantic search snapshots/results for thread-level replay and inspection.
+
+### 2026-03-06 - Task `tal_maria_ikea-l18.8` completed
+- Read this file at task start.
+- Added durable search snapshot repository:
+  - `src/ikea_agent/persistence/search_repository.py`
+  - Persists `search_runs` (query, filters, warnings, candidate counts) and ranked `search_results` rows.
+  - Provides thread-level lookup via `list_search_runs(thread_id=...)`.
+- Wired search snapshot persistence into agent tool flow:
+  - `src/ikea_agent/chat/agent.py`
+  - `run_search_graph` now stores each query run with filters/warning metadata and returned result rows.
+- Added tests covering representative filter serialization and retrieval ordering:
+  - `tests/persistence/test_search_repository.py`
+  - Verifies nested filter serialization, warning payload capture, ranked rows, and newest-first lookup.
+- Migrations created/updated:
+  - No new migration revision for this task (uses existing `search_runs` and `search_results` schema).
+- Commands/tests run:
+  - `uv run ruff check src/ikea_agent/persistence/search_repository.py src/ikea_agent/chat/agent.py tests/persistence/test_search_repository.py`
+  - `uv run pytest tests/persistence/test_search_repository.py tests/chat/test_runtime.py -q` (5 passed)
+- Risks / known gaps:
+  - Query replay currently persists semantic query + filters + ranked outputs, but does not yet persist full intermediate candidate vectors; current snapshot is focused on user-visible auditability.
+- Next step recommendation:
+  - Claim `tal_maria_ikea-l18.9` and expose typed FastAPI thread-data APIs plus generated TypeScript client integration for UI consumption.
