@@ -27,6 +27,8 @@ describe("floorPlanPreviewEvents", () => {
       sceneLevel: "baseline",
       warnings: [],
       legendItems: ["Walls: dark strokes"],
+      scene: null,
+      sceneSummary: null,
     });
 
     expect(listener).toHaveBeenCalledTimes(1);

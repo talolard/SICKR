@@ -26,6 +26,8 @@ describe("FloorPlanPreviewPanel", () => {
             },
           ],
           legendItems: ["Walls"],
+          scene: null,
+          sceneSummary: null,
           images: [
             {
               attachment_id: "svg-1",
@@ -56,6 +58,8 @@ describe("FloorPlanPreviewPanel", () => {
           sceneLevel: "detailed",
           warnings: [],
           legendItems: [],
+          scene: null,
+          sceneSummary: null,
           images: [
             {
               attachment_id: "svg-2",

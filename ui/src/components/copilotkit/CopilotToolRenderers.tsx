@@ -13,6 +13,10 @@ import {
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { AttachmentRef } from "@/lib/attachments";
 import { publishFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
+import {
+  buildFloorPlanSnapshot,
+  type FloorPlanBridgeStatus,
+} from "@/lib/floorPlanPreviewParser";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type ImageToolOutput = {
@@ -185,7 +189,7 @@ type CopilotToolRenderersProps = {
 type FloorPlanSnapshot = Omit<FloorPlanPreviewState, "threadId">;
 
 type FloorPlanRenderBridgeProps = {
-  status: "queued" | "executing" | "complete" | "failed";
+  status: FloorPlanBridgeStatus;
   result: unknown;
   onFloorPlanRendered?: (snapshot: FloorPlanSnapshot) => void;
 };
@@ -200,18 +204,8 @@ function FloorPlanRenderBridge({
   const floorPlanResult = parseFloorPlanResult(result);
 
   const snapshot = useMemo<FloorPlanSnapshot | null>(() => {
-    if (status !== "complete" || failureMessage || !imageOutput) {
-      return null;
-    }
-    return {
-      caption: floorPlanResult?.caption ?? imageOutput.caption,
-      images: imageOutput.images,
-      sceneRevision: floorPlanResult?.scene_revision ?? 0,
-      sceneLevel: floorPlanResult?.scene_level ?? "baseline",
-      warnings: floorPlanResult?.warnings ?? [],
-      legendItems: floorPlanResult?.legend_items ?? [],
-    };
-  }, [failureMessage, floorPlanResult, imageOutput, status]);
+    return buildFloorPlanSnapshot(status, result);
+  }, [result, status]);
 
   useEffect(() => {
     if (!snapshot) {
