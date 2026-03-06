@@ -14,6 +14,11 @@ from ikea_agent.shared.types import AttachmentRef
 class ChatAgentState(BaseModel):
     """State shared between CopilotKit UI and PydanticAI agent runs."""
 
+    session_id: str | None = None
+    branch_from_session_id: str | None = None
+    labels: list[str] = Field(default_factory=list)
+    eval_dataset_name: str | None = None
+    eval_case_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)
 
 

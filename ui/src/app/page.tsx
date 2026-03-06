@@ -7,6 +7,7 @@ import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
+import { getOrCreateSessionId } from "@/lib/sessionStore";
 
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
@@ -21,11 +22,23 @@ function resolveAttachmentUri(uri: string): string {
 export default function Home(): ReactElement {
   const { agent } = useAgent({ agentId: "ikea_agent" });
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const attachmentFilesRef = useRef<Record<string, File>>({});
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const resolvedSessionId = getOrCreateSessionId(window.localStorage);
+    setSessionId(resolvedSessionId);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
     const readyAttachments = attachments
       .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
       .map((attachment) => attachment.attachmentRef as AttachmentRef)
@@ -33,15 +46,17 @@ export default function Home(): ReactElement {
         ...attachment,
         uri: resolveAttachmentUri(attachment.uri),
       }));
+    // TODO: support explicit "continue thread" vs "branch thread" semantics.
     const previousState =
       typeof agent.state === "object" && agent.state !== null
         ? (agent.state as Record<string, unknown>)
         : {};
     agent.setState({
       ...previousState,
+      session_id: sessionId,
       attachments: readyAttachments,
     });
-  }, [agent, attachments]);
+  }, [agent, attachments, sessionId]);
 
   const setAttachmentProgress = (localId: string, progress: number): void => {
     setAttachments((current) =>

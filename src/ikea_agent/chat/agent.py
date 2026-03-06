@@ -116,6 +116,12 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
         output_type=str,
     )
 
+    def _telemetry_context(ctx: RunContext[ChatAgentDeps]) -> dict[str, str | None]:
+        return {
+            "session_id": ctx.deps.state.session_id,
+            "branch_from_session_id": ctx.deps.state.branch_from_session_id,
+        }
+
     @agent.tool
     async def run_search_graph(
         ctx: RunContext[ChatAgentDeps],
@@ -136,6 +142,7 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
             extra={
                 "query_text": semantic_query,
                 "result_count": len(result.output.product_matches),
+                **_telemetry_context(ctx),
             },
         )
         return result.output.product_matches[:limit]
@@ -144,6 +151,13 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     async def list_uploaded_images(ctx: RunContext[ChatAgentDeps]) -> list[AttachmentRef]:
         """List uploaded images from AG-UI shared state."""
 
+        logger.info(
+            "list_uploaded_images",
+            extra={
+                "attachment_count": len(ctx.deps.state.attachments),
+                **_telemetry_context(ctx),
+            },
+        )
         return ctx.deps.state.attachments
 
     @agent.tool_plain
@@ -177,6 +191,10 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
         try:
             result = run_floor_planner(request.model_copy(update={"include_image_bytes": False}))
         except ValueError as exc:
+            logger.exception(
+                "render_floor_plan_failed",
+                extra=_telemetry_context(ctx),
+            )
             raise ModelRetry(
                 "render_floor_plan failed. Correct the `elements` payload (wall segments, "
                 "door/window anchors, orientations, lengths) and retry. "
@@ -198,6 +216,16 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
             mime_type="image/png",
             filename="floor-plan.png",
         )
+        logger.info(
+            "render_floor_plan_completed",
+            extra={
+                "output_attachment_id": stored.ref.attachment_id,
+                "wall_count": result.wall_count,
+                "door_count": result.door_count,
+                "window_count": result.window_count,
+                **_telemetry_context(ctx),
+            },
+        )
         return ImageToolOutput(
             caption=(
                 f"{result.message} Walls: {result.wall_count}, doors: {result.door_count}, "
@@ -213,6 +241,10 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     ) -> ObjectDetectionToolResult:
         """Detect objects in one uploaded image using Florence object detection."""
 
+        logger.info(
+            "detect_objects_in_image_start",
+            extra=_telemetry_context(ctx),
+        )
         return await run_object_detection(
             request=request,
             attachment_store=ctx.deps.attachment_store,
@@ -225,6 +257,10 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     ) -> DepthEstimationToolResult:
         """Estimate a relative depth map for one uploaded image using Marigold."""
 
+        logger.info(
+            "estimate_depth_map_start",
+            extra=_telemetry_context(ctx),
+        )
         return await run_depth_estimation(
             request=request,
             attachment_store=ctx.deps.attachment_store,
@@ -237,6 +273,10 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     ) -> SegmentationToolResult:
         """Create prompt-driven segmentation masks for one uploaded image using SAM."""
 
+        logger.info(
+            "segment_image_with_prompt_start",
+            extra=_telemetry_context(ctx),
+        )
         return await run_image_segmentation(
             request=request,
             attachment_store=ctx.deps.attachment_store,
@@ -249,6 +289,10 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
     ) -> RoomPhotoAnalysisToolResult:
         """Run combined room-photo understanding (object detection + depth)."""
 
+        logger.info(
+            "analyze_room_photo_start",
+            extra=_telemetry_context(ctx),
+        )
         resolved_request = request
         if resolved_request is None:
             if not ctx.deps.state.attachments:
