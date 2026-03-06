@@ -26,6 +26,7 @@ dependencies = [
   "sqlalchemy>=2.0.44",
   "setuptools<81",
   "structlog>=25.4.0",
+  "usd-core>=24.8",
   "uvicorn>=0.40.0",
 ]
 

@@ -18,6 +18,10 @@ from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.openusd_ingest import (
+    OpenUsdValidationError,
+    inspect_openusd_bytes,
+)
 from ikea_agent.chat_app.thread_api_models import (
     AnalysisListItem,
     AssetListItem,
@@ -30,6 +34,7 @@ from ikea_agent.chat_app.thread_api_models import (
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
+from ikea_agent.persistence.room_3d_repository import Room3DRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
@@ -135,6 +140,65 @@ def _register_generated_image_routes(app: FastAPI, attachment_store: AttachmentS
             images=[stored.ref],
         )
         return asdict(output)
+
+
+def _register_openusd_routes(
+    app: FastAPI,
+    *,
+    attachment_store: AttachmentStore,
+    room_3d_repository: Room3DRepository | None,
+) -> None:
+    @app.post("/room-3d/openusd-ingest")
+    async def ingest_openusd_asset(request: Request) -> dict[str, object]:
+        """Validate one OpenUSD upload and persist room 3D asset metadata."""
+
+        filename = request.headers.get("x-filename")
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing required header `x-filename`.")
+        body = await request.body()
+        if len(body) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="OpenUSD upload exceeds 10MB limit.",
+            )
+        try:
+            inspection = inspect_openusd_bytes(content=body, filename=filename)
+        except OpenUsdValidationError as exc:
+            raise HTTPException(
+                status_code=415,
+                detail={"code": exc.code, "message": exc.message},
+            ) from exc
+
+        stored = attachment_store.save_bytes(
+            content=body,
+            mime_type="model/vnd.usd",
+            filename=filename,
+            thread_id=request.headers.get("x-thread-id") or None,
+            run_id=request.headers.get("x-run-id") or None,
+            kind="room_3d_usd",
+        )
+        if room_3d_repository is None:
+            return {
+                "room_3d_asset_id": None,
+                "source_asset": asdict(stored.ref),
+                "usd_format": inspection.usd_format,
+                "metadata": inspection.metadata,
+            }
+
+        thread_id = request.headers.get("x-thread-id") or "anonymous-thread"
+        room_asset = room_3d_repository.create_room_3d_asset(
+            thread_id=thread_id,
+            source_asset_id=stored.ref.attachment_id,
+            usd_format=inspection.usd_format,
+            metadata=inspection.metadata,
+            run_id=request.headers.get("x-run-id") or None,
+        )
+        return {
+            "room_3d_asset_id": room_asset.room_3d_asset_id,
+            "source_asset": asdict(stored.ref),
+            "usd_format": room_asset.usd_format,
+            "metadata": room_asset.metadata,
+        }
 
 
 def _register_thread_data_routes(  # noqa: C901
@@ -292,6 +356,11 @@ def create_app(
         if hasattr(chat_runtime, "session_factory")
         else None
     )
+    room_3d_repository = (
+        Room3DRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
     deps = ChatAgentDeps(
         runtime=chat_runtime,
         attachment_store=attachment_store,
@@ -300,6 +369,11 @@ def create_app(
     )
     _register_attachment_routes(app, attachment_store)
     _register_generated_image_routes(app, attachment_store)
+    _register_openusd_routes(
+        app,
+        attachment_store=attachment_store,
+        room_3d_repository=room_3d_repository,
+    )
     if thread_query_repository is not None:
         _register_thread_data_routes(app, thread_query_repository=thread_query_repository)
 

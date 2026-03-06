@@ -67,8 +67,33 @@ class AttachmentStore:
     ) -> StoredAttachment:
         """Persist one image and return a stable attachment reference."""
 
+        return self.save_bytes(
+            content=content,
+            mime_type=mime_type,
+            filename=filename,
+            thread_id=thread_id,
+            run_id=run_id,
+            created_by_tool=created_by_tool,
+            kind=kind,
+        )
+
+    def save_bytes(
+        self,
+        *,
+        content: bytes,
+        mime_type: str,
+        filename: str | None,
+        thread_id: str | None = None,
+        run_id: str | None = None,
+        created_by_tool: str | None = None,
+        kind: str = "attachment",
+    ) -> StoredAttachment:
+        """Persist arbitrary bytes and return a stable attachment reference."""
+
         attachment_id = str(uuid4())
-        suffix = self._suffix_for_mime_type(mime_type)
+        suffix = Path(filename).suffix if filename else self._suffix_for_mime_type(mime_type)
+        if not suffix:
+            suffix = self._suffix_for_mime_type(mime_type)
         fallback_name = f"{attachment_id}{suffix}"
         file_name = filename or fallback_name
         path = self._root_dir / fallback_name

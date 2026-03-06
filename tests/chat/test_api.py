@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import cast
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -84,3 +85,48 @@ def test_generated_floor_plan_returns_image_tool_output() -> None:
     image_response = client.get(image_ref["uri"])
     assert image_response.status_code == 200
     assert image_response.headers["content-type"].startswith("image/svg+xml")
+
+
+@pytest.mark.parametrize(
+    ("file_name", "content"),
+    [
+        ("scene.usda", b"#usda 1.0\ndef Xform \"Room\" {}"),
+        ("scene.usd", b"binary-usd-placeholder"),
+        ("scene.usdc", b"binary-usdc-placeholder"),
+        ("scene.usdz", b"binary-usdz-placeholder"),
+    ],
+)
+def test_openusd_ingest_accepts_supported_formats(file_name: str, content: bytes) -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    response = client.post(
+        "/room-3d/openusd-ingest",
+        content=content,
+        headers={
+            "x-filename": file_name,
+            "x-thread-id": "thread-openusd",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source_asset"]["attachment_id"]
+    assert payload["usd_format"] == file_name.split(".")[-1]
+    assert payload["metadata"]["validation_backend"] in {"fallback", "pxr"}
+
+
+def test_openusd_ingest_rejects_unsupported_extension() -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    response = client.post(
+        "/room-3d/openusd-ingest",
+        content=b"not-usd",
+        headers={
+            "x-filename": "invalid.txt",
+            "x-thread-id": "thread-openusd",
+        },
+    )
+
+    assert response.status_code == 415
+    payload = response.json()
+    assert payload["detail"]["code"] == "unsupported_extension"
