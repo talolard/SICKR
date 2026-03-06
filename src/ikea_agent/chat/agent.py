@@ -170,8 +170,13 @@ def build_chat_agent() -> Agent[ChatAgentDeps, str]:  # noqa: C901
         If the call fails validation or rendering, fix the payload and retry.
         """
 
+        resolved_request = (
+            request
+            if request.include_image_bytes
+            else request.model_copy(update={"include_image_bytes": True})
+        )
         try:
-            return run_floor_planner(request)
+            return run_floor_planner(resolved_request)
         except ValueError as exc:
             raise ModelRetry(
                 "render_floor_plan failed. Correct the `elements` payload (wall segments, "
