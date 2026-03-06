@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from ikea_agent.chat.agent import build_room_3d_snapshot_context_payload
 from ikea_agent.chat.deps import Room3DSnapshotContext
 from ikea_agent.persistence.room_3d_repository import Room3DSnapshotEntry
@@ -45,8 +47,10 @@ def test_build_room_3d_snapshot_context_payload_merges_state_and_persisted() -> 
         state_snapshots=[state_snapshot],
         persisted_snapshots=[persisted_snapshot],
     )
+    state_snapshots = cast("list[dict[str, object]]", payload["state_snapshots"])
+    persisted_snapshots = cast("list[dict[str, object]]", payload["persisted_snapshots"])
 
     assert payload["state_count"] == 1
     assert payload["persisted_count"] == 1
-    assert payload["state_snapshots"][0]["snapshot_id"] == "snap-state-1"
-    assert payload["persisted_snapshots"][0]["room_3d_snapshot_id"] == "snap-db-1"
+    assert state_snapshots[0]["snapshot_id"] == "snap-state-1"
+    assert persisted_snapshots[0]["room_3d_snapshot_id"] == "snap-db-1"

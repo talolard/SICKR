@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from typing import cast
-import pytest
 
+import pytest
 from fastapi.testclient import TestClient
 
 from ikea_agent.chat.runtime import ChatRuntime
@@ -90,7 +90,7 @@ def test_generated_floor_plan_returns_image_tool_output() -> None:
 @pytest.mark.parametrize(
     ("file_name", "content"),
     [
-        ("scene.usda", b"#usda 1.0\ndef Xform \"Room\" {}"),
+        ("scene.usda", b'#usda 1.0\ndef Xform "Room" {}'),
         ("scene.usd", b"binary-usd-placeholder"),
         ("scene.usdc", b"binary-usdc-placeholder"),
         ("scene.usdz", b"binary-usdz-placeholder"),
@@ -111,7 +111,7 @@ def test_openusd_ingest_accepts_supported_formats(file_name: str, content: bytes
     assert response.status_code == 200
     payload = response.json()
     assert payload["source_asset"]["attachment_id"]
-    assert payload["usd_format"] == file_name.split(".")[-1]
+    assert payload["usd_format"] == file_name.rsplit(".", maxsplit=1)[-1]
     assert payload["metadata"]["validation_backend"] in {"fallback", "pxr"}
 
 

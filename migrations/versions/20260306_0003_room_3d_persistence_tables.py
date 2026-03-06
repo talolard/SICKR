@@ -65,7 +65,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["thread_id"], [f"{APP_SCHEMA}.threads.thread_id"]),
         sa.ForeignKeyConstraint(["run_id"], [f"{APP_SCHEMA}.agent_runs.run_id"]),
         sa.ForeignKeyConstraint(["snapshot_asset_id"], [f"{APP_SCHEMA}.assets.asset_id"]),
-        sa.ForeignKeyConstraint(["room_3d_asset_id"], [f"{APP_SCHEMA}.room_3d_assets.room_3d_asset_id"]),
+        sa.ForeignKeyConstraint(
+            ["room_3d_asset_id"], [f"{APP_SCHEMA}.room_3d_assets.room_3d_asset_id"]
+        ),
         schema=APP_SCHEMA,
     )
     op.create_index(

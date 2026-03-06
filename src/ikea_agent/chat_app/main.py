@@ -27,19 +27,19 @@ from ikea_agent.chat_app.thread_api_models import (
     AssetListItem,
     DetectionListItem,
     FloorPlanRevisionListItem,
-    ThreadDetailItem,
-    ThreadListItem,
-    ThreadTitleUpdateRequest,
     Room3DAssetCreateRequest,
     Room3DAssetListItem,
     Room3DSnapshotCreateRequest,
     Room3DSnapshotListItem,
+    ThreadDetailItem,
+    ThreadListItem,
+    ThreadTitleUpdateRequest,
 )
 from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
-from ikea_agent.persistence.room_3d_repository import Room3DRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.room_3d_repository import Room3DRepository
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
     extract_last_user_prompt,

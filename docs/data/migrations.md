@@ -35,3 +35,14 @@ ALEMBIC_DATABASE_URL="duckdb:///$(pwd)/.tmp_untracked/alembic_validation.duckdb"
 ```
 
 If successful, the database should contain Alembic version metadata and no errors should be emitted.
+
+## Current Room 3D Tables
+
+Revision `20260306_0003` adds:
+
+- `app.room_3d_assets`
+  - thread-scoped OpenUSD asset bindings
+  - links source uploaded asset ids to inspected USD metadata
+- `app.room_3d_snapshots`
+  - thread-scoped camera/lighting snapshot metadata
+  - links persisted PNG snapshot assets to optional room_3d_asset bindings

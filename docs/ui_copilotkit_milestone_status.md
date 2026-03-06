@@ -13,6 +13,8 @@ Updated: 2026-03-06
 - Milestone 5: thread/session persistence, URL thread routing, resume-on-refresh, thread isolation.
 - Milestone 6: persistent floor-plan preview panel beside chat, fed by `render_floor_plan` tool outputs
   with per-thread local persistence in UI state.
+- Milestone 7: 2D/3D floor-plan tabs with React Three Fiber room scene, OpenUSD ingest support,
+  and PNG snapshot capture wired into typed agent state + persistence APIs.
 
 ## Floor-plan preview reliability note
 
@@ -22,6 +24,18 @@ Updated: 2026-03-06
 - The event bridge exists to keep preview updates robust across AG-UI replay/rerender timing,
   where render callbacks can be deferred or replayed.
 - Shared bridge helpers live in `ui/src/lib/floorPlanPreviewEvents.ts`.
+
+## 3D Snapshot Flow
+
+- The 3D tab exposes `Capture PNG` from the current camera perspective.
+- Capture payload includes:
+  - PNG snapshot image
+  - camera metadata (`position_m`, `target_m`, `fov_deg`)
+  - lighting metadata (fixture ids + emphasized count)
+  - optional user comment
+- UI uploads snapshot images through `/api/attachments`, persists metadata through
+  `/api/room-3d/snapshots`, and writes `room_3d_snapshots` into AG-UI shared state.
+- Agent-side retrieval is explicit via `list_room_3d_snapshot_context`.
 
 ## Temporary thread fallback behavior
 

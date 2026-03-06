@@ -16,7 +16,7 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
-def _seed_source_assets(session_factory: sessionmaker[Session]) -> None:
+def _seed_source_assets(session_factory: sessionmaker[Session], *, tmp_path: Path) -> None:
     now = datetime.now(UTC)
     with session_factory() as session:
         session.add(
@@ -40,7 +40,7 @@ def _seed_source_assets(session_factory: sessionmaker[Session]) -> None:
                 kind="room_3d_usd",
                 mime_type="model/vnd.usd",
                 file_name="room.usda",
-                storage_path="/tmp/room.usda",
+                storage_path=str(tmp_path / "room.usda"),
                 sha256="sha-room-usd",
                 size_bytes=101,
                 width=None,
@@ -57,7 +57,7 @@ def _seed_source_assets(session_factory: sessionmaker[Session]) -> None:
                 kind="room_3d_snapshot",
                 mime_type="image/png",
                 file_name="snapshot.png",
-                storage_path="/tmp/snapshot.png",
+                storage_path=str(tmp_path / "snapshot.png"),
                 sha256="sha-snapshot",
                 size_bytes=202,
                 width=640,
@@ -70,7 +70,7 @@ def _seed_source_assets(session_factory: sessionmaker[Session]) -> None:
 
 def test_room_3d_repository_round_trip_assets_and_snapshots(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
-    _seed_source_assets(session_factory)
+    _seed_source_assets(session_factory, tmp_path=tmp_path)
     repository = Room3DRepository(session_factory)
 
     stored_asset = repository.create_room_3d_asset(

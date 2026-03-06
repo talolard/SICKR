@@ -269,9 +269,7 @@ def _snapshot_from_row(row: RowMapping) -> Room3DSnapshotEntry:
         run_id=str(row["run_id"]) if row["run_id"] is not None else None,
         snapshot_asset_id=str(row["snapshot_asset_id"]),
         room_3d_asset_id=(
-            str(row["room_3d_asset_id"])
-            if row["room_3d_asset_id"] is not None
-            else None
+            str(row["room_3d_asset_id"]) if row["room_3d_asset_id"] is not None else None
         ),
         camera=_json_dict(row["camera_json"]),
         lighting=_json_dict(row["lighting_json"]),

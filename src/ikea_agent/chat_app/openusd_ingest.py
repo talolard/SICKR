@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, cast
+
+try:
+    from pxr import Usd as _Usd  # type: ignore[import-untyped]
+except ImportError:
+    _Usd = None
 
 SUPPORTED_OPENUSD_EXTENSIONS: frozenset[str] = frozenset({".usda", ".usd", ".usdc", ".usdz"})
 
@@ -37,7 +42,9 @@ def inspect_openusd_bytes(*, content: bytes, filename: str) -> OpenUsdInspection
             message="Supported OpenUSD formats: .usda, .usd, .usdc, .usdz.",
         )
     if not content:
-        raise OpenUsdValidationError(code="empty_payload", message="Uploaded OpenUSD file is empty.")
+        raise OpenUsdValidationError(
+            code="empty_payload", message="Uploaded OpenUSD file is empty."
+        )
 
     with NamedTemporaryFile(suffix=extension, delete=True) as temp_file:
         temp_path = Path(temp_file.name)
@@ -47,27 +54,29 @@ def inspect_openusd_bytes(*, content: bytes, filename: str) -> OpenUsdInspection
 
 def _inspect_openusd_file(*, path: Path) -> OpenUsdInspection:
     extension = path.suffix.lower().removeprefix(".")
-    try:
-        from pxr import Usd  # type: ignore[import-untyped]
-    except ImportError:
+    if _Usd is None:
         return _fallback_inspection(path=path, usd_format=extension)
 
     try:
-        stage = Usd.Stage.Open(str(path))
+        stage = cast("Any", _Usd).Stage.Open(str(path))
     except Exception:
         # Some local/dev payloads may still be useful to persist as placeholders
         # for later binding flows; keep strict text checks for USDA only.
         if extension == "usda":
             raise OpenUsdValidationError(
                 code="invalid_openusd",
-                message="OpenUSD stage could not be opened. Check that the file is a valid USD asset.",
+                message=(
+                    "OpenUSD stage could not be opened. Check that the file is a valid USD asset."
+                ),
             ) from None
         return _fallback_inspection(path=path, usd_format=extension)
     if stage is None:
         if extension == "usda":
             raise OpenUsdValidationError(
                 code="invalid_openusd",
-                message="OpenUSD stage could not be opened. Check that the file is a valid USD asset.",
+                message=(
+                    "OpenUSD stage could not be opened. Check that the file is a valid USD asset."
+                ),
             )
         return _fallback_inspection(path=path, usd_format=extension)
 

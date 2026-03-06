@@ -24,8 +24,8 @@ from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
-from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.persistence.room_3d_repository import Room3DRepository, Room3DSnapshotEntry
+from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     AttachmentRef,
     ImageToolOutput,

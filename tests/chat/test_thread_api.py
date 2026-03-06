@@ -16,10 +16,10 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     AssetRecord,
     FloorPlanRevisionRecord,
-    SearchResultRecord,
-    SearchRunRecord,
     Room3DAssetRecord,
     Room3DSnapshotRecord,
+    SearchResultRecord,
+    SearchRunRecord,
     ThreadRecord,
     ensure_persistence_schema,
 )
