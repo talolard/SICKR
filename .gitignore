@@ -37,6 +37,7 @@ data/*.csv
 data/*.db*
 data/.milvus_*
 artifacts/
+comments/
 .tmp_untracked/
 
 # Logs
