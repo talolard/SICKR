@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ReactElement } from "react";
+import type { ClipboardEvent, ReactElement } from "react";
 import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
@@ -22,6 +22,16 @@ import {
   loadRoom3DSnapshots,
   saveRoom3DSnapshots,
 } from "@/lib/threadStore";
+import { getConsoleRecordsSnapshot, startFeedbackCapture } from "@/lib/feedbackCapture";
+
+const DEFAULT_FEEDBACK_TITLE = "user_comment_from_ui";
+
+type FeedbackCreateResponse = {
+  comment_id: string;
+  directory: string;
+  markdown_path: string;
+  saved_images_count: number;
+};
 
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
@@ -31,6 +41,26 @@ function resolveAttachmentUri(uri: string): string {
     return uri;
   }
   return `/attachments/${uri.replace(/^\/+/, "")}`;
+}
+
+function collectStorageByPrefix(storage: Storage, prefix: string): Record<string, unknown> {
+  const collected: Record<string, unknown> = {};
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key || !key.startsWith(prefix)) {
+      continue;
+    }
+    const raw = storage.getItem(key);
+    if (!raw) {
+      continue;
+    }
+    try {
+      collected[key] = JSON.parse(raw) as unknown;
+    } catch {
+      collected[key] = raw;
+    }
+  }
+  return collected;
 }
 
 export default function Home(): ReactElement {
@@ -47,8 +77,26 @@ export default function Home(): ReactElement {
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [room3dSnapshots, setRoom3dSnapshots] = useState<Room3DSnapshotContext[]>([]);
   const attachmentFilesRef = useRef<Record<string, File>>({});
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState<boolean>(false);
+  const [feedbackTitle, setFeedbackTitle] = useState<string>(DEFAULT_FEEDBACK_TITLE);
+  const [feedbackComment, setFeedbackComment] = useState<string>("");
+  const [feedbackAttachments, setFeedbackAttachments] = useState<PendingAttachment[]>([]);
+  const feedbackFilesRef = useRef<Record<string, File>>({});
+  const [includeConsoleLog, setIncludeConsoleLog] = useState<boolean>(true);
+  const [includeDomSnapshot, setIncludeDomSnapshot] = useState<boolean>(true);
+  const [includeUiState, setIncludeUiState] = useState<boolean>(true);
+  const [isSendingFeedback, setIsSendingFeedback] = useState<boolean>(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackSuccessPath, setFeedbackSuccessPath] = useState<string | null>(null);
 
   const pendingUploads = attachments.some((attachment) => attachment.status === "uploading");
+  const pendingFeedbackUploads = feedbackAttachments.some(
+    (attachment) => attachment.status === "uploading",
+  );
+
+  useEffect(() => {
+    startFeedbackCapture();
+  }, []);
 
   useEffect(() => {
     if (!threadId) {
@@ -298,6 +346,216 @@ export default function Home(): ReactElement {
     void uploadAttachment(localId, file);
   };
 
+  const addFeedbackFiles = (files: File[]): void => {
+    const next = files.map((file) => {
+      const localId = crypto.randomUUID();
+      feedbackFilesRef.current[localId] = file;
+      return {
+        localId,
+        fileName: file.name,
+        mimeType: file.type,
+        progress: 0,
+        status: "uploading" as const,
+      };
+    });
+    setFeedbackAttachments((current) => [...current, ...next]);
+    next.forEach((pendingAttachment) => {
+      const file = feedbackFilesRef.current[pendingAttachment.localId];
+      if (!file) {
+        return;
+      }
+      const upload = new XMLHttpRequest();
+      upload.open("POST", "/api/attachments");
+      upload.setRequestHeader("content-type", file.type || "application/octet-stream");
+      upload.setRequestHeader("x-filename", file.name);
+      if (threadId) {
+        upload.setRequestHeader("x-thread-id", threadId);
+      }
+      upload.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setFeedbackAttachments((current) =>
+          current.map((attachment) =>
+            attachment.localId === pendingAttachment.localId
+              ? { ...attachment, progress: percent }
+              : attachment,
+          ),
+        );
+      };
+      upload.onerror = () => {
+        setFeedbackAttachments((current) =>
+          current.map((attachment) =>
+            attachment.localId === pendingAttachment.localId
+              ? { ...attachment, status: "error", errorMessage: "Upload failed due to network error." }
+              : attachment,
+          ),
+        );
+      };
+      upload.onload = () => {
+        if (upload.status < 200 || upload.status >= 300) {
+          setFeedbackAttachments((current) =>
+            current.map((attachment) =>
+              attachment.localId === pendingAttachment.localId
+                ? {
+                    ...attachment,
+                    status: "error",
+                    errorMessage: `Upload failed with status ${upload.status}`,
+                  }
+                : attachment,
+            ),
+          );
+          return;
+        }
+        const payload = JSON.parse(upload.responseText) as AttachmentRef;
+        setFeedbackAttachments((current) =>
+          current.map((attachment) =>
+            attachment.localId === pendingAttachment.localId
+              ? {
+                  ...attachment,
+                  status: "ready",
+                  progress: 100,
+                  attachmentRef: {
+                    ...payload,
+                    uri: resolveAttachmentUri(payload.uri),
+                  },
+                }
+              : attachment,
+          ),
+        );
+      };
+      upload.send(file);
+    });
+  };
+
+  const handleFeedbackFileSelection = (fileList: FileList): void => {
+    addFeedbackFiles(Array.from(fileList));
+  };
+
+  const handleFeedbackPaste = (event: ClipboardEvent<HTMLDivElement>): void => {
+    const pastedFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    if (pastedFiles.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    addFeedbackFiles(pastedFiles);
+  };
+
+  const handleRemoveFeedbackAttachment = (localId: string): void => {
+    delete feedbackFilesRef.current[localId];
+    setFeedbackAttachments((current) =>
+      current.filter((attachment) => attachment.localId !== localId),
+    );
+  };
+
+  const handleRetryFeedbackAttachment = (localId: string): void => {
+    const file = feedbackFilesRef.current[localId];
+    if (!file) {
+      return;
+    }
+    setFeedbackAttachments((current) =>
+      current.map((attachment) =>
+        attachment.localId === localId
+          ? (() => {
+              const nextAttachment: PendingAttachment = {
+                ...attachment,
+                status: "uploading",
+                progress: 0,
+              };
+              delete nextAttachment.errorMessage;
+              delete nextAttachment.attachmentRef;
+              return nextAttachment;
+            })()
+          : attachment,
+      ),
+    );
+    addFeedbackFiles([file]);
+    handleRemoveFeedbackAttachment(localId);
+  };
+
+  const buildUiStateSnapshot = (): Record<string, unknown> => {
+    const viewport =
+      typeof window === "undefined"
+        ? null
+        : { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio };
+    return {
+      thread_id: threadId,
+      location: typeof window === "undefined" ? null : window.location.href,
+      viewport,
+      floor_plan_preview: floorPlanPreview,
+      room_3d_snapshots: room3dSnapshots,
+      chat_attachment_count: attachments.length,
+      feedback_attachment_count: feedbackAttachments.length,
+      local_storage: typeof window === "undefined" ? {} : collectStorageByPrefix(window.localStorage, "copilotkit_ui_"),
+      session_storage:
+        typeof window === "undefined" ? {} : collectStorageByPrefix(window.sessionStorage, "copilotkit_ui_"),
+    };
+  };
+
+  const submitFeedback = async (): Promise<void> => {
+    if (isSendingFeedback) {
+      return;
+    }
+    if (pendingFeedbackUploads) {
+      setFeedbackError("Finish uploading feedback images before sending.");
+      return;
+    }
+    setIsSendingFeedback(true);
+    setFeedbackError(null);
+    setFeedbackSuccessPath(null);
+    try {
+      const payload: Record<string, unknown> = {
+        title: feedbackTitle.trim() || DEFAULT_FEEDBACK_TITLE,
+        comment: feedbackComment,
+        thread_id: threadId ?? "",
+        page_url: typeof window === "undefined" ? "" : window.location.href,
+        user_agent: typeof window === "undefined" ? "" : window.navigator.userAgent,
+        include_console_log: includeConsoleLog,
+        include_dom_snapshot: includeDomSnapshot,
+        include_ui_state: includeUiState,
+        attachment_ids: feedbackAttachments
+          .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
+          .map((attachment) => (attachment.attachmentRef as AttachmentRef).attachment_id),
+      };
+      if (includeConsoleLog) {
+        payload.console_log = JSON.stringify(getConsoleRecordsSnapshot());
+      }
+      if (includeDomSnapshot && typeof window !== "undefined") {
+        payload.dom_snapshot = window.document.documentElement.outerHTML;
+      }
+      if (includeUiState) {
+        payload.ui_state = JSON.stringify(buildUiStateSnapshot());
+      }
+
+      const response = await fetch("/api/comments", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error(`Feedback submission failed with status ${response.status}`);
+      }
+      const payload = (await response.json()) as FeedbackCreateResponse;
+      setFeedbackSuccessPath(payload.directory);
+      setFeedbackComment("");
+      setFeedbackAttachments([]);
+      feedbackFilesRef.current = {};
+      setFeedbackTitle(DEFAULT_FEEDBACK_TITLE);
+    } catch (error) {
+      setFeedbackError(
+        error instanceof Error ? error.message : "Feedback submission failed unexpectedly.",
+      );
+    } finally {
+      setIsSendingFeedback(false);
+    }
+  };
+
   return (
     <main className="mx-auto flex min-h-screen max-w-[1700px] flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
@@ -381,6 +639,123 @@ export default function Home(): ReactElement {
           <CopilotSidebar />
         </section>
       </div>
+      <button
+        className="fixed bottom-5 right-5 z-[2050] rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow hover:bg-gray-50"
+        onClick={() => {
+          setIsFeedbackOpen(true);
+          setFeedbackError(null);
+        }}
+        type="button"
+      >
+        Feedback
+      </button>
+      {isFeedbackOpen ? (
+        <div
+          className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setIsFeedbackOpen(false)}
+        >
+          <section
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-4"
+            onClick={(event) => event.stopPropagation()}
+            onPaste={handleFeedbackPaste}
+          >
+            <header className="mb-3">
+              <h2 className="text-lg font-semibold text-gray-900">Send feedback bundle</h2>
+              <p className="text-sm text-gray-600">
+                Add notes and screenshots. Optional debug data can be included for triage.
+              </p>
+            </header>
+            <div className="space-y-3">
+              <label className="block text-sm font-medium text-gray-800" htmlFor="feedback-title">
+                Title
+              </label>
+              <input
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                id="feedback-title"
+                onChange={(event) => setFeedbackTitle(event.target.value)}
+                value={feedbackTitle}
+              />
+              <label className="block text-sm font-medium text-gray-800" htmlFor="feedback-comment">
+                Comment
+              </label>
+              <textarea
+                className="min-h-24 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                id="feedback-comment"
+                onChange={(event) => setFeedbackComment(event.target.value)}
+                placeholder="Describe what you observed and what should be fixed."
+                value={feedbackComment}
+              />
+              <div className="rounded border border-dashed border-gray-300 p-2 text-xs text-gray-600">
+                Paste images directly while this dialog is focused, or use the file picker below.
+              </div>
+              <AttachmentComposer
+                accept="image/png,image/jpeg,image/webp"
+                attachments={feedbackAttachments}
+                inputId="feedback-attachment-input"
+                label="Feedback images"
+                onFilesSelected={handleFeedbackFileSelection}
+                onRemoveAttachment={handleRemoveFeedbackAttachment}
+                onRetryAttachment={handleRetryFeedbackAttachment}
+              />
+              {pendingFeedbackUploads ? (
+                <p className="text-xs text-amber-700">
+                  Finish uploading feedback images before sending.
+                </p>
+              ) : null}
+              <div className="space-y-1 rounded border p-2">
+                <p className="text-xs font-medium text-gray-800">Include debug data</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    checked={includeConsoleLog}
+                    onChange={(event) => setIncludeConsoleLog(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Console log snapshot
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    checked={includeDomSnapshot}
+                    onChange={(event) => setIncludeDomSnapshot(event.target.checked)}
+                    type="checkbox"
+                  />
+                  DOM snapshot
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    checked={includeUiState}
+                    onChange={(event) => setIncludeUiState(event.target.checked)}
+                    type="checkbox"
+                  />
+                  UI state snapshot
+                </label>
+              </div>
+              {feedbackError ? <p className="text-sm text-red-700">{feedbackError}</p> : null}
+              {feedbackSuccessPath ? (
+                <p className="text-sm text-green-700">Saved feedback bundle to {feedbackSuccessPath}</p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <button
+                  className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+                  onClick={() => setIsFeedbackOpen(false)}
+                  type="button"
+                >
+                  Close
+                </button>
+                <button
+                  className="rounded border border-gray-300 bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+                  disabled={isSendingFeedback || pendingFeedbackUploads}
+                  onClick={() => {
+                    void submitFeedback();
+                  }}
+                  type="button"
+                >
+                  {isSendingFeedback ? "Sending..." : "Send feedback"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

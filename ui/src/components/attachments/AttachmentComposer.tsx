@@ -9,6 +9,9 @@ type AttachmentComposerProps = {
   onFilesSelected: (files: FileList) => void;
   onRemoveAttachment: (localId: string) => void;
   onRetryAttachment: (localId: string) => void;
+  accept?: string;
+  inputId?: string;
+  label?: string;
 };
 
 export function AttachmentComposer({
@@ -16,6 +19,9 @@ export function AttachmentComposer({
   onFilesSelected,
   onRemoveAttachment,
   onRetryAttachment,
+  accept = "image/png,image/jpeg,image/webp",
+  inputId = "attachment-input",
+  label = "Attach images",
 }: AttachmentComposerProps): ReactElement {
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>): void => {
     if (event.target.files) {
@@ -26,13 +32,13 @@ export function AttachmentComposer({
 
   return (
     <section className="flex flex-col gap-2 rounded border p-3">
-      <label className="text-sm font-medium" htmlFor="attachment-input">
-        Attach images
+      <label className="text-sm font-medium" htmlFor={inputId}>
+        {label}
       </label>
       <input
-        accept="image/png,image/jpeg,image/webp"
+        accept={accept}
         data-testid="attachment-input"
-        id="attachment-input"
+        id={inputId}
         multiple
         onChange={handleFileSelection}
         type="file"

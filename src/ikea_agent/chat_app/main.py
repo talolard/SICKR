@@ -18,6 +18,11 @@ from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.comment_bundles import (
+    CommentBundleInput,
+    CommentBundleWriter,
+    FeedbackImageInput,
+)
 from ikea_agent.chat_app.openusd_ingest import (
     OpenUsdValidationError,
     inspect_openusd_bytes,
@@ -25,6 +30,8 @@ from ikea_agent.chat_app.openusd_ingest import (
 from ikea_agent.chat_app.thread_api_models import (
     AnalysisListItem,
     AssetListItem,
+    CommentBundleCreateRequest,
+    CommentBundleCreateResponse,
     DetectionListItem,
     FloorPlanRevisionListItem,
     Room3DAssetCreateRequest,
@@ -109,6 +116,74 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
             path=stored.path,
             media_type=stored.ref.mime_type,
             filename=stored.ref.file_name,
+        )
+
+
+def _register_comment_routes(
+    app: FastAPI,
+    *,
+    feedback_enabled: bool,
+    feedback_writer: CommentBundleWriter,
+    attachment_store: AttachmentStore,
+) -> None:
+    @app.post("/api/comments", response_model=CommentBundleCreateResponse)
+    async def create_comment_bundle(
+        payload: CommentBundleCreateRequest,
+    ) -> CommentBundleCreateResponse:
+        """Persist one UI feedback bundle to the local comments directory."""
+
+        if not feedback_enabled:
+            raise HTTPException(
+                status_code=503,
+                detail="Feedback capture is disabled. Enable FEEDBACK_CAPTURE_ENABLED.",
+            )
+
+        images: list[FeedbackImageInput] = []
+        for attachment_id in payload.attachment_ids:
+            stored = attachment_store.resolve(attachment_id)
+            if stored is None:
+                continue
+            content = stored.path.read_bytes()
+            if len(content) > MAX_ATTACHMENT_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Feedback image exceeds 10MB upload limit.",
+                )
+            images.append(
+                FeedbackImageInput(
+                    file_name=stored.ref.file_name or f"{attachment_id}.bin",
+                    mime_type=stored.ref.mime_type,
+                    content=content,
+                )
+            )
+
+        bundle_payload = CommentBundleInput(
+            title=payload.title,
+            comment=payload.comment,
+            page_url=payload.page_url,
+            thread_id=payload.thread_id,
+            user_agent=payload.user_agent,
+            include_console_log=payload.include_console_log,
+            include_dom_snapshot=payload.include_dom_snapshot,
+            include_ui_state=payload.include_ui_state,
+            console_log_json=payload.console_log,
+            dom_snapshot_html=payload.dom_snapshot,
+            ui_state_json=payload.ui_state,
+            images=images,
+        )
+        try:
+            result = feedback_writer.write_bundle(bundle_payload)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Feedback payload contains invalid JSON artifact content.",
+            ) from exc
+
+        return CommentBundleCreateResponse(
+            comment_id=result.comment_id,
+            directory=result.directory,
+            markdown_path=result.markdown_path,
+            saved_images_count=result.saved_images_count,
         )
 
 
@@ -451,6 +526,7 @@ def create_app(
         root_dir=Path(settings.artifact_root_dir),
         asset_repository=asset_repository,
     )
+    feedback_writer = CommentBundleWriter(root_dir=Path(settings.feedback_root_dir))
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -473,6 +549,12 @@ def create_app(
         state=ChatAgentState(),
     )
     _register_attachment_routes(app, attachment_store)
+    _register_comment_routes(
+        app,
+        feedback_enabled=settings.feedback_capture_enabled,
+        feedback_writer=feedback_writer,
+        attachment_store=attachment_store,
+    )
     _register_generated_image_routes(app, attachment_store)
     _register_openusd_routes(
         app,

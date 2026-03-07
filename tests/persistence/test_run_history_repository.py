@@ -112,9 +112,13 @@ def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_pat
     )
 
     with session_factory() as session:
-        run_ids = session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.thread_id == "thread-c")
-        ).scalars().all()
+        run_ids = (
+            session.execute(
+                select(AgentRunRecord.run_id).where(AgentRunRecord.thread_id == "thread-c")
+            )
+            .scalars()
+            .all()
+        )
 
     assert set(run_ids) == {"run-c-1", "run-c-2"}
 

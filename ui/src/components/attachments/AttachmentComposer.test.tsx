@@ -32,4 +32,22 @@ describe("AttachmentComposer", () => {
     expect(removeSpy).toHaveBeenCalledWith("a1");
     expect(retrySpy).toHaveBeenCalledWith("a1");
   });
+
+  it("supports custom label and input id for secondary attachment flows", () => {
+    render(
+      <AttachmentComposer
+        attachments={[]}
+        inputId="feedback-attachment-input"
+        label="Feedback images"
+        onFilesSelected={vi.fn()}
+        onRemoveAttachment={vi.fn()}
+        onRetryAttachment={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Feedback images")).toHaveAttribute(
+      "id",
+      "feedback-attachment-input",
+    );
+  });
 });

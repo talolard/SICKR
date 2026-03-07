@@ -10,6 +10,7 @@ Repository-local collaboration and implementation rules.
 - `external_docs/`: repo-local notes on external libraries and protocols.
 - `plans/`: planning docs that describe direction and sequencing.
 - `docs/`: user/developer docs and runbooks.
+- `comments/`: local UI feedback bundles for debug triage (`comment.md` + artifacts per report).
 - `legacy/`: reference-only; do not import from active runtime.
 - `ui/`: Next.js (App Router) + React + TypeScript CopilotKit UI workspace.
 

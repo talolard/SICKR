@@ -46,6 +46,8 @@ class AppSettings(BaseSettings):
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     duckdb_path: str = Field(default="data/ikea.duckdb")
     artifact_root_dir: str = Field(default="data/artifacts")
+    feedback_capture_enabled: bool = Field(default=False)
+    feedback_root_dir: str = Field(default="comments")
     default_query_limit: int = Field(default=25, ge=1, le=200)
     default_market: str = Field(default="Germany")
 
