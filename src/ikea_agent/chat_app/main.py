@@ -49,6 +49,7 @@ from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.room_3d_repository import Room3DRepository
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
+    ThreadRunHistoryEntry,
     extract_last_user_prompt,
 )
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
@@ -125,6 +126,7 @@ def _register_comment_routes(
     feedback_enabled: bool,
     feedback_writer: CommentBundleWriter,
     attachment_store: AttachmentStore,
+    run_history_repository: RunHistoryRepository | None,
 ) -> None:
     @app.post("/api/comments", response_model=CommentBundleCreateResponse)
     async def create_comment_bundle(
@@ -157,6 +159,35 @@ def _register_comment_routes(
                 )
             )
 
+        user_prompt_history_json: str | None = None
+        full_message_history_json: str | None = None
+        if run_history_repository is not None and payload.thread_id:
+            history: list[ThreadRunHistoryEntry] = run_history_repository.list_thread_run_history(
+                thread_id=payload.thread_id,
+                limit=250,
+            )
+            user_prompts = [
+                entry.user_prompt_text for entry in history if entry.user_prompt_text is not None
+            ]
+            user_prompt_history_json = json.dumps(user_prompts, ensure_ascii=True)
+            full_message_history_json = json.dumps(
+                [
+                    {
+                        "run_id": entry.run_id,
+                        "parent_run_id": entry.parent_run_id,
+                        "status": entry.status,
+                        "user_prompt_text": entry.user_prompt_text,
+                        "started_at": entry.started_at,
+                        "ended_at": entry.ended_at,
+                        "agui_input_messages_json": entry.agui_input_messages_json,
+                        "pydantic_all_messages_json": entry.pydantic_all_messages_json,
+                        "pydantic_new_messages_json": entry.pydantic_new_messages_json,
+                    }
+                    for entry in history
+                ],
+                ensure_ascii=True,
+            )
+
         bundle_payload = CommentBundleInput(
             title=payload.title,
             comment=payload.comment,
@@ -169,6 +200,8 @@ def _register_comment_routes(
             console_log_json=payload.console_log,
             dom_snapshot_html=payload.dom_snapshot,
             ui_state_json=payload.ui_state,
+            user_input_history_json=user_prompt_history_json,
+            full_message_history_json=full_message_history_json,
             images=images,
         )
         try:
@@ -554,6 +587,7 @@ def create_app(
         feedback_enabled=settings.feedback_capture_enabled,
         feedback_writer=feedback_writer,
         attachment_store=attachment_store,
+        run_history_repository=run_history_repository,
     )
     _register_generated_image_routes(app, attachment_store)
     _register_openusd_routes(

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import Text, select, update
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, MessageArchiveRecord, ThreadRecord
@@ -193,6 +195,64 @@ class RunHistoryRepository:
                     MessageArchiveRecord.run_id == run_id
                 )
             ).scalar_one_or_none()
+
+    def list_thread_run_history(
+        self,
+        *,
+        thread_id: str,
+        limit: int = 200,
+    ) -> list[ThreadRunHistoryEntry]:
+        """Return run/message-archive history rows for one thread ordered by start time."""
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    AgentRunRecord.run_id,
+                    AgentRunRecord.parent_run_id,
+                    AgentRunRecord.status,
+                    AgentRunRecord.user_prompt_text,
+                    sa_cast(AgentRunRecord.started_at, Text),
+                    sa_cast(AgentRunRecord.ended_at, Text),
+                    MessageArchiveRecord.agui_input_messages_json,
+                    MessageArchiveRecord.pydantic_all_messages_json,
+                    MessageArchiveRecord.pydantic_new_messages_json,
+                )
+                .outerjoin(
+                    MessageArchiveRecord, MessageArchiveRecord.run_id == AgentRunRecord.run_id
+                )
+                .where(AgentRunRecord.thread_id == thread_id)
+                .order_by(AgentRunRecord.started_at.asc())
+                .limit(limit)
+            ).all()
+        return [
+            ThreadRunHistoryEntry(
+                run_id=row.run_id,
+                parent_run_id=row.parent_run_id,
+                status=row.status,
+                user_prompt_text=row.user_prompt_text,
+                started_at=row.started_at,
+                ended_at=row.ended_at,
+                agui_input_messages_json=row.agui_input_messages_json,
+                pydantic_all_messages_json=row.pydantic_all_messages_json,
+                pydantic_new_messages_json=row.pydantic_new_messages_json,
+            )
+            for row in rows
+        ]
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadRunHistoryEntry:
+    """One thread-scoped run row with optional message archives."""
+
+    run_id: str
+    parent_run_id: str | None
+    status: str
+    user_prompt_text: str | None
+    started_at: str
+    ended_at: str | None
+    agui_input_messages_json: str | None
+    pydantic_all_messages_json: str | None
+    pydantic_new_messages_json: str | None
 
 
 def extract_last_user_prompt(messages: list[dict[str, Any]]) -> str | None:

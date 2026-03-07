@@ -12,6 +12,7 @@ from ikea_agent.persistence.models import (
 )
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
+    ThreadRunHistoryEntry,
     extract_last_user_prompt,
 )
 from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
@@ -137,3 +138,37 @@ def test_record_run_complete_missing_run_is_noop(tmp_path: Path) -> None:
         archives = session.execute(select(MessageArchiveRecord.run_id)).scalars().all()
 
     assert archives == []
+
+
+def test_list_thread_run_history_returns_ordered_archive_rows(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        thread_id="thread-h",
+        run_id="run-h-1",
+        parent_run_id=None,
+        user_prompt_text="first user prompt",
+        agui_input_messages_json='[{"role":"user","content":"first user prompt"}]',
+    )
+    repository.record_run_complete(
+        run_id="run-h-1",
+        pydantic_all_messages_json=b'[{"kind":"request","text":"first"}]',
+        pydantic_new_messages_json=b'[{"kind":"response","text":"ok"}]',
+    )
+    repository.record_run_start(
+        thread_id="thread-h",
+        run_id="run-h-2",
+        parent_run_id="run-h-1",
+        user_prompt_text="second user prompt",
+        agui_input_messages_json='[{"role":"user","content":"second user prompt"}]',
+    )
+
+    history = repository.list_thread_run_history(thread_id="thread-h")
+
+    assert history
+    assert all(isinstance(entry, ThreadRunHistoryEntry) for entry in history)
+    assert history[0].run_id == "run-h-1"
+    assert history[0].pydantic_all_messages_json is not None
+    assert history[1].run_id == "run-h-2"
+    assert history[1].parent_run_id == "run-h-1"

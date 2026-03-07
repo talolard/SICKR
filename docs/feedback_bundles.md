@@ -33,6 +33,8 @@ Where:
 - `console_log.ndjson`: captured browser console/error records (if enabled)
 - `dom_snapshot.html`: DOM snapshot at submission time (if enabled)
 - `ui_state.json`: captured UI state snapshot (if enabled)
+- `user_input_history.json`: user prompt inputs extracted from stored thread runs (when thread history exists)
+- `full_message_history.json`: per-run archived AG-UI/Pydantic message payloads (when thread history exists)
 
 ## Redaction
 

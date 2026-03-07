@@ -147,7 +147,7 @@ def test_comment_bundle_route_is_disabled_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     get_settings.cache_clear()
-    monkeypatch.delenv("FEEDBACK_CAPTURE_ENABLED", raising=False)
+    monkeypatch.setenv("FEEDBACK_CAPTURE_ENABLED", "false")
     client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
 
     response = client.post("/api/comments", json={})

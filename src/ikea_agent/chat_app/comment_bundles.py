@@ -46,6 +46,8 @@ class CommentBundleInput:
     console_log_json: str | None
     dom_snapshot_html: str | None
     ui_state_json: str | None
+    user_input_history_json: str | None
+    full_message_history_json: str | None
     images: list[FeedbackImageInput]
 
 
@@ -126,6 +128,24 @@ class CommentBundleWriter:
                 encoding="utf-8",
             )
             metadata["ui_state_path"] = str(state_path.relative_to(bundle_dir))
+
+        if payload.user_input_history_json:
+            user_input_records = _redact_json_text(payload.user_input_history_json)
+            user_input_path = bundle_dir / "user_input_history.json"
+            user_input_path.write_text(
+                json.dumps(user_input_records, indent=2, ensure_ascii=True),
+                encoding="utf-8",
+            )
+            metadata["user_input_history_path"] = str(user_input_path.relative_to(bundle_dir))
+
+        if payload.full_message_history_json:
+            full_history_records = _redact_json_text(payload.full_message_history_json)
+            full_history_path = bundle_dir / "full_message_history.json"
+            full_history_path.write_text(
+                json.dumps(full_history_records, indent=2, ensure_ascii=True),
+                encoding="utf-8",
+            )
+            metadata["full_message_history_path"] = str(full_history_path.relative_to(bundle_dir))
 
         metadata_path = bundle_dir / "metadata.json"
         metadata_path.write_text(
@@ -222,6 +242,15 @@ def _build_markdown(*, title: str, comment: str, metadata: dict[str, object]) ->
     saved_images_count = metadata.get("saved_images_count")
     if isinstance(saved_images_count, int) and saved_images_count > 0:
         file_guide_lines.append("- `images/`: Uploaded/pasted screenshots attached to this report.")
+    if metadata.get("user_input_history_path"):
+        file_guide_lines.append(
+            "- `user_input_history.json`: Extracted user prompt inputs from thread runs."
+        )
+    if metadata.get("full_message_history_path"):
+        file_guide_lines.append(
+            "- `full_message_history.json`: Full archived AG-UI and Pydantic message "
+            "history per run."
+        )
 
     metadata_lines = [
         "## Metadata",
