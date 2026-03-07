@@ -541,8 +541,8 @@ export default function Home(): ReactElement {
       if (!response.ok) {
         throw new Error(`Feedback submission failed with status ${response.status}`);
       }
-      const payload = (await response.json()) as FeedbackCreateResponse;
-      setFeedbackSuccessPath(payload.directory);
+      const feedbackResponse = (await response.json()) as FeedbackCreateResponse;
+      setFeedbackSuccessPath(feedbackResponse.directory);
       setFeedbackComment("");
       setFeedbackAttachments([]);
       feedbackFilesRef.current = {};
