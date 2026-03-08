@@ -7,7 +7,20 @@ import { FloorPlanPreviewPanel } from "./FloorPlanPreviewPanel";
 
 vi.mock("./FloorPlanScene3D", () => {
   const MockScene = forwardRef<
-    { capturePng: () => { captured_at: string; image_data_url: string; camera: { position_m: [number, number, number]; target_m: [number, number, number]; fov_deg: number }; lighting: { light_fixture_ids: string[]; emphasized_light_count: number } } },
+    {
+      capturePng: () => {
+        captured_at: string;
+        image_data_url: string;
+        camera: {
+          position_m: [number, number, number];
+          target_m: [number, number, number];
+          fov_deg: number;
+        };
+        lighting: { light_fixture_ids: string[]; emphasized_light_count: number };
+      };
+      setInteriorView: () => void;
+      resetOverview: () => void;
+    },
     { scene: unknown }
   >(function MockScene(_props, ref): ReactElement {
     useImperativeHandle(ref, () => ({
@@ -24,6 +37,8 @@ vi.mock("./FloorPlanScene3D", () => {
           emphasized_light_count: 1,
         },
       }),
+      setInteriorView: () => {},
+      resetOverview: () => {},
     }));
     return <div data-testid="floor-plan-3d-canvas">mock 3d</div>;
   });
@@ -163,6 +178,8 @@ describe("FloorPlanPreviewPanel", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "3D" }));
     expect(screen.getByRole("tab", { name: "3D" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enter room" })).toBeInTheDocument();
     expect(screen.getByTestId("scene-units-caption")).toHaveTextContent(
       /centimeter relationships and renders in meters/i,
     );

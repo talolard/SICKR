@@ -135,6 +135,22 @@ export function FloorPlanPreviewPanel({
       ) : preview.scene ? (
         <div className="mt-3 space-y-2">
           <FloorPlanScene3D ref={scene3dRef} scene={preview.scene} />
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-800 hover:bg-gray-50"
+              onClick={() => scene3dRef.current?.resetOverview()}
+              type="button"
+            >
+              Overview
+            </button>
+            <button
+              className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-800 hover:bg-gray-50"
+              onClick={() => scene3dRef.current?.setInteriorView()}
+              type="button"
+            >
+              Enter room
+            </button>
+          </div>
           <p className="text-xs text-gray-600" data-testid="scene-units-caption">
             Units note: scene geometry keeps centimeter relationships and renders in meters.
           </p>
