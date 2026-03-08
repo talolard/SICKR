@@ -504,12 +504,20 @@ export default function Home(): ReactElement {
       setFeedbackError("Finish uploading feedback images before sending.");
       return;
     }
+    const readyAttachmentIds = feedbackAttachments
+      .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
+      .map((attachment) => (attachment.attachmentRef as AttachmentRef).attachment_id);
+    const normalizedTitle = feedbackTitle.trim() || DEFAULT_FEEDBACK_TITLE;
+    if (normalizedTitle === DEFAULT_FEEDBACK_TITLE && !feedbackComment.trim() && readyAttachmentIds.length === 0) {
+      setFeedbackError("Add a comment, an image, or a custom title before sending.");
+      return;
+    }
     setIsSendingFeedback(true);
     setFeedbackError(null);
     setFeedbackSuccessPath(null);
     try {
       const payload: Record<string, unknown> = {
-        title: feedbackTitle.trim() || DEFAULT_FEEDBACK_TITLE,
+        title: normalizedTitle,
         comment: feedbackComment,
         thread_id: threadId ?? "",
         page_url: typeof window === "undefined" ? "" : window.location.href,
@@ -517,9 +525,7 @@ export default function Home(): ReactElement {
         include_console_log: includeConsoleLog,
         include_dom_snapshot: includeDomSnapshot,
         include_ui_state: includeUiState,
-        attachment_ids: feedbackAttachments
-          .filter((attachment) => attachment.status === "ready" && attachment.attachmentRef)
-          .map((attachment) => (attachment.attachmentRef as AttachmentRef).attachment_id),
+        attachment_ids: readyAttachmentIds,
       };
       if (includeConsoleLog) {
         payload.console_log = JSON.stringify(getConsoleRecordsSnapshot());

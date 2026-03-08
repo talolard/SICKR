@@ -125,16 +125,19 @@ export function FloorPlanPreviewPanel({
       </div>
 
       {activeTab === "2d" ? (
-        <div className="mt-3 flex items-center justify-center rounded border bg-gray-50 p-3">
+        <div className="mt-3 flex h-[76vh] items-center justify-center rounded border bg-gray-50 p-1">
           <img
             alt="Latest floor plan"
-            className="max-h-[72vh] w-full max-w-[980px] object-contain"
+            className="h-full w-full object-contain"
             src={primaryImage.uri}
           />
         </div>
       ) : preview.scene ? (
         <div className="mt-3 space-y-2">
           <FloorPlanScene3D ref={scene3dRef} scene={preview.scene} />
+          <p className="text-xs text-gray-600" data-testid="scene-units-caption">
+            Units note: scene geometry keeps centimeter relationships and renders in meters.
+          </p>
           <p className="text-xs text-amber-800" data-testid="lighting-emphasis-caption">
             Lighting emphasis markers: {lightFixtureCount} fixture
             {lightFixtureCount === 1 ? "" : "s"} highlighted.

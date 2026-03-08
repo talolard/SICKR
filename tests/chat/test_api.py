@@ -250,3 +250,20 @@ def test_comment_bundle_route_uses_default_title_when_blank(
     assert response.status_code == 200
     payload = response.json()
     assert payload["comment_id"].startswith("user_comment_from_ui--")
+
+
+def test_comment_bundle_route_rejects_empty_default_submission(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    get_settings.cache_clear()
+    monkeypatch.setenv("FEEDBACK_CAPTURE_ENABLED", "true")
+    monkeypatch.setenv("FEEDBACK_ROOT_DIR", str(tmp_path / "comments"))
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    response = client.post(
+        "/api/comments",
+        json={"title": "user_comment_from_ui", "comment": "", "attachment_ids": []},
+    )
+
+    assert response.status_code == 422

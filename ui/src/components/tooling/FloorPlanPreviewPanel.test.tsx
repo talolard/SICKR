@@ -163,6 +163,9 @@ describe("FloorPlanPreviewPanel", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "3D" }));
     expect(screen.getByRole("tab", { name: "3D" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("scene-units-caption")).toHaveTextContent(
+      /centimeter relationships and renders in meters/i,
+    );
     expect(screen.getByTestId("lighting-emphasis-caption")).toHaveTextContent(
       /Lighting emphasis markers: 1 fixture highlighted/i,
     );

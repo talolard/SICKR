@@ -19,6 +19,7 @@ from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.comment_bundles import (
+    DEFAULT_COMMENT_TITLE,
     CommentBundleInput,
     CommentBundleWriter,
     FeedbackImageInput,
@@ -140,57 +141,31 @@ def _register_comment_routes(
                 detail="Feedback capture is disabled. Enable FEEDBACK_CAPTURE_ENABLED.",
             )
 
-        images: list[FeedbackImageInput] = []
-        for attachment_id in payload.attachment_ids:
-            stored = attachment_store.resolve(attachment_id)
-            if stored is None:
-                continue
-            content = stored.path.read_bytes()
-            if len(content) > MAX_ATTACHMENT_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail="Feedback image exceeds 10MB upload limit.",
-                )
-            images.append(
-                FeedbackImageInput(
-                    file_name=stored.ref.file_name or f"{attachment_id}.bin",
-                    mime_type=stored.ref.mime_type,
-                    content=content,
-                )
+        images = _resolve_feedback_images(
+            attachment_store=attachment_store,
+            attachment_ids=payload.attachment_ids,
+        )
+
+        normalized_title = (payload.title or "").strip() or DEFAULT_COMMENT_TITLE
+        normalized_comment = payload.comment.strip()
+        if (
+            normalized_title == DEFAULT_COMMENT_TITLE
+            and not normalized_comment
+            and len(images) == 0
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Feedback must include a comment, images, or a non-default title.",
             )
 
-        user_prompt_history_json: str | None = None
-        full_message_history_json: str | None = None
-        if run_history_repository is not None and payload.thread_id:
-            history: list[ThreadRunHistoryEntry] = run_history_repository.list_thread_run_history(
-                thread_id=payload.thread_id,
-                limit=250,
-            )
-            user_prompts = [
-                entry.user_prompt_text for entry in history if entry.user_prompt_text is not None
-            ]
-            user_prompt_history_json = json.dumps(user_prompts, ensure_ascii=True)
-            full_message_history_json = json.dumps(
-                [
-                    {
-                        "run_id": entry.run_id,
-                        "parent_run_id": entry.parent_run_id,
-                        "status": entry.status,
-                        "user_prompt_text": entry.user_prompt_text,
-                        "started_at": entry.started_at,
-                        "ended_at": entry.ended_at,
-                        "agui_input_messages_json": entry.agui_input_messages_json,
-                        "pydantic_all_messages_json": entry.pydantic_all_messages_json,
-                        "pydantic_new_messages_json": entry.pydantic_new_messages_json,
-                    }
-                    for entry in history
-                ],
-                ensure_ascii=True,
-            )
+        user_prompt_history_json, full_message_history_json = _build_feedback_history_payloads(
+            run_history_repository=run_history_repository,
+            thread_id=payload.thread_id,
+        )
 
         bundle_payload = CommentBundleInput(
-            title=payload.title,
-            comment=payload.comment,
+            title=normalized_title,
+            comment=normalized_comment,
             page_url=payload.page_url,
             thread_id=payload.thread_id,
             user_agent=payload.user_agent,
@@ -218,6 +193,67 @@ def _register_comment_routes(
             markdown_path=result.markdown_path,
             saved_images_count=result.saved_images_count,
         )
+
+
+def _resolve_feedback_images(
+    *,
+    attachment_store: AttachmentStore,
+    attachment_ids: list[str],
+) -> list[FeedbackImageInput]:
+    images: list[FeedbackImageInput] = []
+    for attachment_id in attachment_ids:
+        stored = attachment_store.resolve(attachment_id)
+        if stored is None:
+            continue
+        content = stored.path.read_bytes()
+        if len(content) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Feedback image exceeds 10MB upload limit.",
+            )
+        images.append(
+            FeedbackImageInput(
+                file_name=stored.ref.file_name or f"{attachment_id}.bin",
+                mime_type=stored.ref.mime_type,
+                content=content,
+            )
+        )
+    return images
+
+
+def _build_feedback_history_payloads(
+    *,
+    run_history_repository: RunHistoryRepository | None,
+    thread_id: str | None,
+) -> tuple[str | None, str | None]:
+    if run_history_repository is None or not thread_id:
+        return None, None
+    history: list[ThreadRunHistoryEntry] = run_history_repository.list_thread_run_history(
+        thread_id=thread_id,
+        limit=250,
+    )
+    user_prompts = [
+        entry.user_prompt_text for entry in history if entry.user_prompt_text is not None
+    ]
+    user_prompt_history_json = json.dumps(user_prompts, ensure_ascii=True)
+    full_message_history_json = json.dumps(
+        [
+            {
+                "run_id": entry.run_id,
+                "parent_run_id": entry.parent_run_id,
+                "status": entry.status,
+                "user_prompt_text": entry.user_prompt_text,
+                "started_at": entry.started_at,
+                "ended_at": entry.ended_at,
+                "agui_input_messages_json": entry.agui_input_messages_json,
+                "pydantic_all_messages_json": entry.pydantic_all_messages_json,
+                "pydantic_new_messages_json": entry.pydantic_new_messages_json,
+            }
+            for entry in history
+        ],
+        ensure_ascii=True,
+    )
+    return user_prompt_history_json, full_message_history_json
 
 
 def _floor_plan_preview_svg() -> str:

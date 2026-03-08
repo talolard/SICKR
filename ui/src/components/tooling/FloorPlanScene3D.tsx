@@ -64,6 +64,13 @@ type SceneGeometry = {
 };
 
 const CM_TO_M = 0.01;
+const DEFAULT_CAMERA_FOV_DEG = 50;
+
+type InitialCameraSettings = {
+  position: [number, number, number];
+  target: [number, number, number];
+  fovDeg: number;
+};
 
 function toSceneGeometry(scene: FloorPlanScene): SceneGeometry {
   const dims = scene.architecture.dimensions_cm;
@@ -162,6 +169,21 @@ function toSceneGeometry(scene: FloorPlanScene): SceneGeometry {
     windows,
     placements,
     fixtures,
+  };
+}
+
+export function computeInitialCameraSettings(
+  geometry: Pick<SceneGeometry, "roomLengthM" | "roomDepthM" | "roomHeightM">,
+): InitialCameraSettings {
+  const maxPlanSpanM = Math.max(geometry.roomLengthM, geometry.roomDepthM, 0.1);
+  const centerX = geometry.roomLengthM * 0.5;
+  const centerZ = geometry.roomDepthM * 0.5;
+  const topDownHeightM = Math.max(geometry.roomHeightM * 2.6, maxPlanSpanM * 1.45);
+  const depthOffsetM = maxPlanSpanM * 0.24;
+  return {
+    position: [centerX, topDownHeightM, centerZ + depthOffsetM],
+    target: [centerX, geometry.roomHeightM * 0.22, centerZ],
+    fovDeg: DEFAULT_CAMERA_FOV_DEG,
   };
 }
 
@@ -276,6 +298,10 @@ function CaptureBridge({
 export const FloorPlanScene3D = forwardRef<FloorPlanScene3DHandle, FloorPlanScene3DProps>(
   function FloorPlanScene3D({ scene }: FloorPlanScene3DProps, ref): ReactElement {
     const geometry = useMemo(() => toSceneGeometry(scene), [scene]);
+    const initialCamera = useMemo(
+      () => computeInitialCameraSettings(geometry),
+      [geometry],
+    );
     const hasWebGl =
       typeof window !== "undefined" && "WebGLRenderingContext" in window;
     const glRef = useRef<WebGLRenderer | null>(null);
@@ -334,17 +360,13 @@ export const FloorPlanScene3D = forwardRef<FloorPlanScene3DHandle, FloorPlanScen
       >
         <Canvas
           camera={{
-            position: [
-              geometry.roomLengthM * 0.5,
-              geometry.roomHeightM * 0.85,
-              geometry.roomDepthM * 1.25,
-            ],
-            fov: 55,
+            position: initialCamera.position,
+            fov: initialCamera.fovDeg,
           }}
         >
           <CaptureBridge cameraRef={cameraRef} glRef={glRef} />
           <RoomScene geometry={geometry} />
-          <OrbitControls makeDefault />
+          <OrbitControls makeDefault target={initialCamera.target} />
         </Canvas>
       </div>
     );
