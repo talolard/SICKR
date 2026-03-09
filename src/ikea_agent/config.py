@@ -38,7 +38,7 @@ class AppSettings(BaseSettings):
     gcp_project_id: str = Field(default="gen-lang-client-0545732168")
     gcp_region: str = Field(default="us-central1")
     gemini_model: str = Field(default="gemini-embedding-001")
-    gemini_generation_model: str = Field(default="gemini-3.1-flash-lite-preview")
+    gemini_generation_model: str = Field(default="gemini-3.1-pro-preview")
     embedding_provider: str = Field(default="google-gla")
     embedding_model_uri: str = Field(default="google-gla:gemini-embedding-001")
     gemini_api_key: str | None = Field(default=None)
