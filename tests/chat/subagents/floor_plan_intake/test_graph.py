@@ -13,6 +13,7 @@ from ikea_agent.chat.subagents.floor_plan_intake.graph import (
     run_from_raw_input,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.types import (
+    FloorPlanIntakeDecision,
     FloorPlanIntakeDeps,
     FloorPlanIntakeInput,
     FloorPlanIntakeOutcome,
@@ -22,6 +23,7 @@ from ikea_agent.tools.floorplanner.models import (
     ArchitectureScene,
     BaselineFloorPlanScene,
     FloorPlanRenderOutput,
+    FloorPlanRenderRequest,
     Point2DCm,
     RoomDimensionsCm,
     WallSegmentCm,
@@ -73,6 +75,32 @@ def _render_output(scene_revision: int) -> FloorPlanRenderOutput:
     )
 
 
+async def _decider_for_testing(
+    *,
+    state: FloorPlanIntakeState,
+    payload: FloorPlanIntakeInput,
+) -> FloorPlanIntakeDecision:
+    if "move on" in payload.user_message.lower():
+        return FloorPlanIntakeDecision(
+            next_action="render",
+            assistant_message="Rendering a draft now.",
+            room_type=state.room_type,
+            length_cm=state.length_cm,
+            depth_cm=state.depth_cm,
+            wall_height_cm=state.wall_height_cm,
+            orientation_context_collected=True,
+        )
+    return FloorPlanIntakeDecision(
+        next_action="ask_constraints",
+        assistant_message="Tell me fixed constraints before rendering.",
+        room_type=state.room_type,
+        length_cm=state.length_cm,
+        depth_cm=state.depth_cm,
+        wall_height_cm=state.wall_height_cm,
+        orientation_context_collected=state.orientation_context_collected,
+    )
+
+
 def test_graph_returns_unsupported_image_exit_when_images_are_present(tmp_path: Path) -> None:
     graph = build_floor_plan_intake_graph()
 
@@ -82,17 +110,20 @@ def test_graph_returns_unsupported_image_exit_when_images_are_present(tmp_path: 
     result = asyncio.run(
         graph.run(
             state=FloorPlanIntakeState(),
-            deps=FloorPlanIntakeDeps(output_dir=tmp_path, floor_plan_renderer=_renderer),
+            deps=FloorPlanIntakeDeps(
+                output_dir=tmp_path,
+                floor_plan_renderer=_renderer,
+                intake_decider=_decider_for_testing,
+            ),
             inputs=FloorPlanIntakeInput(user_message="Here are images", images=["a.png"]),
         )
     )
 
     assert result.status == "unsupported_image"
     assert result.should_exit is True
-    assert "do not support picture parsing yet" in result.assistant_message
 
 
-def test_graph_renders_after_move_on_with_dimensions_and_orientation(tmp_path: Path) -> None:
+def test_graph_renders_after_move_on_with_model_decider(tmp_path: Path) -> None:
     graph = build_floor_plan_intake_graph()
 
     def _renderer(**_: object) -> FloorPlanRenderOutput:
@@ -101,7 +132,11 @@ def test_graph_renders_after_move_on_with_dimensions_and_orientation(tmp_path: P
     result = asyncio.run(
         graph.run(
             state=FloorPlanIntakeState(),
-            deps=FloorPlanIntakeDeps(output_dir=tmp_path, floor_plan_renderer=_renderer),
+            deps=FloorPlanIntakeDeps(
+                output_dir=tmp_path,
+                floor_plan_renderer=_renderer,
+                intake_decider=_decider_for_testing,
+            ),
             inputs=FloorPlanIntakeInput(
                 user_message=(
                     "I have a 300 by 400 room, ceiling is 260 cm, with my back to the door "
@@ -114,6 +149,31 @@ def test_graph_renders_after_move_on_with_dimensions_and_orientation(tmp_path: P
     assert result.status == "rendered_draft"
     assert result.render_output is not None
     assert result.render_output.scene_revision == 1
+    assert result.assistant_message == "Rendering a draft now."
+
+
+def test_rendered_scene_is_valid_floorplanner_request_contract(tmp_path: Path) -> None:
+    graph = build_floor_plan_intake_graph()
+
+    def _renderer(**_: object) -> FloorPlanRenderOutput:
+        return _render_output(1)
+
+    result = asyncio.run(
+        graph.run(
+            state=FloorPlanIntakeState(),
+            deps=FloorPlanIntakeDeps(
+                output_dir=tmp_path,
+                floor_plan_renderer=_renderer,
+                intake_decider=_decider_for_testing,
+            ),
+            inputs=FloorPlanIntakeInput(user_message="Room is 300 by 400, window on left, move on"),
+        )
+    )
+
+    assert result.render_output is not None
+    request = FloorPlanRenderRequest(scene=result.render_output.scene, include_image_bytes=False)
+    assert request.scene is not None
+    assert request.scene.scene_level == "baseline"
 
 
 def test_run_floor_plan_intake_executes_with_renderer(
@@ -121,6 +181,7 @@ def test_run_floor_plan_intake_executes_with_renderer(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(graph_module, "render_floor_plan_draft", lambda **_: _render_output(1))
+    monkeypatch.setattr(graph_module, "decide_floor_plan_intake_step", _decider_for_testing)
 
     payload = FloorPlanIntakeInput(
         user_message=(

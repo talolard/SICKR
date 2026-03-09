@@ -35,6 +35,28 @@ class FloorPlanIntakeOutcome(BaseModel):
     collected_summary: dict[str, object] = Field(default_factory=dict)
 
 
+class FloorPlanIntakeDecision(BaseModel):
+    """Model-produced intake decision for one user turn."""
+
+    next_action: Literal[
+        "complete",
+        "ask_dimensions",
+        "ask_orientation",
+        "ask_constraints",
+        "render",
+    ]
+    assistant_message: str = Field(
+        min_length=1,
+        description="Response shown to user for the selected action.",
+    )
+    room_type: RoomType | None = None
+    length_cm: float | None = None
+    depth_cm: float | None = None
+    wall_height_cm: float | None = None
+    orientation_context_collected: bool | None = None
+    fixed_constraints: list[str] = Field(default_factory=list)
+
+
 class FloorPlanRenderCallable(Protocol):
     """Typed renderer callable used by graph nodes for floor-plan draft generation."""
 
@@ -48,6 +70,19 @@ class FloorPlanRenderCallable(Protocol):
         include_image_bytes: bool,
     ) -> FloorPlanRenderOutput:
         """Render one scene revision and return canonical render output."""
+        ...
+
+
+class FloorPlanIntakeDeciderCallable(Protocol):
+    """Typed model-backed decider callable for subagent routing."""
+
+    async def __call__(
+        self,
+        *,
+        state: FloorPlanIntakeState,
+        payload: FloorPlanIntakeInput,
+    ) -> FloorPlanIntakeDecision:
+        """Return structured next-step decision and extracted fields."""
         ...
 
 
@@ -74,6 +109,7 @@ class FloorPlanIntakeDeps:
 
     output_dir: Path
     floor_plan_renderer: FloorPlanRenderCallable
+    intake_decider: FloorPlanIntakeDeciderCallable
     max_question_rounds: int = 4
 
 

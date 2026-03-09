@@ -18,7 +18,10 @@ from ikea_agent.chat.subagents.floor_plan_intake.nodes import (
     route_turn,
     unsupported_image_outcome,
 )
-from ikea_agent.chat.subagents.floor_plan_intake.tools import render_floor_plan_draft
+from ikea_agent.chat.subagents.floor_plan_intake.tools import (
+    decide_floor_plan_intake_step,
+    render_floor_plan_draft,
+)
 from ikea_agent.chat.subagents.floor_plan_intake.types import (
     FloorPlanIntakeDeps,
     FloorPlanIntakeInput,
@@ -111,6 +114,7 @@ async def run_floor_plan_intake(
         deps=FloorPlanIntakeDeps(
             output_dir=output_dir,
             floor_plan_renderer=render_floor_plan_draft,
+            intake_decider=decide_floor_plan_intake_step,
         ),
         inputs=payload,
     )

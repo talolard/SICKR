@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from ikea_agent.chat.subagents.floor_plan_intake.types import (
+    FloorPlanIntakeDecision,
     FloorPlanIntakeInput,
     FloorPlanIntakeOutcome,
     FloorPlanIntakeState,
@@ -44,6 +45,7 @@ class RouteSignal(BaseModel):
         "ask_constraints",
         "render",
     ]
+    assistant_message: str | None = None
 
 
 async def route_turn(
@@ -51,13 +53,18 @@ async def route_turn(
 ) -> RouteSignal:
     """Evaluate one user turn and emit a routing signal for downstream branches."""
 
-    _ingest_payload(ctx.state, ctx.inputs)
+    _ingest_payload_heuristic(ctx.state, ctx.inputs)
     kind = _resolve_route_kind(
         state=ctx.state,
         payload=ctx.inputs,
         max_question_rounds=ctx.deps.max_question_rounds,
     )
-    return RouteSignal(kind=kind)
+    if kind == "unsupported_image":
+        return RouteSignal(kind=kind)
+
+    decision = await ctx.deps.intake_decider(state=ctx.state, payload=ctx.inputs)
+    _apply_decision_updates(ctx.state, decision)
+    return RouteSignal(kind=decision.next_action, assistant_message=decision.assistant_message)
 
 
 def _resolve_route_kind(
@@ -156,10 +163,7 @@ async def complete_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPlanInta
     return FloorPlanIntakeOutcome(
         status="complete",
         should_exit=True,
-        assistant_message=(
-            "Understood. We can stop here and return to the parent flow. "
-            "You can always come back for another refinement pass later."
-        ),
+        assistant_message=ctx.inputs.assistant_message or _default_complete_message(),
         scene_revision=ctx.state.scene_revision,
         render_output=ctx.state.last_render,
         collected_summary=_state_summary(ctx.state),
@@ -173,11 +177,7 @@ async def ask_dimensions_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPl
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=(
-            "Give me a rough room size first (for example, 300 by 400 cm). "
-            "Approximate values are fine and we will iterate together. "
-            "At any point, you can say 'let's move on'."
-        ),
+        assistant_message=ctx.inputs.assistant_message or _default_dimensions_message(),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -190,7 +190,7 @@ async def ask_orientation_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorP
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=_orientation_prompt(ctx.state.room_type),
+        assistant_message=ctx.inputs.assistant_message or _orientation_prompt(ctx.state.room_type),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -203,13 +203,7 @@ async def ask_constraints_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorP
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=(
-            "Before we draft, tell me fixed architectural constraints: wall height, "
-            "unusual corners/curves/poles, plus any hard-mounted objects. "
-            "If movable furniture appears, we'll place it later unless it is fixed "
-            "to the wall. Optionally share outlets, radiators/heating, and lights. "
-            "You can also say 'let's move on' now."
-        ),
+        assistant_message=ctx.inputs.assistant_message or _default_constraints_message(),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -235,18 +229,17 @@ async def render_draft_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPlan
     return FloorPlanIntakeOutcome(
         status="rendered_draft",
         should_exit=False,
-        assistant_message=(
-            "I generated an initial floor-plan draft from your input. "
-            "Does this look right, or do you want corrections? "
-            "You can reply with corrections, 'that's close enough', or 'let's give up'."
-        ),
+        assistant_message=ctx.inputs.assistant_message or _default_render_message(),
         scene_revision=ctx.state.scene_revision,
         render_output=render_output,
         collected_summary=_state_summary(ctx.state),
     )
 
 
-def _ingest_payload(state: FloorPlanIntakeState, payload: FloorPlanIntakeInput) -> None:
+def _ingest_payload_heuristic(
+    state: FloorPlanIntakeState,
+    payload: FloorPlanIntakeInput,
+) -> None:
     state.latest_input = payload
     user_text = payload.user_message.strip()
     state.room_type = _infer_room_type(user_text, state.room_type)
@@ -263,6 +256,59 @@ def _ingest_payload(state: FloorPlanIntakeState, payload: FloorPlanIntakeInput) 
     for constraint in new_constraints:
         if constraint not in state.fixed_constraints:
             state.fixed_constraints.append(constraint)
+
+
+def _apply_decision_updates(
+    state: FloorPlanIntakeState,
+    decision: FloorPlanIntakeDecision,
+) -> None:
+    if decision.room_type is not None:
+        state.room_type = decision.room_type
+    if decision.length_cm is not None:
+        state.length_cm = decision.length_cm
+    if decision.depth_cm is not None:
+        state.depth_cm = decision.depth_cm
+    if decision.wall_height_cm is not None:
+        state.wall_height_cm = decision.wall_height_cm
+    if decision.orientation_context_collected is not None:
+        state.orientation_context_collected = decision.orientation_context_collected
+    for constraint in decision.fixed_constraints:
+        normalized = constraint.strip().lower()
+        if normalized and normalized not in state.fixed_constraints:
+            state.fixed_constraints.append(normalized)
+
+
+def _default_complete_message() -> str:
+    return (
+        "Understood. We can stop here and return to the parent flow. "
+        "You can always come back for another refinement pass later."
+    )
+
+
+def _default_dimensions_message() -> str:
+    return (
+        "Give me a rough room size first (for example, 300 by 400 cm). "
+        "Approximate values are fine and we will iterate together. "
+        "At any point, you can say 'let's move on'."
+    )
+
+
+def _default_constraints_message() -> str:
+    return (
+        "Before we draft, tell me fixed architectural constraints: wall height, "
+        "unusual corners/curves/poles, plus any hard-mounted objects. "
+        "If movable furniture appears, we'll place it later unless it is fixed "
+        "to the wall. Optionally share outlets, radiators/heating, and lights. "
+        "You can also say 'let's move on' now."
+    )
+
+
+def _default_render_message() -> str:
+    return (
+        "I generated an initial floor-plan draft from your input. "
+        "Does this look right, or do you want corrections? "
+        "You can reply with corrections, 'that's close enough', or 'let's give up'."
+    )
 
 
 def _parse_dimensions_cm(text: str) -> tuple[float, float] | None:
