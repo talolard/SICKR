@@ -54,12 +54,21 @@ export function parseProductResults(result: unknown): Product[] | null {
   if (Array.isArray(result)) {
     return parseFromArray(result);
   }
-  if (typeof result === "object" && result !== null && "products" in result) {
-    const products = (result as { products: unknown }).products;
-    if (!Array.isArray(products)) {
-      return null;
+  if (typeof result === "object" && result !== null) {
+    if ("products" in result) {
+      const products = (result as { products: unknown }).products;
+      if (!Array.isArray(products)) {
+        return null;
+      }
+      return parseFromArray(products);
     }
-    return parseFromArray(products);
+    if ("results" in result) {
+      const products = (result as { results: unknown }).results;
+      if (!Array.isArray(products)) {
+        return null;
+      }
+      return parseFromArray(products);
+    }
   }
   return null;
 }
