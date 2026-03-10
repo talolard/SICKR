@@ -28,6 +28,7 @@ export default function SubagentChatPage(): React.ReactElement {
   }, [currentAgent, subagents]);
 
   const chatUrl = selected?.chat_proxy_path ?? `/api/subagents/${currentAgent}/chat/`;
+  const resolvedChatUrl = selected?.chat_url ?? chatUrl;
 
   return (
     <main className="min-h-screen bg-white">
@@ -37,13 +38,13 @@ export default function SubagentChatPage(): React.ReactElement {
           <p className="text-sm text-gray-600">
             {selected?.description ?? "Subagent chat routed through PydanticAI web UI."}
           </p>
-          <Link href={chatUrl} className="text-sm text-blue-700 underline" target="_blank">
+          <Link href={resolvedChatUrl} className="text-sm text-blue-700 underline" target="_blank">
             Open in new tab
           </Link>
         </div>
         {error.length > 0 ? <p className="text-red-700">{error}</p> : null}
         <iframe
-          src={chatUrl}
+          src={resolvedChatUrl}
           title={`subagent-${currentAgent}-chat`}
           className="h-[calc(100vh-12rem)] w-full rounded border border-gray-300"
         />

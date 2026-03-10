@@ -3,6 +3,7 @@ export type SubagentItem = {
   description: string;
   web_path: string;
   chat_proxy_path: string;
+  chat_url: string;
 };
 
 export async function fetchSubagents(): Promise<SubagentItem[]> {
