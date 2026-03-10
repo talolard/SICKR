@@ -14,6 +14,9 @@ from ikea_agent.chat.subagents.floor_plan_intake.agent import (
     NOTES as FLOOR_PLAN_NOTES,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.agent import (
+    PROMPT as FLOOR_PLAN_PROMPT,
+)
+from ikea_agent.chat.subagents.floor_plan_intake.agent import (
     SUBAGENT_NAME as FLOOR_PLAN_SUBAGENT_NAME,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.agent import (
@@ -21,9 +24,6 @@ from ikea_agent.chat.subagents.floor_plan_intake.agent import (
 )
 from ikea_agent.chat.subagents.floor_plan_intake.agent import (
     build_floor_plan_intake_agent,
-)
-from ikea_agent.chat.subagents.floor_plan_intake.agent import (
-    read_prompt_markdown as read_floor_plan_prompt_markdown,
 )
 
 
@@ -108,7 +108,7 @@ def describe_subagent(name: str) -> SubagentDescription:
             agent_key=item["agent_key"],
             ag_ui_path=item["ag_ui_path"],
             web_path=item["web_path"],
-            prompt_markdown=read_floor_plan_prompt_markdown(),
+            prompt_markdown=FLOOR_PLAN_PROMPT.read_markdown(),
             tools=list(FLOOR_PLAN_TOOL_NAMES),
             notes=FLOOR_PLAN_NOTES,
         )

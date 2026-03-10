@@ -3,27 +3,45 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True, slots=True)
+class SubagentPrompt:
+    """Prompt helper for loading markdown and instruction text from a file path."""
+
+    path: Path
+
+    def read_markdown(self) -> str:
+        """Load prompt markdown content and fail loudly when missing."""
+
+        if not self.path.exists():
+            msg = f"Prompt file does not exist: {self.path}"
+            raise FileNotFoundError(msg)
+        return self.path.read_text(encoding="utf-8")
+
+    def instruction_text(self) -> str:
+        """Load prompt markdown and strip optional YAML front-matter."""
+
+        raw = self.read_markdown().strip()
+        if raw.startswith("---"):
+            end = raw.find("---", 3)
+            if end != -1:
+                raw = raw[end + 3 :].lstrip("\n")
+        return raw.strip()
 
 
 def read_prompt_markdown(prompt_path: Path) -> str:
     """Load markdown prompt content and fail loudly when missing."""
 
-    if not prompt_path.exists():
-        msg = f"Prompt file does not exist: {prompt_path}"
-        raise FileNotFoundError(msg)
-    return prompt_path.read_text(encoding="utf-8")
+    return SubagentPrompt(prompt_path).read_markdown()
 
 
 def instruction_text_from_prompt(prompt_path: Path) -> str:
     """Load prompt markdown and strip optional YAML front-matter."""
 
-    raw = read_prompt_markdown(prompt_path).strip()
-    if raw.startswith("---"):
-        end = raw.find("---", 3)
-        if end != -1:
-            raw = raw[end + 3 :].lstrip("\n")
-    return raw.strip()
+    return SubagentPrompt(prompt_path).instruction_text()
 
 
 def load_prompt(prompt_path: Path) -> str:
