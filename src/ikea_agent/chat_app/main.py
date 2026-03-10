@@ -17,6 +17,7 @@ from pydantic_ai.ag_ui import handle_ag_ui_request
 from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
+from ikea_agent.chat.subagents.web import build_subagent_web_agent, list_subagent_catalog
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.comment_bundles import (
     DEFAULT_COMMENT_TITLE,
@@ -193,6 +194,14 @@ def _register_comment_routes(
             markdown_path=result.markdown_path,
             saved_images_count=result.saved_images_count,
         )
+
+
+def _register_subagent_catalog_routes(app: FastAPI) -> None:
+    @app.get("/api/subagents")
+    async def list_subagents() -> dict[str, list[dict[str, str]]]:
+        """Return all registered subagents and their mounted web paths."""
+
+        return {"subagents": list_subagent_catalog()}
 
 
 def _resolve_feedback_images(
@@ -625,6 +634,7 @@ def create_app(
         attachment_store=attachment_store,
         run_history_repository=run_history_repository,
     )
+    _register_subagent_catalog_routes(app)
     _register_generated_image_routes(app, attachment_store)
     _register_openusd_routes(
         app,
@@ -645,6 +655,11 @@ def create_app(
             deps=deps,
             run_history_repository=run_history_repository,
         )
+
+    for item in list_subagent_catalog():
+        subagent_name = item["name"]
+        subagent_web_agent = build_subagent_web_agent(subagent_name)
+        app.mount(item["web_path"], subagent_web_agent.to_web(deps=None))
 
     if mount_web_ui:
         app.mount("/", web_agent.to_web(deps=deps))

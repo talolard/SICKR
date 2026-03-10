@@ -50,6 +50,36 @@ def test_create_app_with_ag_ui_mount_exposes_ag_ui_route() -> None:
     assert response.status_code != 404
 
 
+def test_subagent_catalog_route_lists_registered_subagents() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    response = client.get("/api/subagents")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["subagents"]
+    assert any(item["name"] == "floor_plan_intake" for item in payload["subagents"])
+
+
+def test_subagent_web_mount_exists() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    response = client.get("/subagents/floor_plan_intake/chat/")
+    assert response.status_code != 404
+
+
 def test_attachment_upload_and_fetch_round_trip() -> None:
     client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
 
