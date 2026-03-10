@@ -25,6 +25,7 @@ import {
 import { getConsoleRecordsSnapshot, startFeedbackCapture } from "@/lib/feedbackCapture";
 
 const DEFAULT_FEEDBACK_TITLE = "user_comment_from_ui";
+const COPILOT_AGENT_ID = "ikea_agent";
 
 type FeedbackCreateResponse = {
   comment_id: string;
@@ -64,7 +65,7 @@ function collectStorageByPrefix(storage: Storage, prefix: string): Record<string
 }
 
 export default function Home(): ReactElement {
-  const { agent } = useAgent({ agentId: "ikea_agent" });
+  const { agent } = useAgent({ agentId: COPILOT_AGENT_ID });
   const {
     threadId,
     threadIds,
@@ -642,7 +643,10 @@ export default function Home(): ReactElement {
               }
             }}
           />
-          <CopilotSidebar />
+          <CopilotSidebar
+            agentId={COPILOT_AGENT_ID}
+            threadId={threadId ?? undefined}
+          />
         </section>
       </div>
       <button
