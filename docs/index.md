@@ -5,6 +5,8 @@
 - [Typing and Static Analysis](typing.md)
 - [Logging Standards](logging.md)
 - [Git Identity](git_identity.md)
+- [Worktree Multi-Agent Workflow](worktree_multi_agent_workflow.md)
+- [Merge Runbook](merge_runbook.md)
 - [Agent Tool Bridge](tools/agent_tool_bridge.md)
 - [Floor Planner Tool](tools/floor_planner.md)
 - [Image Analysis Tools](tools/image_analysis.md)

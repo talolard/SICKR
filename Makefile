@@ -1,6 +1,6 @@
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
 	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
-	dev-all dev-all-mock reset
+	dev-all dev-all-mock reset agent-start merge-list merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -79,6 +79,25 @@ reset:
 	@lsof -tiTCP:$(PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@rm -rf $(UI_DIR)/.next 2>/dev/null || true
 	@echo "Stopped dev servers on :$(UI_PORT)/:$(PORT) and cleared $(UI_DIR)/.next"
+
+agent-start:
+	@if [ -n "$(ISSUE)" ]; then \
+		./scripts/worktree/start-task.sh --issue "$(ISSUE)" --slot "$(SLOT)"; \
+	elif [ -n "$(QUERY)" ]; then \
+		./scripts/worktree/start-task.sh --query "$(QUERY)" --slot "$(SLOT)"; \
+	else \
+		echo "Usage: make agent-start SLOT=<0-99> ISSUE=<id> OR QUERY=\"text\""; \
+		exit 1; \
+	fi
+
+merge-list:
+	./scripts/beads/merge_list.sh
+
+merge-list-json:
+	./scripts/beads/merge_list.sh --json
+
+merge-normalize:
+	./scripts/beads/merge_normalize.sh
 
 # One command before commit.
 tidy: format
