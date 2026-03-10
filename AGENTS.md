@@ -53,6 +53,11 @@ When using libraries search for documentation in
 - **Pre-commit quality gate: `make tidy`** (runs format → lint-fix → typecheck → test in one command).
 - Use `make format-all` for a quick format+lint pass without running the test suite.
 
+## Behavioral Readiness Gate
+
+- For behavioral/runtime changes (agent logic, prompts, tools, routing, or UI behavior), run `make ui-test-e2e-real-ui-smoke` and ensure it passes before telling the user work is ready.
+- This gate is not required for documentation-only changes.
+
 ## Typing and Test Expectations
 
 - Use explicit type annotations in production code and tests.
