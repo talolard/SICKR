@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 
 from pydantic_ai import Agent
@@ -18,7 +19,7 @@ from ikea_agent.chat.subagents.floor_plan_intake.types import (
 from ikea_agent.config import get_settings
 
 
-def _build_decider_instructions() -> str:
+def _build_default_decider_instructions() -> str:
     return (
         "You are a floor-plan intake routing specialist. "
         "Given current intake state and latest user turn, choose exactly one next_action: "
@@ -33,11 +34,28 @@ def _build_decider_instructions() -> str:
     )
 
 
-@lru_cache(maxsize=1)
-def _build_decider_agent() -> Agent[None, FloorPlanIntakeDecision]:
+def _build_decider_instructions(*, prompt_instructions: str) -> str:
+    return (
+        f"{prompt_instructions.strip()}\n\n"
+        "Routing contract:\n"
+        "- Choose exactly one next_action from: complete, ask_dimensions, ask_orientation, "
+        "ask_constraints, render.\n"
+        "- Return concise assistant_message in the same collaborative tone.\n"
+        "- Extract any newly stated room dimensions, wall height, room type, orientation coverage, "
+        "and fixed constraints.\n"
+        "- If user asks to move on or provide corrections after a prior draft, choose render.\n"
+    )
+
+
+@lru_cache(maxsize=16)
+def _build_decider_agent(
+    *,
+    instructions: str,
+    model_name: str,
+) -> Agent[None, FloorPlanIntakeDecision]:
     settings = get_settings()
     model = GoogleModel(
-        settings.gemini_generation_model,
+        model_name,
         settings=GoogleModelSettings(
             google_thinking_config=ThinkingConfigDict(include_thoughts=False),
         ),
@@ -46,7 +64,7 @@ def _build_decider_agent() -> Agent[None, FloorPlanIntakeDecision]:
     return Agent[None, FloorPlanIntakeDecision](
         model=model,
         deps_type=type(None),
-        instructions=_build_decider_instructions(),
+        instructions=instructions,
         output_type=FloorPlanIntakeDecision,
     )
 
@@ -78,7 +96,39 @@ async def decide_floor_plan_intake_step(
 ) -> FloorPlanIntakeDecision:
     """Use the configured model to decide intake routing for one turn."""
 
-    agent = _build_decider_agent()
+    settings = get_settings()
+    instructions = _build_default_decider_instructions()
+    agent = _build_decider_agent(
+        instructions=instructions,
+        model_name=settings.gemini_generation_model,
+    )
     prompt = _build_decider_prompt(state=state, payload=payload)
     result = await agent.run(prompt)
     return result.output
+
+
+def build_floor_plan_intake_decider(
+    *,
+    prompt_instructions: str,
+    model_name: str | None = None,
+) -> Callable[..., Awaitable[FloorPlanIntakeDecision]]:
+    """Create a decider callable bound to prompt-driven instructions and model."""
+
+    settings = get_settings()
+    resolved_model_name = model_name or settings.gemini_generation_model
+    instructions = _build_decider_instructions(prompt_instructions=prompt_instructions)
+    agent = _build_decider_agent(
+        instructions=instructions,
+        model_name=resolved_model_name,
+    )
+
+    async def _decide(
+        *,
+        state: FloorPlanIntakeState,
+        payload: FloorPlanIntakeInput,
+    ) -> FloorPlanIntakeDecision:
+        prompt = _build_decider_prompt(state=state, payload=payload)
+        result = await agent.run(prompt)
+        return result.output
+
+    return _decide

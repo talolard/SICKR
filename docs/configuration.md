@@ -10,9 +10,27 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
 - `EMBEDDING_DIMENSIONS` default: `256`
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
+- `MMR_LAMBDA` default: `0.8`
+- `MMR_PRESELECT_LIMIT` default: `30`
+- `EMBEDDING_NEIGHBOR_LIMIT` default: `0` (`0` means store all pairwise neighbors)
 
 ## Notes
 
 - Embeddings are generated via pydantic-ai embedding providers.
 - Milvus Lite stores vectors; DuckDB stores product metadata and embedding snapshots.
-- Use `uv run python -m ingest.hydrate_milvus` to load/rebuild Milvus from DuckDB snapshots.
+- Use `uv run python -m ingest.hydrate_milvus` to load/rebuild Milvus from DuckDB snapshots and
+  recompute `app.product_embedding_neighbors` in batch.
+
+## Subagent Model Overrides
+
+Subagents resolve generation models with this precedence:
+
+1. Explicit runtime override passed by caller.
+2. Per-subagent config in `subagents`.
+3. Global `GEMINI_GENERATION_MODEL`.
+
+Environment example for one override:
+
+```bash
+SUBAGENTS__FLOOR_PLAN_INTAKE__MODEL=gemini-3.1-flash
+```

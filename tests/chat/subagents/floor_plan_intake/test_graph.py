@@ -16,7 +16,6 @@ from ikea_agent.chat.subagents.floor_plan_intake.types import (
     FloorPlanIntakeDecision,
     FloorPlanIntakeDeps,
     FloorPlanIntakeInput,
-    FloorPlanIntakeOutcome,
     FloorPlanIntakeState,
 )
 from ikea_agent.tools.floorplanner.models import (
@@ -196,25 +195,23 @@ def test_run_floor_plan_intake_executes_with_renderer(
 
 
 def test_run_from_raw_input_accepts_plain_text(monkeypatch: MonkeyPatch) -> None:
-    async def _fake_run(
-        payload: FloorPlanIntakeInput,
+    async def _fake_decider(
         *,
-        output_dir: Path = graph_module.DEFAULT_OUTPUT_DIR,
-    ) -> FloorPlanIntakeOutcome:
-        _ = output_dir
-        return FloorPlanIntakeOutcome(
-            status="ask_user",
-            should_exit=False,
-            assistant_message=payload.user_message,
-            scene_revision=0,
+        state: FloorPlanIntakeState,
+        payload: FloorPlanIntakeInput,
+    ) -> FloorPlanIntakeDecision:
+        _ = state
+        return FloorPlanIntakeDecision(
+            next_action="ask_dimensions",
+            assistant_message=f"Echo: {payload.user_message}",
         )
 
-    monkeypatch.setattr(graph_module, "run_floor_plan_intake", _fake_run)
+    monkeypatch.setattr(graph_module, "decide_floor_plan_intake_step", _fake_decider)
 
     output = asyncio.run(run_from_raw_input("room is 300 by 400"))
 
     assert output["status"] == "ask_user"
-    assert output["assistant_message"] == "room is 300 by 400"
+    assert output["assistant_message"] == "Echo: room is 300 by 400"
 
 
 def test_run_floor_plan_intake_fails_when_prompt_is_missing(

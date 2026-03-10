@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import cast
 
 from pydantic_graph.beta import Graph, GraphBuilder
 
@@ -19,10 +20,12 @@ from ikea_agent.chat.subagents.floor_plan_intake.nodes import (
     unsupported_image_outcome,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.tools import (
-    decide_floor_plan_intake_step,
+    build_floor_plan_intake_decider,
     render_floor_plan_draft,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.types import (
+    FloorPlanIntakeDeciderCallable,
+    FloorPlanIntakeDecision,
     FloorPlanIntakeDeps,
     FloorPlanIntakeInput,
     FloorPlanIntakeOutcome,
@@ -99,10 +102,59 @@ def build_floor_plan_intake_graph() -> Graph[
     return builder.build()
 
 
+async def decide_floor_plan_intake_step(
+    *,
+    state: FloorPlanIntakeState,
+    payload: FloorPlanIntakeInput,
+    model_name: str | None = None,
+) -> FloorPlanIntakeDecision:
+    """Run the model-backed intake decider using this subagent's prompt instructions."""
+
+    prompt_instructions = load_prompt(PROMPT_PATH)
+    decider = build_floor_plan_intake_decider(
+        prompt_instructions=prompt_instructions,
+        model_name=model_name,
+    )
+    return await decider(state=state, payload=payload)
+
+
+def build_floor_plan_intake_deps(
+    *,
+    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    model_name: str | None = None,
+) -> FloorPlanIntakeDeps:
+    """Construct typed graph dependencies for one floor-plan intake run."""
+
+    decider: FloorPlanIntakeDeciderCallable
+    if model_name is None:
+
+        async def decider(
+            *,
+            state: FloorPlanIntakeState,
+            payload: FloorPlanIntakeInput,
+        ) -> FloorPlanIntakeDecision:
+            return await decide_floor_plan_intake_step(state=state, payload=payload)
+    else:
+        prompt_instructions = load_prompt(PROMPT_PATH)
+        decider = cast(
+            "FloorPlanIntakeDeciderCallable",
+            build_floor_plan_intake_decider(
+                prompt_instructions=prompt_instructions,
+                model_name=model_name,
+            ),
+        )
+    return FloorPlanIntakeDeps(
+        output_dir=output_dir,
+        floor_plan_renderer=render_floor_plan_draft,
+        intake_decider=decider,
+    )
+
+
 async def run_floor_plan_intake(
     payload: FloorPlanIntakeInput,
     *,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
+    model_name: str | None = None,
 ) -> FloorPlanIntakeOutcome:
     """Run one floor-plan intake turn and return a typed outcome."""
 
@@ -111,19 +163,26 @@ async def run_floor_plan_intake(
     graph = build_floor_plan_intake_graph()
     return await graph.run(
         state=FloorPlanIntakeState(),
-        deps=FloorPlanIntakeDeps(
-            output_dir=output_dir,
-            floor_plan_renderer=render_floor_plan_draft,
-            intake_decider=decide_floor_plan_intake_step,
-        ),
+        deps=build_floor_plan_intake_deps(output_dir=output_dir, model_name=model_name),
         inputs=payload,
     )
 
 
-async def run_from_raw_input(raw_input: str) -> dict[str, object]:
-    """CLI-facing adapter that normalizes raw input and returns JSON-safe output."""
+async def run_from_raw_input(
+    raw_input: str,
+    *,
+    model_name: str | None = None,
+) -> dict[str, object]:
+    """Normalize raw input and execute one floor-plan intake run as JSON output."""
 
     normalized = parse_json_or_text(raw_input)
     payload = FloorPlanIntakeInput.model_validate(normalized)
-    outcome = await run_floor_plan_intake(payload)
+    _ = load_prompt(PROMPT_PATH)
+    await asyncio.to_thread(DEFAULT_OUTPUT_DIR.mkdir, parents=True, exist_ok=True)
+    graph = build_floor_plan_intake_graph()
+    outcome = await graph.run(
+        state=FloorPlanIntakeState(),
+        deps=build_floor_plan_intake_deps(output_dir=DEFAULT_OUTPUT_DIR, model_name=model_name),
+        inputs=payload,
+    )
     return outcome.model_dump(mode="json")

@@ -9,8 +9,14 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubagentModelConfig(BaseModel):
+    """Optional model override configuration for one subagent."""
+
+    model: str | None = Field(default=None)
 
 
 class AppSettings(BaseSettings):
@@ -21,6 +27,7 @@ class AppSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
+        env_nested_delimiter="__",
     )
 
     app_env: str = Field(default="dev")
@@ -61,6 +68,24 @@ class AppSettings(BaseSettings):
     rerank_backend: Literal["lexical", "transformer"] = Field(default="transformer")
     rerank_candidate_limit: int = Field(default=100, ge=10, le=500)
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
+    mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
+    mmr_preselect_limit: int = Field(default=30, ge=5, le=200)
+    embedding_neighbor_limit: int = Field(default=0, ge=0, le=10000)
+    subagents: dict[str, SubagentModelConfig] = Field(default_factory=dict)
+
+    def subagent_model(self, subagent_name: str) -> str | None:
+        """Return configured model override for one subagent when present."""
+
+        direct = self.subagents.get(subagent_name)
+        if direct and direct.model:
+            return direct.model
+        lower = self.subagents.get(subagent_name.lower())
+        if lower and lower.model:
+            return lower.model
+        upper = self.subagents.get(subagent_name.upper())
+        if upper and upper.model:
+            return upper.model
+        return None
 
 
 @lru_cache(maxsize=1)

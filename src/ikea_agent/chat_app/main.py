@@ -3,25 +3,28 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
 from typing import Protocol
-from urllib.parse import urlparse
 from uuid import uuid4
 
-import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
-from pydantic_ai.ui._web.app import create_api_app
-from starlette.types import ASGIApp
 
 from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
-from ikea_agent.chat.subagents.web import build_subagent_web_agent, list_subagent_catalog
+from ikea_agent.chat.subagents.index import (
+    SubagentCatalogItem,
+    SubagentDescription,
+    build_subagent_ag_ui_agent,
+    describe_subagent,
+    list_subagent_catalog,
+)
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.comment_bundles import (
     DEFAULT_COMMENT_TITLE,
@@ -64,7 +67,6 @@ from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-_SUBAGENT_REFERER_PARTS = 3
 logger = getLogger(__name__)
 
 
@@ -72,84 +74,6 @@ class _ArchivedMessagesResult(Protocol):
     def all_messages_json(self) -> bytes: ...
 
     def new_messages_json(self) -> bytes: ...
-
-
-def _resolve_subagent_name_from_referer(referer: str | None) -> str | None:
-    """Extract subagent name from a web UI referer path when present."""
-
-    if not referer:
-        return None
-    parsed = urlparse(referer)
-    path_parts = [part for part in parsed.path.split("/") if part]
-    if (
-        len(path_parts) >= _SUBAGENT_REFERER_PARTS
-        and path_parts[0] == "subagents"
-        and path_parts[2] == "chat"
-    ):
-        return path_parts[1]
-    return None
-
-
-def _resolve_subagent_name_from_chat_payload(
-    body: bytes,
-    *,
-    model_id_to_subagent: dict[str, str],
-) -> str | None:
-    """Extract subagent selection from /api/chat payload model id when present."""
-
-    if not body:
-        return None
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    model = payload.get("model")
-    if not isinstance(model, str):
-        return None
-    return model_id_to_subagent.get(model)
-
-
-async def _proxy_request_to_starlette_app(
-    *,
-    target_app: ASGIApp,
-    request: Request,
-    body: bytes | None = None,
-) -> Response:
-    """Forward one request to an in-process Starlette app and return its response."""
-
-    sub_path = request.url.path.removeprefix("/api")
-    if not sub_path:
-        sub_path = "/"
-    query = f"?{request.url.query}" if request.url.query else ""
-    request_body = body if body is not None else await request.body()
-    headers = {
-        key: value
-        for key, value in request.headers.items()
-        if key.lower() not in {"host", "content-length"}
-    }
-    transport = httpx.ASGITransport(app=target_app)
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://subagent.local",
-    ) as client:
-        upstream = await client.request(
-            method=request.method,
-            url=f"{sub_path}{query}",
-            headers=headers,
-            content=request_body,
-        )
-
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        headers={
-            key: value
-            for key, value in upstream.headers.items()
-            if key.lower() not in {"content-length", "transfer-encoding", "connection"}
-        },
-    )
 
 
 def _build_attachment_store(
@@ -281,53 +205,19 @@ def _register_comment_routes(
 
 def _register_subagent_catalog_routes(app: FastAPI) -> None:
     @app.get("/api/subagents")
-    async def list_subagents() -> dict[str, list[dict[str, str]]]:
-        """Return all registered subagents and their mounted web paths."""
+    async def list_subagents() -> dict[str, list[SubagentCatalogItem]]:
+        """Return all registered subagents for UI navigation."""
 
         return {"subagents": list_subagent_catalog()}
 
+    @app.get("/api/subagents/{subagent_name}/metadata")
+    async def get_subagent_metadata(subagent_name: str) -> SubagentDescription:
+        """Return prompt, graph, and tool metadata for one subagent."""
 
-def _register_web_ui_api_dispatch_routes(
-    app: FastAPI,
-    *,
-    main_api_app: ASGIApp,
-    subagent_api_apps: dict[str, ASGIApp],
-    model_id_to_subagent: dict[str, str],
-) -> None:
-    async def _dispatch(request: Request) -> Response:
-        body = await request.body()
-        subagent_name = _resolve_subagent_name_from_referer(request.headers.get("referer"))
-        if subagent_name is None and request.url.path == "/api/chat":
-            subagent_name = _resolve_subagent_name_from_chat_payload(
-                body,
-                model_id_to_subagent=model_id_to_subagent,
-            )
-        target_app = (
-            subagent_api_apps.get(subagent_name, main_api_app)
-            if subagent_name is not None
-            else main_api_app
-        )
-        return await _proxy_request_to_starlette_app(
-            target_app=target_app,
-            request=request,
-            body=body,
-        )
-
-    @app.options("/api/chat")
-    async def api_chat_options(request: Request) -> Response:
-        return await _dispatch(request)
-
-    @app.post("/api/chat")
-    async def api_chat_post(request: Request) -> Response:
-        return await _dispatch(request)
-
-    @app.get("/api/configure")
-    async def api_configure_get(request: Request) -> Response:
-        return await _dispatch(request)
-
-    @app.get("/api/health")
-    async def api_health_get(request: Request) -> Response:
-        return await _dispatch(request)
+        try:
+            return describe_subagent(subagent_name)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _resolve_feedback_images(
@@ -643,16 +533,15 @@ def _register_thread_data_routes(  # noqa: C901
         )
 
 
-def _register_ag_ui_route(
+def _register_ag_ui_routes(  # noqa: C901
     app: FastAPI,
     *,
-    web_agent: Agent[ChatAgentDeps, str],
+    main_agent: Agent[ChatAgentDeps, str],
+    subagent_agents: dict[str, Agent[None, str]],
     deps: ChatAgentDeps,
     run_history_repository: RunHistoryRepository | None,
 ) -> None:
-    @app.post("/ag-ui")
-    @app.post("/ag-ui/")
-    async def run_ag_ui(request: Request) -> Response:
+    async def _parse_and_record_run_context(request: Request) -> tuple[bytes, str]:
         body = await request.body()
         run_id = f"agui-{uuid4().hex[:16]}"
         try:
@@ -679,7 +568,9 @@ def _register_ag_ui_route(
         except Exception:
             # If request parsing fails, proceed with AG-UI normal error semantics.
             logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
+        return body, run_id
 
+    def _build_on_complete(run_id: str) -> Callable[[_ArchivedMessagesResult], Awaitable[None]]:
         async def _on_complete(result: _ArchivedMessagesResult) -> None:
             if run_history_repository is not None:
                 run_history_repository.record_run_complete(
@@ -688,16 +579,48 @@ def _register_ag_ui_route(
                     pydantic_new_messages_json=result.new_messages_json(),
                 )
 
+        return _on_complete
+
+    @app.post("/ag-ui")
+    @app.post("/ag-ui/")
+    async def run_main_ag_ui(request: Request) -> Response:
+        _body, run_id = await _parse_and_record_run_context(request)
+        on_complete = _build_on_complete(run_id)
         try:
             with deps.attachment_store.bind_context(
                 thread_id=deps.state.thread_id or "anonymous-thread",
                 run_id=deps.state.run_id,
             ):
                 return await handle_ag_ui_request(
-                    web_agent,
+                    main_agent,
                     request,
                     deps=deps,
-                    on_complete=_on_complete,
+                    on_complete=on_complete,
+                )
+        except Exception as exc:
+            if run_history_repository is not None:
+                run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
+            raise
+
+    @app.post("/ag-ui/subagents/{subagent_name}")
+    @app.post("/ag-ui/subagents/{subagent_name}/")
+    async def run_subagent_ag_ui(request: Request, subagent_name: str) -> Response:
+        agent = subagent_agents.get(subagent_name)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Unknown subagent `{subagent_name}`.")
+
+        _body, run_id = await _parse_and_record_run_context(request)
+        on_complete = _build_on_complete(run_id)
+        try:
+            with deps.attachment_store.bind_context(
+                thread_id=deps.state.thread_id or "anonymous-thread",
+                run_id=deps.state.run_id,
+            ):
+                return await handle_ag_ui_request(
+                    agent,
+                    request,
+                    deps=None,
+                    on_complete=on_complete,
                 )
         except Exception as exc:
             if run_history_repository is not None:
@@ -774,34 +697,19 @@ def create_app(
             room_3d_repository=room_3d_repository,
         )
 
+    catalog = list_subagent_catalog()
+    subagent_agents = {item["name"]: build_subagent_ag_ui_agent(item["name"]) for item in catalog}
+
     if mount_ag_ui:
-        _register_ag_ui_route(
+        _register_ag_ui_routes(
             app,
-            web_agent=web_agent,
+            main_agent=web_agent,
+            subagent_agents=subagent_agents,
             deps=deps,
             run_history_repository=run_history_repository,
         )
 
     main_web_app = web_agent.to_web(deps=deps)
-    main_api_app = create_api_app(web_agent, deps=deps)
-    subagent_api_apps: dict[str, ASGIApp] = {}
-    model_id_to_subagent: dict[str, str] = {}
-    catalog = list_subagent_catalog()
-    for item in catalog:
-        subagent_name = item["name"]
-        subagent_web_agent = build_subagent_web_agent(subagent_name)
-        app.mount(item["web_path"], subagent_web_agent.to_web(deps=None))
-        subagent_api_apps[subagent_name] = create_api_app(subagent_web_agent, deps=None)
-        model_id_to_subagent[f"function:subagent_{subagent_name}"] = subagent_name
-    if len(catalog) == 1:
-        model_id_to_subagent["function:function:_run"] = catalog[0]["name"]
-
-    _register_web_ui_api_dispatch_routes(
-        app,
-        main_api_app=main_api_app,
-        subagent_api_apps=subagent_api_apps,
-        model_id_to_subagent=model_id_to_subagent,
-    )
 
     if mount_web_ui:
         app.mount("/", main_web_app)

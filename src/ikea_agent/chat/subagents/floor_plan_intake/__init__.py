@@ -1,6 +1,8 @@
 """Floor-plan intake subagent package."""
 
+from ikea_agent.chat.subagents.floor_plan_intake.agent import FloorPlannerSubgraphAgent
 from ikea_agent.chat.subagents.floor_plan_intake.graph import (
+    build_floor_plan_intake_deps,
     build_floor_plan_intake_graph,
     run_floor_plan_intake,
     run_from_raw_input,
@@ -13,6 +15,8 @@ from ikea_agent.chat.subagents.floor_plan_intake.types import (
 __all__ = [
     "FloorPlanIntakeInput",
     "FloorPlanIntakeOutcome",
+    "FloorPlannerSubgraphAgent",
+    "build_floor_plan_intake_deps",
     "build_floor_plan_intake_graph",
     "run_floor_plan_intake",
     "run_from_raw_input",
