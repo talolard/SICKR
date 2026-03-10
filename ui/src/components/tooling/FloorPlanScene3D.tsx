@@ -3,17 +3,26 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
-import type { MutableRefObject, ReactElement } from "react";
+import type { ElementRef, MutableRefObject, ReactElement } from "react";
 import {
   CanvasTexture,
+  ExtrudeGeometry,
+  Path,
   RepeatWrapping,
   SRGBColorSpace,
+  Shape,
   type PerspectiveCamera,
   type Texture,
   type WebGLRenderer,
 } from "three";
 
 import type { FloorPlanScene } from "@/lib/floorPlanScene";
+import {
+  computeInitialCameraSettings,
+  toSceneGeometry,
+  type SceneGeometry,
+  type Wall3D,
+} from "@/lib/floorPlanScene3dGeometry";
 
 type FloorPlanScene3DProps = {
   scene: FloorPlanScene;
@@ -39,158 +48,13 @@ export type FloorPlanScene3DHandle = {
   resetOverview: () => void;
 };
 
-type Segment3D = {
-  id: string;
-  center: [number, number, number];
-  lengthM: number;
-  angleRad: number;
-  thicknessM: number;
-  heightM: number;
-};
-
-type Placement3D = {
-  id: string;
-  center: [number, number, number];
-  size: [number, number, number];
-  color: string;
-};
-
-type Fixture3D = {
-  id: string;
-  kind: "socket" | "light";
-  position: [number, number, number];
-};
-
-type SceneGeometry = {
-  roomLengthM: number;
-  roomDepthM: number;
-  roomHeightM: number;
-  walls: Segment3D[];
-  doors: Segment3D[];
-  windows: Segment3D[];
-  placements: Placement3D[];
-  fixtures: Fixture3D[];
-};
-
-const CM_TO_M = 0.01;
-const DEFAULT_CAMERA_FOV_DEG = 50;
-
-type InitialCameraSettings = {
-  position: [number, number, number];
-  target: [number, number, number];
-  fovDeg: number;
-};
-
-type OrbitControlsHandle = {
-  target: { set: (x: number, y: number, z: number) => void };
-  update: () => void;
-};
-
 type SceneTextures = {
   floor: Texture | null;
   wall: Texture | null;
   wood: Texture | null;
 };
 
-function toSceneGeometry(scene: FloorPlanScene): SceneGeometry {
-  const dims = scene.architecture.dimensions_cm;
-  const roomLengthM = dims.length_x_cm * CM_TO_M;
-  const roomDepthM = dims.depth_y_cm * CM_TO_M;
-  const roomHeightM = dims.height_z_cm * CM_TO_M;
-
-  const walls: Segment3D[] = scene.architecture.walls.map((wall) => {
-    const dxM = (wall.end_cm.x_cm - wall.start_cm.x_cm) * CM_TO_M;
-    const dyM = (wall.end_cm.y_cm - wall.start_cm.y_cm) * CM_TO_M;
-    const lengthM = Math.max(0.001, Math.hypot(dxM, dyM));
-    return {
-      id: wall.wall_id,
-      center: [
-        (wall.start_cm.x_cm + wall.end_cm.x_cm) * 0.5 * CM_TO_M,
-        roomHeightM * 0.5,
-        (wall.start_cm.y_cm + wall.end_cm.y_cm) * 0.5 * CM_TO_M,
-      ],
-      lengthM,
-      angleRad: Math.atan2(dyM, dxM),
-      thicknessM: (wall.thickness_cm ?? 10) * CM_TO_M,
-      heightM: roomHeightM,
-    };
-  });
-
-  const doors: Segment3D[] = (scene.architecture.doors ?? []).map((door) => {
-    const dxM = (door.end_cm.x_cm - door.start_cm.x_cm) * CM_TO_M;
-    const dyM = (door.end_cm.y_cm - door.start_cm.y_cm) * CM_TO_M;
-    const lengthM = Math.max(0.001, Math.hypot(dxM, dyM));
-    return {
-      id: door.opening_id,
-      center: [
-        (door.start_cm.x_cm + door.end_cm.x_cm) * 0.5 * CM_TO_M,
-        Math.min(1.05, roomHeightM * 0.4),
-        (door.start_cm.y_cm + door.end_cm.y_cm) * 0.5 * CM_TO_M,
-      ],
-      lengthM,
-      angleRad: Math.atan2(dyM, dxM),
-      thicknessM: 0.03,
-      heightM: Math.min(2.1, roomHeightM * 0.8),
-    };
-  });
-
-  const windows: Segment3D[] = (scene.architecture.windows ?? []).map((window) => {
-    const dxM = (window.end_cm.x_cm - window.start_cm.x_cm) * CM_TO_M;
-    const dyM = (window.end_cm.y_cm - window.start_cm.y_cm) * CM_TO_M;
-    const lengthM = Math.max(0.001, Math.hypot(dxM, dyM));
-    const zMinM = (window.z_min_cm ?? dims.height_z_cm * 0.45) * CM_TO_M;
-    const zMaxM = (window.z_max_cm ?? dims.height_z_cm * 0.78) * CM_TO_M;
-    const heightM = Math.max(0.2, zMaxM - zMinM);
-    return {
-      id: window.opening_id,
-      center: [
-        (window.start_cm.x_cm + window.end_cm.x_cm) * 0.5 * CM_TO_M,
-        zMinM + heightM * 0.5,
-        (window.start_cm.y_cm + window.end_cm.y_cm) * 0.5 * CM_TO_M,
-      ],
-      lengthM,
-      angleRad: Math.atan2(dyM, dxM),
-      thicknessM: 0.03,
-      heightM,
-    };
-  });
-
-  const placements: Placement3D[] = (scene.placements ?? []).map((placement) => ({
-    id: placement.placement_id,
-    center: [
-      (placement.position_cm.x_cm + placement.size_cm.x_cm * 0.5) * CM_TO_M,
-      ((placement.z_cm ?? 0) + placement.size_cm.z_cm * 0.5) * CM_TO_M,
-      (placement.position_cm.y_cm + placement.size_cm.y_cm * 0.5) * CM_TO_M,
-    ],
-    size: [
-      placement.size_cm.x_cm * CM_TO_M,
-      placement.size_cm.z_cm * CM_TO_M,
-      placement.size_cm.y_cm * CM_TO_M,
-    ],
-    color: placement.color ?? "#7c5f4b",
-  }));
-
-  const fixtures: Fixture3D[] = (scene.fixtures ?? []).map((fixture) => ({
-    id: fixture.fixture_id,
-    kind: fixture.fixture_kind,
-    position: [
-      fixture.x_cm * CM_TO_M,
-      (fixture.z_cm ?? 0) * CM_TO_M,
-      fixture.y_cm * CM_TO_M,
-    ],
-  }));
-
-  return {
-    roomLengthM,
-    roomDepthM,
-    roomHeightM,
-    walls,
-    doors,
-    windows,
-    placements,
-    fixtures,
-  };
-}
+type OrbitControlsHandle = ElementRef<typeof OrbitControls>;
 
 function hashString(value: string): number {
   let hash = 0;
@@ -253,19 +117,50 @@ function createSceneTextures(): SceneTextures {
   };
 }
 
-export function computeInitialCameraSettings(
-  geometry: Pick<SceneGeometry, "roomLengthM" | "roomDepthM" | "roomHeightM">,
-): InitialCameraSettings {
-  const maxPlanSpanM = Math.max(geometry.roomLengthM, geometry.roomDepthM, 0.1);
-  const centerX = geometry.roomLengthM * 0.5;
-  const centerZ = geometry.roomDepthM * 0.5;
-  const topDownHeightM = Math.max(geometry.roomHeightM * 2.6, maxPlanSpanM * 1.45);
-  const depthOffsetM = maxPlanSpanM * 0.24;
-  return {
-    position: [centerX, topDownHeightM, centerZ + depthOffsetM],
-    target: [centerX, geometry.roomHeightM * 0.22, centerZ],
-    fovDeg: DEFAULT_CAMERA_FOV_DEG,
-  };
+function buildWallGeometry(wall: Wall3D): ExtrudeGeometry {
+  const shape = new Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(wall.lengthM, 0);
+  shape.lineTo(wall.lengthM, wall.heightM);
+  shape.lineTo(0, wall.heightM);
+  shape.lineTo(0, 0);
+
+  for (const opening of wall.openings) {
+    const hole = new Path();
+    hole.moveTo(opening.alongStartM, opening.zMinM);
+    hole.lineTo(opening.alongEndM, opening.zMinM);
+    hole.lineTo(opening.alongEndM, opening.zMaxM);
+    hole.lineTo(opening.alongStartM, opening.zMaxM);
+    hole.lineTo(opening.alongStartM, opening.zMinM);
+    shape.holes.push(hole);
+  }
+
+  const geometry = new ExtrudeGeometry(shape, {
+    depth: wall.thicknessM,
+    bevelEnabled: false,
+  });
+  // Center the extrusion on wall centerline so placement aligns with opening inserts.
+  geometry.translate(0, 0, -wall.thicknessM * 0.5);
+  return geometry;
+}
+
+function WallWithOpenings({ wall, wallTexture }: { wall: Wall3D; wallTexture: Texture | null }): ReactElement {
+  const wallGeometry = useMemo(() => buildWallGeometry(wall), [wall]);
+
+  return (
+    <mesh
+      geometry={wallGeometry}
+      position={wall.start}
+      rotation={[0, -wall.angleRad, 0]}
+    >
+      <meshStandardMaterial
+        color="#d9d2c3"
+        map={wallTexture}
+        metalness={0.03}
+        roughness={0.95}
+      />
+    </mesh>
+  );
 }
 
 function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
@@ -300,33 +195,23 @@ function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
       </mesh>
 
       {geometry.walls.map((wall) => (
-        <mesh key={wall.id} position={wall.center} rotation={[0, -wall.angleRad, 0]}>
-          <boxGeometry args={[wall.lengthM, wall.heightM, wall.thicknessM]} />
-          <meshStandardMaterial
-            color="#d9d2c3"
-            map={textures.wall}
-            metalness={0.03}
-            roughness={0.95}
-          />
-        </mesh>
+        <WallWithOpenings key={wall.id} wall={wall} wallTexture={textures.wall} />
       ))}
 
-      {geometry.doors.map((door) => (
-        <mesh key={door.id} position={door.center} rotation={[0, -door.angleRad, 0]}>
-          <boxGeometry args={[door.lengthM, door.heightM, door.thicknessM]} />
-          <meshStandardMaterial color="#6ea8cc" transparent opacity={0.5} />
-        </mesh>
-      ))}
-
-      {geometry.windows.map((window) => (
-        <mesh key={window.id} position={window.center} rotation={[0, -window.angleRad, 0]}>
-          <boxGeometry args={[window.lengthM, window.heightM, window.thicknessM]} />
-          <meshStandardMaterial
-            color="#94caff"
-            emissive="#15364e"
-            transparent
-            opacity={0.55}
-          />
+      {geometry.openingInserts.map((opening) => (
+        <mesh key={opening.id} position={opening.center} rotation={[0, -opening.angleRad, 0]}>
+          <boxGeometry args={[opening.lengthM, opening.heightM, opening.thicknessM]} />
+          {opening.kind === "door" ? (
+            <meshStandardMaterial color="#8b6b54" map={textures.wood} roughness={0.72} metalness={0.06} />
+          ) : (
+            <meshStandardMaterial
+              color="#94caff"
+              emissive="#15364e"
+              transparent
+              opacity={0.48}
+              depthWrite={false}
+            />
+          )}
         </mesh>
       ))}
 

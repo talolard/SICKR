@@ -34,6 +34,8 @@ export const floorPlanSceneSchema = z.object({
           opening_id: z.string(),
           start_cm: z.object({ x_cm: z.number(), y_cm: z.number() }),
           end_cm: z.object({ x_cm: z.number(), y_cm: z.number() }),
+          z_min_cm: z.number().nullable().optional(),
+          z_max_cm: z.number().nullable().optional(),
           opens_towards: z.string().nullable().optional(),
           panel_length_cm: z.number().nullable().optional(),
           label: z.string().nullable().optional(),

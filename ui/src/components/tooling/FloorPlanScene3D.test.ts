@@ -1,4 +1,4 @@
-import { computeInitialCameraSettings } from "./FloorPlanScene3D";
+import { computeInitialCameraSettings } from "@/lib/floorPlanScene3dGeometry";
 
 describe("computeInitialCameraSettings", () => {
   it("frames room from a readable elevated perspective", () => {

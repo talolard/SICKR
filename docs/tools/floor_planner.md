@@ -27,6 +27,8 @@ Core concepts:
 - Openings validation:
   - every door/window segment must lie on an existing wall segment
   - zero-length opening segments are rejected
+  - optional door and window vertical ranges support `z_min_cm` + `z_max_cm`
+  - when both vertical bounds are present, `z_max_cm >= z_min_cm` is required
 - Optional labels are supported on walls/doors/windows and are surfaced in rendering and scene summaries.
 
 ## Rendering Behavior
@@ -36,6 +38,10 @@ Core concepts:
 - Render includes top view and right-side X/Z elevation panel.
 - Visual layers include architecture, openings, placements, fixtures, legend, and warnings.
 - Tool returns typed `FloorPlanRenderOutput` and optionally `ToolReturn` with PNG `BinaryContent`.
+
+UI 3D preview notes:
+- Three.js wall meshes are built with real door/window cutouts (not overlays hidden inside walls).
+- Door/window inserts are rendered inside those cutouts for immediate spatial readability.
 
 ## Agent Usage Guidance
 Use floor planning when the user provides room dimensions/openings and object placement intent.

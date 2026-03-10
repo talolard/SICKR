@@ -56,13 +56,23 @@ class DoorOpeningCm(BaseModel):
     opening_id: str = Field(min_length=1)
     start_cm: Point2DCm
     end_cm: Point2DCm
+    z_min_cm: float | None = Field(default=None, ge=0.0)
+    z_max_cm: float | None = Field(default=None, ge=0.0)
     opens_towards: str | None = None
     panel_length_cm: float | None = Field(default=None, gt=0.0)
     label: str | None = None
 
     @model_validator(mode="after")
     def validate_non_zero_span(self) -> DoorOpeningCm:
-        """Ensure door opening has a non-zero span."""
+        """Ensure door geometry is coherent across plan and optional elevation fields."""
+
+        if (
+            self.z_min_cm is not None
+            and self.z_max_cm is not None
+            and self.z_max_cm < self.z_min_cm
+        ):
+            msg = "z_max_cm must be greater than or equal to z_min_cm"
+            raise FloorPlannerValidationError(msg)
 
         if self.start_cm.x_cm == self.end_cm.x_cm and self.start_cm.y_cm == self.end_cm.y_cm:
             msg = "Door opening segment cannot be zero-length"

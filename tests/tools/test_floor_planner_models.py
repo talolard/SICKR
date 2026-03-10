@@ -145,6 +145,43 @@ def test_architecture_rejects_door_not_on_wall() -> None:
         BaselineFloorPlanScene.model_validate(payload)
 
 
+def test_architecture_accepts_door_optional_vertical_range() -> None:
+    payload = _scene_payload()
+    architecture = payload["architecture"]
+    assert isinstance(architecture, dict)
+    architecture["doors"] = [
+        {
+            "opening_id": "entry-door",
+            "start_cm": {"x_cm": 0.0, "y_cm": 30.0},
+            "end_cm": {"x_cm": 0.0, "y_cm": 90.0},
+            "z_min_cm": 0.0,
+            "z_max_cm": 210.0,
+        }
+    ]
+
+    scene = BaselineFloorPlanScene.model_validate(payload)
+    assert len(scene.architecture.doors) == 1
+    assert scene.architecture.doors[0].z_max_cm == pytest.approx(210.0)
+
+
+def test_architecture_rejects_door_invalid_vertical_range() -> None:
+    payload = _scene_payload()
+    architecture = payload["architecture"]
+    assert isinstance(architecture, dict)
+    architecture["doors"] = [
+        {
+            "opening_id": "entry-door",
+            "start_cm": {"x_cm": 0.0, "y_cm": 30.0},
+            "end_cm": {"x_cm": 0.0, "y_cm": 90.0},
+            "z_min_cm": 120.0,
+            "z_max_cm": 80.0,
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="z_max_cm must be greater than or equal to z_min_cm"):
+        BaselineFloorPlanScene.model_validate(payload)
+
+
 def test_scene_summary_prefers_labels_for_openings_and_walls() -> None:
     payload = _scene_payload()
     architecture = payload["architecture"]
