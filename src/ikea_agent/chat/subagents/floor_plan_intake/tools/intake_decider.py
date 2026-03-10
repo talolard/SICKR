@@ -30,6 +30,10 @@ def _build_default_decider_instructions() -> str:
         "focus on text-only continuation guidance. "
         "Extract any newly stated room dimensions (width and length), room height, room type, "
         "orientation coverage, and fixed constraints. "
+        "Keep room_type stable once established unless user explicitly corrects room type. "
+        "Do not treat movable furniture mentions (for example 'kitchen table') as room_type "
+        "switch signals. "
+        "If room_type is ambiguous, keep the previous room_type and ask a clarifying question. "
         "If user asks to move on or provide corrections after a prior draft, choose render."
     )
 
@@ -44,6 +48,10 @@ def _build_decider_instructions(*, prompt_instructions: str) -> str:
         "- Extract any newly stated room dimensions (width and length), room height, "
         "room type, orientation coverage, "
         "and fixed constraints.\n"
+        "- Keep room_type stable once established unless user explicitly corrects room type.\n"
+        "- Do not treat movable furniture mentions (for example 'kitchen table') as room_type "
+        "switch signals.\n"
+        "- If room_type is ambiguous, keep previous room_type and ask a clarifying question.\n"
         "- If user asks to move on or provide corrections after a prior draft, choose render.\n"
     )
 

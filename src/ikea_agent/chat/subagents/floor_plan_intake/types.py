@@ -12,7 +12,7 @@ from pydantic_graph.beta.step import StepContext
 
 from ikea_agent.tools.floorplanner.models import FloorPlanRenderOutput, FloorPlanScene
 
-RoomType = Literal["bathroom", "kitchen", "bedroom", "hallway", "other"]
+RoomType = Literal["bathroom", "kitchen", "bedroom", "living_room", "hallway", "other"]
 
 
 class FloorPlanIntakeInput(BaseModel):
