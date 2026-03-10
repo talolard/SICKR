@@ -1,142 +1,80 @@
 ---
 name: build-graph-agent
-description: Create graph-based IKEA subagents using the class-based SubgraphAgent contract.
+description: Create first-class IKEA agents using local pydantic-ai toolsets (agents-first runtime; no graph layer).
 ---
 
 # build-graph-agent
 
-Create a new IKEA chat subagent implemented as a Pydantic Graph beta graph with a direct,
-class-based runtime contract.
+This skill name is legacy. Use it to build **agents-first** capabilities.
+Do not add `pydantic_graph` orchestration or `subagents/*` packages.
 
 ## When to use
 
 Use this skill whenever you need to:
 
-- add a new subagent under `src/ikea_agent/chat/subagents/`
-- implement a capability as a graph-based subagent
-- scaffold prompt/tools/tests for a new subagent
+- add a new agent under `src/ikea_agent/chat/agents/`
+- implement a capability as a plain `pydantic_ai.Agent`
+- scaffold prompt/toolset/tests for a new agent
 
 ## Required architecture
 
-Every subagent must follow this structure:
+Every agent must follow this structure:
 
-- `src/ikea_agent/chat/subagents/base.py` provides shared `SubgraphAgent` behavior
-- each subagent package defines one concrete class in `agent.py` that extends `SubgraphAgent`
-- `src/ikea_agent/chat/subagents/index.py` explicitly lists subagents for discovery and routing
+- `src/ikea_agent/chat/agents/<agent_name>/agent.py`
+- `src/ikea_agent/chat/agents/<agent_name>/deps.py`
+- `src/ikea_agent/chat/agents/<agent_name>/toolset.py`
+- `src/ikea_agent/chat/agents/<agent_name>/prompt.md`
+- optional `README.md` for capability notes
 
-Do not use:
+Global registration must be explicit in `src/ikea_agent/chat/agents/index.py`:
 
-- registry pattern (`registry.py`)
-- wrapper adapters (`web.py`)
-- shared subagent CLI (`cli.py`)
+- catalog item (`name`, `agent_key`, `ag_ui_path`, `web_path`)
+- metadata builder (`describe_agent`)
+- runtime builder (`build_agent_ag_ui_agent`)
 
-## Required files for subagent `<agent_name>`
+Do not add:
 
-- `src/ikea_agent/chat/subagents/<agent_name>/agent.py`
-- `src/ikea_agent/chat/subagents/<agent_name>/graph.py`
-- `src/ikea_agent/chat/subagents/<agent_name>/nodes.py`
-- `src/ikea_agent/chat/subagents/<agent_name>/prompt.md`
-- `src/ikea_agent/chat/subagents/<agent_name>/tools/__init__.py`
-- `src/ikea_agent/chat/subagents/<agent_name>/tools/...`
-- `src/ikea_agent/chat/subagents/<agent_name>/README.md`
+- graph builder/node files
+- registry indirection
+- shared cross-agent tool registries
 
-Optional when needed:
+## Tool requirements
 
-- `src/ikea_agent/chat/subagents/<agent_name>/types.py`
-
-## Concrete class contract
-
-Each subagent class must define:
-
-- `subagent_name`
-- `description`
-- `prompt_path`
-- `tool_names`
-- `notes` (optional)
-- `build_graph()`
-- `build_state()`
-- `build_deps(model_name=...)`
-- `parse_user_input(user_message)`
-
-Runtime behavior must come from `SubgraphAgent` base class:
-
-- AG-UI adapter generation
-- model resolution
-- prompt loading and instruction creation
-- metadata generation
-
-## Goal-driven state design requirements
-
-Every subagent must declare a concrete goal and shape state around that goal.
-
-- Put the goal in both:
-  - class metadata (`description`/`notes`)
-  - `README.md` scope text
-- Build `State` as the minimum set of typed fields needed to complete that goal.
-- Prefer domain names over generic placeholders (for example `width_cm`, `length_cm`, `height_cm`).
-- If defaults are operationally necessary (for example a fallback height), store:
-  - the assumed value
-  - whether user-facing notification has been emitted
-- Persist only what is needed for cross-turn continuity; do not accumulate unrelated context.
-- Always capture turn history and include a `notes` list for high-signal details that do not fit typed state fields.
-
-## Concurrency and fan-out caveats (document as TODOs)
-
-- Concurrency policy should be explicit (currently commonly last-write-wins unless overridden).
-- For map-reduce/fan-out agent patterns:
-  - avoid mutating shared state in map stage
-  - aggregate/reduce first
-  - apply final state mutation in reduce stage with explicit reconciliation logic
-
-## Prompt requirements
-
-- store prompt in `prompt.md`
-- use prompt content as runtime instruction base (not docs-only)
-- append only minimal machine constraints programmatically when needed
+- Tools remain in `src/ikea_agent/tools/` for domain logic.
+- Agent-facing wrappers live in local `toolset.py`.
+- Build one `FunctionToolset[...]` per agent and register tool names explicitly.
+- Tool input/output must be typed and JSON-serializable.
 
 ## Model resolution requirements
 
-Subagent model selection must follow:
+Agent model selection must follow:
 
 1. explicit override from caller
-2. per-subagent config override
+2. per-agent config override (`settings.agent_model(agent_name)`)
 3. global default generation model
 
-## Graph requirements
+## Route requirements
 
-- use Pydantic Graph **beta** APIs (`GraphBuilder`, `step`, `decision`, `match`, `join`)
-- avoid v1 node wiring patterns (`BaseNode`, `End`, `run_sync`)
-- execute graph with `await graph.run(state=..., deps=..., inputs=...)`
+After adding an agent, ensure these routes work:
 
-## Index and route requirements
-
-After adding a subagent class:
-
-1. add it explicitly to `src/ikea_agent/chat/subagents/index.py`
-2. ensure backend routes continue to work via index-driven discovery:
-   - `/api/subagents`
-   - `/api/subagents/{name}/metadata`
-   - `/ag-ui/subagents/{name}`
+- `/api/agents`
+- `/api/agents/{name}/metadata`
+- `/ag-ui/agents/{name}`
+- `/agents/{name}/chat/`
 
 ## Testing requirements
 
 Add typed pytest coverage for:
 
-- base contract behavior (`SubgraphAgent` model/prompt/metadata)
 - index discovery and unknown-name errors
-- subagent-specific graph behavior
-- API route smoke for subagent endpoints
+- prompt loading and instructions wiring
+- local toolset registration
+- API route smoke for agent endpoints
 
-Tests must verify each subagent uses:
+## Done criteria for new agent
 
-- its own prompt
-- its own declared tool set
-- its own graph metadata
-
-## Done criteria for new subagent
-
-- class-based subagent exists and is readable in one file (`agent.py`)
-- subagent is explicitly listed in `index.py`
-- no registry/web/cli indirection added
+- agent package exists under `chat/agents/<agent_name>/`
+- agent is listed in `chat/agents/index.py`
+- no graph/subagent runtime introduced
 - metadata + AG-UI routes function end-to-end
-- tests pass for new contract
+- tests pass and `make tidy` is clean

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { fetchAgents, type AgentItem } from "@/lib/agents";
 
-export default function Home(): React.ReactElement {
+export default function AgentsPage(): React.ReactElement {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [error, setError] = useState<string>("");
 
@@ -26,9 +26,8 @@ export default function Home(): React.ReactElement {
     <main className="min-h-screen bg-white">
       <AppNavBanner currentAgentName={null} agents={agents} />
       <section className="mx-auto max-w-[1700px] p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Choose an agent</h2>
-        <p className="mt-1 text-sm text-gray-600">Each agent has its own prompt, tools, and runtime context.</p>
-        {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
+        <h2 className="text-lg font-semibold text-gray-900">Agents</h2>
+        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           {agents.map((agent) => (
             <Link

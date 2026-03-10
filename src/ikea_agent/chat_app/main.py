@@ -7,24 +7,31 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
+from starlette.types import ASGIApp
 
-from ikea_agent.chat.agent import build_chat_agent
-from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
-from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
-from ikea_agent.chat.subagents.index import (
-    SubagentCatalogItem,
-    SubagentDescription,
-    build_subagent_ag_ui_agent,
-    describe_subagent,
-    list_subagent_catalog,
+from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
+from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
+from ikea_agent.chat.agents.index import (
+    AgentCatalogItem,
+    AgentDescription,
+    build_agent_ag_ui_agent,
+    describe_agent,
+    list_agent_catalog,
 )
+from ikea_agent.chat.agents.search.deps import SearchAgentDeps
+from ikea_agent.chat.agents.state import (
+    FloorPlanIntakeAgentState,
+    ImageAnalysisAgentState,
+    SearchAgentState,
+)
+from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.comment_bundles import (
     DEFAULT_COMMENT_TITLE,
@@ -68,6 +75,8 @@ from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 logger = getLogger(__name__)
+
+AnyAgentDeps = FloorPlanIntakeDeps | SearchAgentDeps | ImageAnalysisAgentDeps
 
 
 class _ArchivedMessagesResult(Protocol):
@@ -203,19 +212,19 @@ def _register_comment_routes(
         )
 
 
-def _register_subagent_catalog_routes(app: FastAPI) -> None:
-    @app.get("/api/subagents")
-    async def list_subagents() -> dict[str, list[SubagentCatalogItem]]:
-        """Return all registered subagents for UI navigation."""
+def _register_agent_catalog_routes(app: FastAPI) -> None:
+    @app.get("/api/agents")
+    async def list_agents() -> dict[str, list[AgentCatalogItem]]:
+        """Return all registered agents for UI navigation."""
 
-        return {"subagents": list_subagent_catalog()}
+        return {"agents": list_agent_catalog()}
 
-    @app.get("/api/subagents/{subagent_name}/metadata")
-    async def get_subagent_metadata(subagent_name: str) -> SubagentDescription:
-        """Return prompt, graph, and tool metadata for one subagent."""
+    @app.get("/api/agents/{agent_name}/metadata")
+    async def get_agent_metadata(agent_name: str) -> AgentDescription:
+        """Return prompt and tool metadata for one agent."""
 
         try:
-            return describe_subagent(subagent_name)
+            return describe_agent(agent_name)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -536,18 +545,18 @@ def _register_thread_data_routes(  # noqa: C901
 def _register_ag_ui_routes(  # noqa: C901
     app: FastAPI,
     *,
-    main_agent: Agent[ChatAgentDeps, str],
-    subagent_agents: dict[str, Agent[ChatAgentDeps, str]],
-    deps: ChatAgentDeps,
+    agents: dict[str, Agent[object, str]],
+    deps_by_agent: dict[str, AnyAgentDeps],
     run_history_repository: RunHistoryRepository | None,
 ) -> None:
-    async def _parse_and_record_run_context(request: Request) -> tuple[bytes, str]:
+    async def _parse_and_record_run_context(request: Request) -> tuple[bytes, str, str]:
         body = await request.body()
         run_id = f"agui-{uuid4().hex[:16]}"
+        thread_id = "anonymous-thread"
         try:
             payload = json.loads(body.decode("utf-8")) if body else {}
             run_id = str(payload.get("run_id") or run_id)
-            thread_id = str(payload.get("thread_id") or "anonymous-thread")
+            thread_id = str(payload.get("thread_id") or thread_id)
             parent_run_id = payload.get("parent_run_id")
             parent_run_id_value = str(parent_run_id) if isinstance(parent_run_id, str) else None
             message_payload = payload.get("messages")
@@ -563,12 +572,10 @@ def _register_ag_ui_routes(  # noqa: C901
                     user_prompt_text=user_prompt_text,
                     agui_input_messages_json=json.dumps(messages),
                 )
-            deps.state.thread_id = thread_id
-            deps.state.run_id = run_id
         except Exception:
             # If request parsing fails, proceed with AG-UI normal error semantics.
             logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
-        return body, run_id
+        return body, run_id, thread_id
 
     def _build_on_complete(run_id: str) -> Callable[[_ArchivedMessagesResult], Awaitable[None]]:
         async def _on_complete(result: _ArchivedMessagesResult) -> None:
@@ -581,35 +588,17 @@ def _register_ag_ui_routes(  # noqa: C901
 
         return _on_complete
 
-    @app.post("/ag-ui")
-    @app.post("/ag-ui/")
-    async def run_main_ag_ui(request: Request) -> Response:
-        _body, run_id = await _parse_and_record_run_context(request)
-        on_complete = _build_on_complete(run_id)
-        try:
-            with deps.attachment_store.bind_context(
-                thread_id=deps.state.thread_id or "anonymous-thread",
-                run_id=deps.state.run_id,
-            ):
-                return await handle_ag_ui_request(
-                    main_agent,
-                    request,
-                    deps=deps,
-                    on_complete=on_complete,
-                )
-        except Exception as exc:
-            if run_history_repository is not None:
-                run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
-            raise
+    @app.post("/ag-ui/agents/{agent_name}")
+    @app.post("/ag-ui/agents/{agent_name}/")
+    async def run_agent_ag_ui(request: Request, agent_name: str) -> Response:
+        agent = agents.get(agent_name)
+        deps = deps_by_agent.get(agent_name)
+        if agent is None or deps is None:
+            raise HTTPException(status_code=404, detail=f"Unknown agent `{agent_name}`.")
 
-    @app.post("/ag-ui/subagents/{subagent_name}")
-    @app.post("/ag-ui/subagents/{subagent_name}/")
-    async def run_subagent_ag_ui(request: Request, subagent_name: str) -> Response:
-        agent = subagent_agents.get(subagent_name)
-        if agent is None:
-            raise HTTPException(status_code=404, detail=f"Unknown subagent `{subagent_name}`.")
-
-        _body, run_id = await _parse_and_record_run_context(request)
+        _body, run_id, thread_id = await _parse_and_record_run_context(request)
+        deps.state.thread_id = thread_id
+        deps.state.run_id = run_id
         on_complete = _build_on_complete(run_id)
         try:
             with deps.attachment_store.bind_context(
@@ -626,6 +615,70 @@ def _register_ag_ui_routes(  # noqa: C901
             if run_history_repository is not None:
                 run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
             raise
+
+
+def _build_agents(catalog: list[AgentCatalogItem]) -> dict[str, Agent[object, str]]:
+    """Build AG-UI agent instances keyed by agent name."""
+
+    return {item["name"]: build_agent_ag_ui_agent(item["name"]) for item in catalog}
+
+
+def _build_deps_by_agent(
+    *,
+    catalog: list[AgentCatalogItem],
+    runtime: ChatRuntime,
+    attachment_store: AttachmentStore,
+) -> dict[str, AnyAgentDeps]:
+    """Build typed deps per agent name."""
+
+    deps_by_agent: dict[str, AnyAgentDeps] = {}
+    for item in catalog:
+        name = item["name"]
+        if name == "floor_plan_intake":
+            deps_by_agent[name] = FloorPlanIntakeDeps(
+                runtime=runtime,
+                attachment_store=attachment_store,
+                floor_plan_scene_store=FloorPlanSceneStore(),
+                state=FloorPlanIntakeAgentState(),
+            )
+            continue
+        if name == "search":
+            deps_by_agent[name] = SearchAgentDeps(
+                runtime=runtime,
+                attachment_store=attachment_store,
+                state=SearchAgentState(),
+            )
+            continue
+        if name == "image_analysis":
+            deps_by_agent[name] = ImageAnalysisAgentDeps(
+                runtime=runtime,
+                attachment_store=attachment_store,
+                state=ImageAnalysisAgentState(),
+            )
+            continue
+        msg = f"No deps builder configured for agent `{name}`."
+        raise RuntimeError(msg)
+    return deps_by_agent
+
+
+def _build_web_apps(
+    *,
+    catalog: list[AgentCatalogItem],
+    agents: dict[str, Agent[object, str]],
+    deps_by_agent: dict[str, AnyAgentDeps],
+    mount_web_ui: bool,
+) -> dict[str, ASGIApp]:
+    """Build mounted pydantic-ai web apps keyed by agent name."""
+
+    if not mount_web_ui:
+        return {}
+    return {
+        item["name"]: cast(
+            "ASGIApp",
+            agents[item["name"]].to_web(deps=deps_by_agent[item["name"]]),
+        )
+        for item in catalog
+    }
 
 
 def create_app(
@@ -668,12 +721,6 @@ def create_app(
         if hasattr(chat_runtime, "session_factory")
         else None
     )
-    deps = ChatAgentDeps(
-        runtime=chat_runtime,
-        attachment_store=attachment_store,
-        floor_plan_scene_store=FloorPlanSceneStore(),
-        state=ChatAgentState(),
-    )
     _register_attachment_routes(app, attachment_store)
     _register_comment_routes(
         app,
@@ -682,7 +729,7 @@ def create_app(
         attachment_store=attachment_store,
         run_history_repository=run_history_repository,
     )
-    _register_subagent_catalog_routes(app)
+    _register_agent_catalog_routes(app)
     _register_generated_image_routes(app, attachment_store)
     _register_openusd_routes(
         app,
@@ -696,33 +743,32 @@ def create_app(
             room_3d_repository=room_3d_repository,
         )
 
-    catalog = list_subagent_catalog()
-    subagent_agents = {item["name"]: build_subagent_ag_ui_agent(item["name"]) for item in catalog}
-    subagent_web_apps = (
-        {item["name"]: subagent_agents[item["name"]].to_web(deps=deps) for item in catalog}
-        if mount_web_ui
-        else {}
+    catalog = list_agent_catalog()
+    agents = _build_agents(catalog)
+    deps_by_agent = _build_deps_by_agent(
+        catalog=catalog,
+        runtime=chat_runtime,
+        attachment_store=attachment_store,
+    )
+    web_apps = _build_web_apps(
+        catalog=catalog,
+        agents=agents,
+        deps_by_agent=deps_by_agent,
+        mount_web_ui=mount_web_ui,
     )
 
-    web_agent: Agent[ChatAgentDeps, str] | None = None
     if mount_ag_ui:
-        web_agent = build_chat_agent()
         _register_ag_ui_routes(
             app,
-            main_agent=web_agent,
-            subagent_agents=subagent_agents,
-            deps=deps,
+            agents=agents,
+            deps_by_agent=deps_by_agent,
             run_history_repository=run_history_repository,
         )
 
     if mount_web_ui:
-        if web_agent is None:
-            web_agent = build_chat_agent()
         for item in catalog:
-            subagent_mount_path = item["web_path"].rstrip("/")
-            app.mount(subagent_mount_path, subagent_web_apps[item["name"]])
-        main_web_app = web_agent.to_web(deps=deps)
-        app.mount("/", main_web_app)
+            agent_mount_path = item["web_path"].rstrip("/")
+            app.mount(agent_mount_path, web_apps[item["name"]])
 
     return app
 

@@ -1,8 +1,8 @@
-"""CLI utility to run the chat agent directly from a terminal session.
+"""CLI utility to run one named first-class agent from a terminal session.
 
-This runner is intended for fast local validation of prompt/tool behavior
-without starting the web server. It builds the same runtime dependencies and
-agent definition used by the FastAPI app, then executes one user prompt.
+This runner is for quick local prompt/tool validation without starting FastAPI.
+It constructs the same runtime + deps types used by the web app and executes
+exactly one user prompt.
 """
 
 from __future__ import annotations
@@ -15,8 +15,15 @@ from pathlib import Path
 from tempfile import gettempdir
 from uuid import uuid4
 
-from ikea_agent.chat.agent import build_chat_agent
-from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
+from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
+from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
+from ikea_agent.chat.agents.index import build_agent_ag_ui_agent
+from ikea_agent.chat.agents.search.deps import SearchAgentDeps
+from ikea_agent.chat.agents.state import (
+    FloorPlanIntakeAgentState,
+    ImageAnalysisAgentState,
+    SearchAgentState,
+)
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import AppSettings, get_settings
@@ -25,10 +32,17 @@ from ikea_agent.observability.logfire_setup import configure_logfire
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 DEFAULT_PROMPT = "I have a 7x2 meter hallway with no natural light and two doors one on each end"
+DEFAULT_AGENT = "floor_plan_intake"
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the IKEA chat agent once from CLI.")
+    parser = argparse.ArgumentParser(description="Run one IKEA agent once from CLI.")
+    parser.add_argument(
+        "--agent",
+        default=DEFAULT_AGENT,
+        choices=["floor_plan_intake", "search", "image_analysis"],
+        help="Named agent to execute.",
+    )
     parser.add_argument(
         "--prompt",
         default=DEFAULT_PROMPT,
@@ -80,8 +94,39 @@ def _build_runtime_with_fallback(settings: AppSettings) -> ChatRuntime:
         return build_chat_runtime()
 
 
+def _build_deps(
+    *,
+    agent_name: str,
+    runtime: ChatRuntime,
+    attachment_store: AttachmentStore,
+    session_id: str,
+) -> FloorPlanIntakeDeps | SearchAgentDeps | ImageAnalysisAgentDeps:
+    if agent_name == "floor_plan_intake":
+        return FloorPlanIntakeDeps(
+            runtime=runtime,
+            attachment_store=attachment_store,
+            floor_plan_scene_store=FloorPlanSceneStore(),
+            state=FloorPlanIntakeAgentState(session_id=session_id),
+        )
+    if agent_name == "search":
+        return SearchAgentDeps(
+            runtime=runtime,
+            attachment_store=attachment_store,
+            state=SearchAgentState(session_id=session_id),
+        )
+    if agent_name == "image_analysis":
+        return ImageAnalysisAgentDeps(
+            runtime=runtime,
+            attachment_store=attachment_store,
+            state=ImageAnalysisAgentState(session_id=session_id),
+        )
+    msg = f"Unsupported agent `{agent_name}`"
+    raise ValueError(msg)
+
+
 async def _run_once(
     *,
+    agent_name: str,
     prompt: str,
     session_id: str,
     duckdb_path: str | None,
@@ -103,23 +148,24 @@ async def _run_once(
 
     runtime = _build_runtime_with_fallback(settings)
     attachment_store = AttachmentStore(Path(settings.artifact_root_dir))
-    deps = ChatAgentDeps(
+    deps = _build_deps(
+        agent_name=agent_name,
         runtime=runtime,
         attachment_store=attachment_store,
-        floor_plan_scene_store=FloorPlanSceneStore(),
-        state=ChatAgentState(session_id=session_id),
+        session_id=session_id,
     )
-    agent = build_chat_agent()
+    agent = build_agent_ag_ui_agent(agent_name)
     result = await agent.run(prompt, deps=deps)
     return result.output
 
 
 def main() -> None:
-    """Execute one direct agent run and print final assistant output."""
+    """Execute one direct agent run and print the final assistant output."""
 
     args = _build_parser().parse_args()
     output = asyncio.run(
         _run_once(
+            agent_name=args.agent,
             prompt=args.prompt,
             session_id=args.session_id,
             duckdb_path=args.duckdb_path,

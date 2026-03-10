@@ -1,1 +1,1 @@
-"""Chat graph and agent modules."""
+"""Agent-first chat runtime modules."""

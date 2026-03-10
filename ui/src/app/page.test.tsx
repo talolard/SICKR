@@ -1,121 +1,49 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { beforeEach, vi } from "vitest";
+import { vi } from "vitest";
 
 import Home from "./page";
+import type { AgentItem } from "@/lib/agents";
 
-type ThreadSessionState = {
-  agentKey: string;
-  threadId: string | null;
-  threadIds: string[];
-  warning: string | null;
-};
-
-const sidebarProps: Array<Record<string, unknown>> = [];
-
-const mockAgent = {
-  state: {},
-  setState: vi.fn(),
-};
-
-let currentThreadSession: ThreadSessionState = {
-  agentKey: "ikea_agent",
-  threadId: null,
-  threadIds: [],
-  warning: null,
-};
-
-vi.mock("@copilotkit/react-core/v2", () => ({
-  CopilotSidebar: (props: Record<string, unknown>): ReactElement => {
-    sidebarProps.push(props);
-    return <div data-testid="copilot-sidebar" />;
-  },
-  useAgent: () => ({ agent: mockAgent }),
+const { fetchAgentsMock } = vi.hoisted(() => ({
+  fetchAgentsMock: vi.fn<() => Promise<AgentItem[]>>(async () => []),
 }));
 
-vi.mock("@/app/CopilotKitProviders", () => ({
-  useThreadSession: () => ({
-    ...currentThreadSession,
-    selectThread: vi.fn(),
-    createThread: vi.fn(),
-    clearWarning: vi.fn(),
-  }),
-}));
-
-vi.mock("@/components/attachments/AttachmentComposer", () => ({
-  AttachmentComposer: (): ReactElement => <div data-testid="attachment-composer" />,
+vi.mock("@/lib/agents", () => ({
+  fetchAgents: fetchAgentsMock,
 }));
 
 vi.mock("@/components/navigation/AppNavBanner", () => ({
   AppNavBanner: (): ReactElement => <div data-testid="app-nav-banner" />,
 }));
 
-vi.mock("@/components/copilotkit/CopilotToolRenderers", () => ({
-  CopilotToolRenderers: (): ReactElement => <div data-testid="tool-renderers" />,
-}));
-
-vi.mock("@/components/thread/ThreadDataPanel", () => ({
-  ThreadDataPanel: (): ReactElement => <div data-testid="thread-data-panel" />,
-}));
-
-vi.mock("@/components/tooling/FloorPlanPreviewPanel", () => ({
-  FloorPlanPreviewPanel: (): ReactElement => <div data-testid="floor-plan-preview-panel" />,
-}));
-
-vi.mock("@/lib/floorPlanPreviewEvents", () => ({
-  subscribeFloorPlanRendered: vi.fn(() => () => undefined),
-}));
-
-vi.mock("@/lib/floorPlanPreviewStore", () => ({
-  loadFloorPlanPreview: vi.fn(() => null),
-  saveFloorPlanPreview: vi.fn(),
-}));
-
-vi.mock("@/lib/api/room3dClient", () => ({
-  createRoom3DSnapshot: vi.fn(),
-}));
-
-vi.mock("@/lib/threadStore", () => ({
-  loadRoom3DSnapshots: vi.fn(() => []),
-  saveRoom3DSnapshots: vi.fn(),
-}));
-
-vi.mock("@/lib/feedbackCapture", () => ({
-  getConsoleRecordsSnapshot: vi.fn(() => []),
-  startFeedbackCapture: vi.fn(),
-}));
-
-vi.mock("@/lib/subagents", () => ({
-  fetchSubagents: vi.fn(async () => []),
-}));
-
 describe("Home page", () => {
-  beforeEach(() => {
-    sidebarProps.length = 0;
-    mockAgent.setState.mockReset();
-    currentThreadSession = {
-      agentKey: "ikea_agent",
-      threadId: null,
-      threadIds: [],
-      warning: null,
-    };
-  });
+  it("renders available agents as links", async () => {
+    fetchAgentsMock.mockResolvedValueOnce([
+      {
+        name: "floor_plan_intake",
+        description: "Collect room layout constraints.",
+        agent_key: "agent_floor_plan_intake",
+        ag_ui_path: "/ag-ui/agents/floor_plan_intake",
+      },
+      {
+        name: "search",
+        description: "Find products.",
+        agent_key: "agent_search",
+        ag_ui_path: "/ag-ui/agents/search",
+      },
+    ]);
 
-  it("passes a stable agentId to CopilotSidebar across rerenders", () => {
-    const { rerender } = render(<Home />);
+    render(<Home />);
 
-    currentThreadSession = {
-      agentKey: "ikea_agent",
-      threadId: "900339f6",
-      threadIds: ["900339f6"],
-      warning: null,
-    };
-    rerender(<Home />);
-
-    expect(sidebarProps.length).toBeGreaterThanOrEqual(2);
-    expect(sidebarProps[0]?.agentId).toBe("ikea_agent");
-    expect(sidebarProps[1]?.agentId).toBe("ikea_agent");
-    expect(sidebarProps[0]?.threadId).toBeUndefined();
-    expect(sidebarProps[1]?.threadId).toBe("900339f6");
+    expect(await screen.findByRole("link", { name: /floor_plan_intake/i })).toHaveAttribute(
+      "href",
+      "/agents/floor_plan_intake",
+    );
+    expect(await screen.findByRole("link", { name: /search/i })).toHaveAttribute(
+      "href",
+      "/agents/search",
+    );
+    expect(screen.getByTestId("app-nav-banner")).toBeInTheDocument();
   });
 });

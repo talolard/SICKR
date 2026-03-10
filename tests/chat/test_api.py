@@ -11,8 +11,8 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat.subagents.index import SubagentCatalogItem
 from ikea_agent.chat_app.main import (
     create_app,
 )
@@ -91,12 +91,12 @@ def test_create_app_with_ag_ui_mount_exposes_ag_ui_route() -> None:
         )
     )
 
-    response = client.get("/ag-ui")
+    response = client.post("/ag-ui/agents/floor_plan_intake", json={"messages": []})
 
     assert response.status_code != 404
 
 
-def test_subagent_catalog_route_lists_registered_subagents() -> None:
+def test_agent_catalog_route_lists_registered_agents() -> None:
     client = TestClient(
         create_app(
             runtime=cast("ChatRuntime", object()),
@@ -105,15 +105,15 @@ def test_subagent_catalog_route_lists_registered_subagents() -> None:
         )
     )
 
-    response = client.get("/api/subagents")
+    response = client.get("/api/agents")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["subagents"]
-    assert any(item["name"] == "floor_plan_intake" for item in payload["subagents"])
+    assert payload["agents"]
+    assert any(item["name"] == "floor_plan_intake" for item in payload["agents"])
 
 
-def test_subagent_ag_ui_route_exists() -> None:
+def test_agent_ag_ui_route_exists() -> None:
     client = TestClient(
         create_app(
             runtime=cast("ChatRuntime", object()),
@@ -122,11 +122,11 @@ def test_subagent_ag_ui_route_exists() -> None:
         )
     )
 
-    response = client.post("/ag-ui/subagents/floor_plan_intake", json={"messages": []})
+    response = client.post("/ag-ui/agents/floor_plan_intake", json={"messages": []})
     assert response.status_code != 404
 
 
-def test_subagent_metadata_route_returns_prompt_and_tools() -> None:
+def test_agent_metadata_route_returns_prompt_and_tools() -> None:
     client = TestClient(
         create_app(
             runtime=cast("ChatRuntime", object()),
@@ -135,48 +135,46 @@ def test_subagent_metadata_route_returns_prompt_and_tools() -> None:
         )
     )
 
-    response = client.get("/api/subagents/floor_plan_intake/metadata")
+    response = client.get("/api/agents/floor_plan_intake/metadata")
     assert response.status_code == 200
     payload = response.json()
     assert payload["prompt_markdown"]
     assert "render_floor_plan" in payload["tools"]
 
 
-def test_subagent_web_chat_mount_boots_and_dispatches_to_subagent(
+def test_agent_web_chat_mount_boots_and_dispatches_to_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _stubbed_ui_html(_html_source: str | Path | None = None) -> bytes:
-        return b"<!doctype html><html><body>subagent-ui</body></html>"
+        return b"<!doctype html><html><body>agent-ui</body></html>"
 
-    main_agent = _build_stream_only_agent("main-stream")
-    subagent_agent = _build_stream_only_agent("subagent-stream")
-    catalog_item: SubagentCatalogItem = {
+    agent_agent = _build_stream_only_agent("agent-stream")
+    catalog_item: AgentCatalogItem = {
         "name": "floor_plan_intake",
-        "description": "Test subagent",
-        "agent_key": "subagent_floor_plan_intake",
-        "ag_ui_path": "/ag-ui/subagents/floor_plan_intake",
-        "web_path": "/subagents/floor_plan_intake/chat/",
+        "description": "Test agent",
+        "agent_key": "agent_floor_plan_intake",
+        "ag_ui_path": "/ag-ui/agents/floor_plan_intake",
+        "web_path": "/agents/floor_plan_intake/chat/",
     }
 
-    def _build_subagent(
+    def _build_agent(
         name: str,
         *,
         explicit_model: str | None = None,
     ) -> Agent[object, str]:
         _ = explicit_model
         if name != "floor_plan_intake":
-            raise KeyError(f"Unknown subagent `{name}`.")
-        return subagent_agent
+            raise KeyError(f"Unknown agent `{name}`.")
+        return agent_agent
 
     monkeypatch.setattr("pydantic_ai.ui._web.app._get_ui_html", _stubbed_ui_html)
-    monkeypatch.setattr("ikea_agent.chat_app.main.build_chat_agent", lambda: main_agent)
     monkeypatch.setattr(
-        "ikea_agent.chat_app.main.list_subagent_catalog",
+        "ikea_agent.chat_app.main.list_agent_catalog",
         lambda: [catalog_item],
     )
     monkeypatch.setattr(
-        "ikea_agent.chat_app.main.build_subagent_ag_ui_agent",
-        _build_subagent,
+        "ikea_agent.chat_app.main.build_agent_ag_ui_agent",
+        _build_agent,
     )
 
     client = TestClient(
@@ -188,20 +186,16 @@ def test_subagent_web_chat_mount_boots_and_dispatches_to_subagent(
     )
     payload = _chat_request_payload("route-check")
 
-    boot_response = client.get("/subagents/floor_plan_intake/chat/")
-    subagent_response = client.post("/subagents/floor_plan_intake/chat/api/chat", json=payload)
+    boot_response = client.get("/agents/floor_plan_intake/chat/")
+    agent_response = client.post("/agents/floor_plan_intake/chat/api/chat", json=payload)
     main_response = client.post("/api/chat", json=payload)
 
     assert boot_response.status_code == 200
-    assert "subagent-ui" in boot_response.text
-    assert subagent_response.status_code == 200
-    assert main_response.status_code == 200
-    assert subagent_response.headers["content-type"].startswith("text/event-stream")
-    assert main_response.headers["content-type"].startswith("text/event-stream")
-    assert "subagent-stream" in subagent_response.text
-    assert "main-stream" not in subagent_response.text
-    assert "main-stream" in main_response.text
-    assert "subagent-stream" not in main_response.text
+    assert "agent-ui" in boot_response.text
+    assert agent_response.status_code == 200
+    assert main_response.status_code == 404
+    assert agent_response.headers["content-type"].startswith("text/event-stream")
+    assert "agent-stream" in agent_response.text
 
 
 def test_function_model_web_adapter_uses_streaming_path_for_chat_dispatch(

@@ -27,7 +27,7 @@ type CopilotKitProvidersProps = {
 
 type ThreadSessionContextValue = {
   agentKey: string;
-  subagentName: string | null;
+  agentName: string | null;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -38,12 +38,13 @@ type ThreadSessionContextValue = {
 
 const ThreadSessionContext = createContext<ThreadSessionContextValue | null>(null);
 
-function resolveAgentContext(pathname: string): { agentKey: string; subagentName: string | null } {
-  const match = pathname.match(/^\/subagents\/([^/]+)/);
+function resolveAgentContext(pathname: string): { agentKey: string; agentName: string | null } {
+  const match = pathname.match(/^\/agents\/([^/]+)/);
   if (match && match[1]) {
-    return { agentKey: `subagent_${match[1]}`, subagentName: match[1] };
+    return { agentKey: `agent_${match[1]}`, agentName: match[1] };
   }
-  return { agentKey: "ikea_agent", subagentName: null };
+  // Home defaults to floor_plan_intake key even without active chat.
+  return { agentKey: "agent_floor_plan_intake", agentName: null };
 }
 
 function randomThreadId(agentKey: string): string {
@@ -60,7 +61,7 @@ export function CopilotKitProviders({
   children,
 }: CopilotKitProvidersProps): ReactElement {
   const pathname = usePathname();
-  const { agentKey, subagentName } = useMemo(() => resolveAgentContext(pathname), [pathname]);
+  const { agentKey, agentName } = useMemo(() => resolveAgentContext(pathname), [pathname]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadIds, setThreadIds] = useState<string[]>([]);
   const [resumableThreadIds, setResumableThreadIds] = useState<string[]>([]);
@@ -146,7 +147,7 @@ export function CopilotKitProviders({
   const contextValue = useMemo<ThreadSessionContextValue>(
     () => ({
       agentKey,
-      subagentName,
+      agentName,
       threadId,
       threadIds,
       warning,
@@ -154,7 +155,7 @@ export function CopilotKitProviders({
       createThread,
       clearWarning: () => setWarning(null),
     }),
-    [agentKey, createThread, selectThread, subagentName, threadId, threadIds, warning],
+    [agentKey, agentName, createThread, selectThread, threadId, threadIds, warning],
   );
 
   return (

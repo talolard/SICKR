@@ -13,8 +13,8 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class SubagentModelConfig(BaseModel):
-    """Optional model override configuration for one subagent."""
+class AgentModelConfig(BaseModel):
+    """Optional model override configuration for one named agent."""
 
     model: str | None = Field(default=None)
     persistence_mode: Literal["state_per_thread", "data_per_turn", "disabled"] | None = Field(
@@ -75,42 +75,62 @@ class AppSettings(BaseSettings):
     mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     mmr_preselect_limit: int = Field(default=30, ge=5, le=200)
     embedding_neighbor_limit: int = Field(default=0, ge=0, le=10000)
-    subagents: dict[str, SubagentModelConfig] = Field(default_factory=dict)
+    agents: dict[str, AgentModelConfig] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("agents", "subagents"),
+    )
 
-    def _resolve_subagent_config(self, subagent_name: str) -> SubagentModelConfig | None:
-        direct = self.subagents.get(subagent_name)
+    def _resolve_agent_config(self, agent_name: str) -> AgentModelConfig | None:
+        direct = self.agents.get(agent_name)
         if direct is not None:
             return direct
-        lower = self.subagents.get(subagent_name.lower())
+        lower = self.agents.get(agent_name.lower())
         if lower is not None:
             return lower
-        return self.subagents.get(subagent_name.upper())
+        return self.agents.get(agent_name.upper())
 
-    def subagent_model(self, subagent_name: str) -> str | None:
-        """Return configured model override for one subagent when present."""
+    def agent_model(self, agent_name: str) -> str | None:
+        """Return configured model override for one agent when present."""
 
-        resolved = self._resolve_subagent_config(subagent_name)
+        resolved = self._resolve_agent_config(agent_name)
         if resolved and resolved.model:
             return resolved.model
         return None
 
-    def subagent_persistence_mode(
-        self, subagent_name: str
+    def agent_persistence_mode(
+        self, agent_name: str
     ) -> Literal["state_per_thread", "data_per_turn", "disabled"] | None:
-        """Return configured persistence mode override for one subagent."""
+        """Return configured persistence mode override for one agent."""
 
-        resolved = self._resolve_subagent_config(subagent_name)
+        resolved = self._resolve_agent_config(agent_name)
         if resolved is not None:
             return resolved.persistence_mode
         return None
 
-    def subagent_capture_turn_history(self, subagent_name: str) -> bool | None:
-        """Return configured turn-history capture override for one subagent."""
+    def agent_capture_turn_history(self, agent_name: str) -> bool | None:
+        """Return configured turn-history capture override for one agent."""
 
-        resolved = self._resolve_subagent_config(subagent_name)
+        resolved = self._resolve_agent_config(agent_name)
         if resolved is not None:
             return resolved.capture_turn_history
         return None
+
+    def subagent_model(self, subagent_name: str) -> str | None:
+        """Backward-compatible alias for `agent_model`."""
+
+        return self.agent_model(subagent_name)
+
+    def subagent_persistence_mode(
+        self, subagent_name: str
+    ) -> Literal["state_per_thread", "data_per_turn", "disabled"] | None:
+        """Backward-compatible alias for `agent_persistence_mode`."""
+
+        return self.agent_persistence_mode(subagent_name)
+
+    def subagent_capture_turn_history(self, subagent_name: str) -> bool | None:
+        """Backward-compatible alias for `agent_capture_turn_history`."""
+
+        return self.agent_capture_turn_history(subagent_name)
 
 
 @lru_cache(maxsize=1)

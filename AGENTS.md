@@ -4,7 +4,7 @@ Repository-local collaboration and implementation rules.
 
 ## Repository structure (current)
 
-- `src/ikea_agent/`: active Python runtime (FastAPI + pydantic-ai + pydantic-graph).
+- `src/ikea_agent/`: active Python runtime (FastAPI + pydantic-ai).
 - `tests/`: pytest test suite (typed tests preferred).
 - `spec/`: specs (including `spec/ui/` for CopilotKit integration).
 - `external_docs/`: repo-local notes on external libraries and protocols.
@@ -64,20 +64,21 @@ When using libraries search for documentation in
 
 ## Chat Runtime Standards
 
-- Treat FastAPI + pydantic-ai + pydantic-graph as the default web/runtime stack.
+- Treat FastAPI + pydantic-ai as the default web/runtime stack.
 - Prefer chat-first UX and API surfaces over form-heavy page flows.
-- Keep graph state minimal; pass intermediate payloads through typed nodes when possible.
+- Keep agent state minimal and typed per agent.
 - Prefer tools that return typed domain objects (for example `list[RetrievalResult]`) over preformatted prose.
 - Keep agent prompts concrete, scenario-driven, and explicit about output structure.
 - Prefer current lightweight generation models as defaults when they satisfy quality/cost needs; keep model choice configurable.
 - Use module-level loggers (`getLogger(__name__)`) and log concise operational facts (query + result counts).
 - Avoid hidden side effects in service constructors (for example auto-running schema SQL). Bootstrap runtime/schema explicitly at app startup.
-- Keep route handlers thin: validate request payloads, call graph/services, return typed responses.
+- Keep route handlers thin: validate request payloads, call agents/services, return typed responses.
 
 ## Implementing Tools
 
 - Implement new runtime tools under `src/ikea_agent/tools/`.
-- Register tool functions directly in `src/ikea_agent/chat/agent.py` on the active pydantic-ai agent.
+- Register tools in per-agent toolset modules under `src/ikea_agent/chat/agents/<agent_name>/toolset.py`.
+- Register agent builders and metadata in `src/ikea_agent/chat/agents/index.py`.
 - Prefer Pydantic models for tool inputs/outputs
 
 ## Tool Rendering (CopilotKit)
@@ -108,7 +109,7 @@ For a new tool `<tool_name>`:
 
 1. Backend:
    - Implemented under `src/ikea_agent/tools/...` with typed input/output.
-   - Registered in `src/ikea_agent/chat/agent.py` with a stable name.
+   - Registered in an agent-local toolset under `src/ikea_agent/chat/agents/<agent_name>/toolset.py` with a stable name.
 2. UI:
    - Renderer exists at `ui/src/components/tooling/<ToolName>ToolRenderer.tsx`.
    - Registered in a single renderer registry (one place) via `useRenderTool`.

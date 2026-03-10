@@ -21,16 +21,16 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - Use `uv run python -m ingest.hydrate_milvus` to load/rebuild Milvus from DuckDB snapshots and
   recompute `app.product_embedding_neighbors` in batch.
 
-## Subagent Model Overrides
+## Agent Model Overrides
 
-Subagents resolve generation models with this precedence:
+Agents resolve generation models with this precedence:
 
 1. Explicit runtime override passed by caller.
-2. Per-subagent config in `subagents`.
+2. Per-agent config in `agents` (legacy alias: `subagents`).
 3. Global `GEMINI_GENERATION_MODEL`.
 
 Environment example for one override:
 
 ```bash
-SUBAGENTS__FLOOR_PLAN_INTAKE__MODEL=gemini-3.1-flash
+AGENTS__FLOOR_PLAN_INTAKE__MODEL=gemini-3.1-flash
 ```
