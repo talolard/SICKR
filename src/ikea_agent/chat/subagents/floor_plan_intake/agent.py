@@ -10,6 +10,12 @@ from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, Thinking
 from pydantic_ai.providers.google import GoogleProvider
 
 from ikea_agent.chat.deps import ChatAgentDeps
+from ikea_agent.chat.subagents.common import (
+    instruction_text_from_prompt,
+)
+from ikea_agent.chat.subagents.common import (
+    read_prompt_markdown as read_prompt_markdown_file,
+)
 from ikea_agent.chat.tools.floor_plan_tools import register_floor_plan_tools
 from ikea_agent.config import get_settings
 
@@ -31,19 +37,11 @@ NOTES = (
 def read_prompt_markdown() -> str:
     """Load prompt markdown for this subagent."""
 
-    if not PROMPT_PATH.exists():
-        msg = f"Prompt file does not exist: {PROMPT_PATH}"
-        raise FileNotFoundError(msg)
-    return PROMPT_PATH.read_text(encoding="utf-8")
+    return read_prompt_markdown_file(PROMPT_PATH)
 
 
 def _instruction_text_from_prompt() -> str:
-    raw = read_prompt_markdown().strip()
-    if raw.startswith("---"):
-        end = raw.find("---", 3)
-        if end != -1:
-            raw = raw[end + 3 :].lstrip("\n")
-    return raw.strip()
+    return instruction_text_from_prompt(PROMPT_PATH)
 
 
 def resolve_model_name(*, explicit_model: str | None = None) -> str:
