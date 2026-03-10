@@ -65,6 +65,29 @@ Runtime behavior must come from `SubgraphAgent` base class:
 - prompt loading and instruction creation
 - metadata generation
 
+## Goal-driven state design requirements
+
+Every subagent must declare a concrete goal and shape state around that goal.
+
+- Put the goal in both:
+  - class metadata (`description`/`notes`)
+  - `README.md` scope text
+- Build `State` as the minimum set of typed fields needed to complete that goal.
+- Prefer domain names over generic placeholders (for example `width_cm`, `length_cm`, `height_cm`).
+- If defaults are operationally necessary (for example a fallback height), store:
+  - the assumed value
+  - whether user-facing notification has been emitted
+- Persist only what is needed for cross-turn continuity; do not accumulate unrelated context.
+- Always capture turn history and include a `notes` list for high-signal details that do not fit typed state fields.
+
+## Concurrency and fan-out caveats (document as TODOs)
+
+- Concurrency policy should be explicit (currently commonly last-write-wins unless overridden).
+- For map-reduce/fan-out agent patterns:
+  - avoid mutating shared state in map stage
+  - aggregate/reduce first
+  - apply final state mutation in reduce stage with explicit reconciliation logic
+
 ## Prompt requirements
 
 - store prompt in `prompt.md`

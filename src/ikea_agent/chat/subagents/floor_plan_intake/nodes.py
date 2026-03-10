@@ -32,6 +32,7 @@ _HEIGHT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MIN_ORIENTATION_TOKENS = 2
+_DEFAULT_HEIGHT_CM = 280.0
 
 
 class RouteSignal(BaseModel):
@@ -86,7 +87,7 @@ def _resolve_route_kind(
         kind = "complete"
     elif state.last_render is not None and _wants_render_now(payload.user_message):
         kind = "render"
-    elif state.length_cm is None or state.depth_cm is None:
+    elif state.width_cm is None or state.length_cm is None:
         kind = "ask_dimensions"
     elif not state.orientation_context_collected:
         kind = _route_without_orientation(
@@ -163,7 +164,10 @@ async def complete_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPlanInta
     return FloorPlanIntakeOutcome(
         status="complete",
         should_exit=True,
-        assistant_message=ctx.inputs.assistant_message or _default_complete_message(),
+        assistant_message=_with_height_assumption_notice(
+            state=ctx.state,
+            base_message=ctx.inputs.assistant_message or _default_complete_message(),
+        ),
         scene_revision=ctx.state.scene_revision,
         render_output=ctx.state.last_render,
         collected_summary=_state_summary(ctx.state),
@@ -177,7 +181,10 @@ async def ask_dimensions_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPl
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=ctx.inputs.assistant_message or _default_dimensions_message(),
+        assistant_message=_with_height_assumption_notice(
+            state=ctx.state,
+            base_message=ctx.inputs.assistant_message or _default_dimensions_message(),
+        ),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -190,7 +197,10 @@ async def ask_orientation_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorP
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=ctx.inputs.assistant_message or _orientation_prompt(ctx.state.room_type),
+        assistant_message=_with_height_assumption_notice(
+            state=ctx.state,
+            base_message=ctx.inputs.assistant_message or _orientation_prompt(ctx.state.room_type),
+        ),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -203,7 +213,10 @@ async def ask_constraints_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorP
     return FloorPlanIntakeOutcome(
         status="ask_user",
         should_exit=False,
-        assistant_message=ctx.inputs.assistant_message or _default_constraints_message(),
+        assistant_message=_with_height_assumption_notice(
+            state=ctx.state,
+            base_message=ctx.inputs.assistant_message or _default_constraints_message(),
+        ),
         scene_revision=ctx.state.scene_revision,
         collected_summary=_state_summary(ctx.state),
     )
@@ -229,7 +242,10 @@ async def render_draft_outcome(ctx: IntakeStepContext[RouteSignal]) -> FloorPlan
     return FloorPlanIntakeOutcome(
         status="rendered_draft",
         should_exit=False,
-        assistant_message=ctx.inputs.assistant_message or _default_render_message(),
+        assistant_message=_with_height_assumption_notice(
+            state=ctx.state,
+            base_message=ctx.inputs.assistant_message or _default_render_message(),
+        ),
         scene_revision=ctx.state.scene_revision,
         render_output=render_output,
         collected_summary=_state_summary(ctx.state),
@@ -246,11 +262,16 @@ def _ingest_payload_heuristic(
 
     dims = _parse_dimensions_cm(user_text)
     if dims is not None:
-        state.length_cm, state.depth_cm = dims
+        state.width_cm, state.length_cm = dims
 
     height = _parse_height_cm(user_text)
     if height is not None:
-        state.wall_height_cm = height
+        state.height_cm = height
+        state.height_assumed_default = False
+        state.height_default_notified = False
+    elif state.height_cm is None:
+        state.height_cm = _DEFAULT_HEIGHT_CM
+        state.height_assumed_default = True
 
     new_constraints = _extract_fixed_constraints(user_text)
     for constraint in new_constraints:
@@ -264,12 +285,14 @@ def _apply_decision_updates(
 ) -> None:
     if decision.room_type is not None:
         state.room_type = decision.room_type
+    if decision.width_cm is not None:
+        state.width_cm = decision.width_cm
     if decision.length_cm is not None:
         state.length_cm = decision.length_cm
-    if decision.depth_cm is not None:
-        state.depth_cm = decision.depth_cm
-    if decision.wall_height_cm is not None:
-        state.wall_height_cm = decision.wall_height_cm
+    if decision.height_cm is not None:
+        state.height_cm = decision.height_cm
+        state.height_assumed_default = False
+        state.height_default_notified = False
     if decision.orientation_context_collected is not None:
         state.orientation_context_collected = decision.orientation_context_collected
     for constraint in decision.fixed_constraints:
@@ -287,7 +310,7 @@ def _default_complete_message() -> str:
 
 def _default_dimensions_message() -> str:
     return (
-        "Give me a rough room size first (for example, 300 by 400 cm). "
+        "Give me a rough room size first (for example, width 300 and length 400 cm). "
         "Approximate values are fine and we will iterate together. "
         "At any point, you can say 'let's move on'."
     )
@@ -295,7 +318,7 @@ def _default_dimensions_message() -> str:
 
 def _default_constraints_message() -> str:
     return (
-        "Before we draft, tell me fixed architectural constraints: wall height, "
+        "Before we draft, tell me fixed architectural constraints: "
         "unusual corners/curves/poles, plus any hard-mounted objects. "
         "If movable furniture appears, we'll place it later unless it is fixed "
         "to the wall. Optionally share outlets, radiators/heating, and lights. "
@@ -423,37 +446,37 @@ def _orientation_prompt(room_type: RoomType) -> str:
 
 
 def _build_scene(state: FloorPlanIntakeState) -> BaselineFloorPlanScene:
+    width_cm = state.width_cm or 400.0
     length_cm = state.length_cm or 400.0
-    depth_cm = state.depth_cm or 300.0
-    wall_height_cm = state.wall_height_cm or 260.0
+    height_cm = state.height_cm or _DEFAULT_HEIGHT_CM
     walls = [
         WallSegmentCm(
             wall_id="bottom",
             start_cm=Point2DCm(x_cm=0.0, y_cm=0.0),
-            end_cm=Point2DCm(x_cm=length_cm, y_cm=0.0),
+            end_cm=Point2DCm(x_cm=width_cm, y_cm=0.0),
         ),
         WallSegmentCm(
             wall_id="right",
-            start_cm=Point2DCm(x_cm=length_cm, y_cm=0.0),
-            end_cm=Point2DCm(x_cm=length_cm, y_cm=depth_cm),
+            start_cm=Point2DCm(x_cm=width_cm, y_cm=0.0),
+            end_cm=Point2DCm(x_cm=width_cm, y_cm=length_cm),
         ),
         WallSegmentCm(
             wall_id="top",
-            start_cm=Point2DCm(x_cm=length_cm, y_cm=depth_cm),
-            end_cm=Point2DCm(x_cm=0.0, y_cm=depth_cm),
+            start_cm=Point2DCm(x_cm=width_cm, y_cm=length_cm),
+            end_cm=Point2DCm(x_cm=0.0, y_cm=length_cm),
         ),
         WallSegmentCm(
             wall_id="left",
-            start_cm=Point2DCm(x_cm=0.0, y_cm=depth_cm),
+            start_cm=Point2DCm(x_cm=0.0, y_cm=length_cm),
             end_cm=Point2DCm(x_cm=0.0, y_cm=0.0),
         ),
     ]
     return BaselineFloorPlanScene(
         architecture=ArchitectureScene(
             dimensions_cm=RoomDimensionsCm(
-                length_x_cm=length_cm,
-                depth_y_cm=depth_cm,
-                height_z_cm=wall_height_cm,
+                length_x_cm=width_cm,
+                depth_y_cm=length_cm,
+                height_z_cm=height_cm,
             ),
             walls=walls,
             doors=[],
@@ -466,10 +489,26 @@ def _build_scene(state: FloorPlanIntakeState) -> BaselineFloorPlanScene:
 def _state_summary(state: FloorPlanIntakeState) -> dict[str, object]:
     return {
         "room_type": state.room_type,
+        "width_cm": state.width_cm,
         "length_cm": state.length_cm,
-        "depth_cm": state.depth_cm,
-        "wall_height_cm": state.wall_height_cm,
+        "height_cm": state.height_cm,
+        "height_assumed_default": state.height_assumed_default,
         "orientation_context_collected": state.orientation_context_collected,
         "fixed_constraints": list(state.fixed_constraints),
         "scene_revision": state.scene_revision,
     }
+
+
+def _with_height_assumption_notice(
+    *,
+    state: FloorPlanIntakeState,
+    base_message: str,
+) -> str:
+    if not state.height_assumed_default or state.height_default_notified:
+        return base_message
+
+    state.height_default_notified = True
+    return (
+        f"{base_message} "
+        "I'm assuming a 280 cm wall height for now; tell me if you want a different height."
+    )

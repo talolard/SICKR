@@ -5,7 +5,8 @@ Collect enough room constraints to create an initial floor-plan draft, then iter
 ## Scope
 
 - In scope:
-  - rough dimensions and wall height
+- rough dimensions and wall height
+- rough width/length dimensions and room height
   - fixed architecture (doors/windows/unusual shape)
   - fixed/non-movable installed elements
   - iterative render/correction loop
@@ -47,6 +48,7 @@ Collect enough room constraints to create an initial floor-plan draft, then iter
 | Images provided and continuation not allowed | Unsupported image | Exit with decision prompt |
 | User says perfect/close enough/give up | Complete | Exit to parent |
 | Missing dimensions | Ask dimensions | Continue intake |
+| Missing height | Assume 280 cm and notify user | Continue intake |
 | Missing orientation context | Ask orientation + room-specific constraints | Continue intake |
 | User says move on / render / corrections OR round cap reached | Render draft | Return rendered draft |
 | Otherwise | Ask fixed constraints | Continue intake |

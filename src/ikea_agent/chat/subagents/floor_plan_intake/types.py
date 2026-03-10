@@ -50,9 +50,9 @@ class FloorPlanIntakeDecision(BaseModel):
         description="Response shown to user for the selected action.",
     )
     room_type: RoomType | None = None
+    width_cm: float | None = None
     length_cm: float | None = None
-    depth_cm: float | None = None
-    wall_height_cm: float | None = None
+    height_cm: float | None = None
     orientation_context_collected: bool | None = None
     fixed_constraints: list[str] = Field(default_factory=list)
 
@@ -92,9 +92,11 @@ class FloorPlanIntakeState:
 
     latest_input: FloorPlanIntakeInput | None = None
     room_type: RoomType = "other"
+    width_cm: float | None = None
     length_cm: float | None = None
-    depth_cm: float | None = None
-    wall_height_cm: float | None = None
+    height_cm: float | None = None
+    height_assumed_default: bool = False
+    height_default_notified: bool = False
     orientation_context_collected: bool = False
     fixed_constraints: list[str] = field(default_factory=list)
     question_rounds: int = 0

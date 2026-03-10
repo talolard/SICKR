@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
-from typing import ClassVar, Protocol, TypedDict, TypeVar, cast
+from time import time
+from typing import ClassVar, Literal, Protocol, TypedDict, TypeVar, cast
 
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelMessage,
@@ -24,6 +27,7 @@ StateT = TypeVar("StateT")
 DepsT = TypeVar("DepsT")
 InputT = TypeVar("InputT")
 OutputT = TypeVar("OutputT")
+SubagentPersistenceMode = Literal["state_per_thread", "data_per_turn", "disabled"]
 
 
 class SupportsSubgraphRuntime(Protocol[StateT, DepsT, InputT, OutputT]):
@@ -54,6 +58,27 @@ class SubagentDescription(SubagentCatalogItem):
     notes: str
 
 
+class SubagentTurnRecord(BaseModel):
+    """Per-turn conversational record captured for subagent runs."""
+
+    timestamp_ms: int
+    thread_id: str
+    run_id: str | None = None
+    user_message: str
+    assistant_message: str
+    output_payload: dict[str, object]
+    notes: list[str]
+
+
+class SupportsPersistentSubagentState(Protocol):
+    """Minimal shared-state surface needed for subagent persistence hooks."""
+
+    thread_id: str | None
+    run_id: str | None
+    subagent_state: dict[str, dict[str, dict[str, object]]]
+    subagent_turn_history: dict[str, dict[str, list[dict[str, object]]]]
+
+
 class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
     """Class-based graph subagent that builds AG-UI adapters from one graph contract."""
 
@@ -62,6 +87,8 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
     prompt_path: ClassVar[Path]
     tool_names: ClassVar[tuple[str, ...]] = ()
     notes: ClassVar[str] = ""
+    persistence_mode: ClassVar[SubagentPersistenceMode | None] = None
+    capture_turn_history: ClassVar[bool | None] = None
 
     @classmethod
     def agent_key(cls) -> str:
@@ -112,6 +139,28 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
         return settings.gemini_generation_model
 
     @classmethod
+    def resolve_persistence_mode(cls) -> SubagentPersistenceMode:
+        """Resolve persistence mode using class override, config override, then default."""
+
+        if cls.persistence_mode is not None:
+            return cls.persistence_mode
+        configured = get_settings().subagent_persistence_mode(cls.subagent_name)
+        if configured is not None:
+            return configured
+        return "state_per_thread"
+
+    @classmethod
+    def resolve_capture_turn_history(cls) -> bool:
+        """Resolve turn-history capture policy using class/config overrides then default."""
+
+        if cls.capture_turn_history is not None:
+            return cls.capture_turn_history
+        configured = get_settings().subagent_capture_turn_history(cls.subagent_name)
+        if configured is not None:
+            return configured
+        return True
+
+    @classmethod
     @abstractmethod
     def build_graph(cls) -> object:
         """Build and return the subagent graph instance."""
@@ -130,6 +179,67 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
     @abstractmethod
     def parse_user_input(cls, user_message: str) -> InputT:
         """Convert latest user message into typed graph input."""
+
+    @classmethod
+    def hydrate_state(
+        cls,
+        payload: Mapping[str, object] | None,
+    ) -> StateT:
+        """Hydrate graph state from persisted payload using Pydantic/dataclass defaults."""
+
+        if payload is None:
+            return cls.build_state()
+
+        template = cls.build_state()
+        state_type = type(template)
+        if hasattr(state_type, "model_validate"):
+            validated = state_type.model_validate(payload)
+            return cast("StateT", validated)
+
+        if is_dataclass(template):
+            field_names = {item.name for item in fields(template)}
+            kwargs = {name: payload[name] for name in field_names if name in payload}
+            return cast("StateT", state_type(**kwargs))
+
+        msg = (
+            f"Subagent `{cls.subagent_name}` state type `{state_type.__name__}` does not support "
+            "default hydration. Override `hydrate_state` for custom behavior."
+        )
+        raise TypeError(msg)
+
+    @classmethod
+    def serialize_state(
+        cls,
+        state: StateT,
+    ) -> dict[str, object] | None:
+        """Serialize graph state using Pydantic/dataclass defaults."""
+
+        if hasattr(state, "model_dump"):
+            dumped = state.model_dump(mode="json")
+            if isinstance(dumped, dict):
+                return dumped
+
+        if is_dataclass(state):
+            return cast("dict[str, object]", asdict(state))
+
+        msg = (
+            f"Subagent `{cls.subagent_name}` state type `{type(state).__name__}` does not support "
+            "default serialization. Override `serialize_state` for custom behavior."
+        )
+        raise TypeError(msg)
+
+    @classmethod
+    def build_turn_notes(
+        cls,
+        *,
+        user_message: str,
+        output: object,
+        state: StateT,
+    ) -> list[str]:
+        """Return optional high-signal notes for turn history records."""
+
+        _ = (user_message, output, state)
+        return []
 
     @classmethod
     def output_to_json(cls, output: object) -> dict[str, object]:
@@ -159,6 +269,7 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
         *,
         user_message: str,
         model_name: str,
+        persistent_state: SupportsPersistentSubagentState | None = None,
     ) -> OutputT:
         """Run one graph turn using typed state/deps/input builders."""
 
@@ -166,11 +277,98 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
             "SupportsSubgraphRuntime[StateT, DepsT, InputT, OutputT]",
             cls.build_graph(),
         )
-        return await graph.run(
-            state=cls.build_state(),
+        mode = cls.resolve_persistence_mode()
+        keep_history = cls.resolve_capture_turn_history()
+
+        state = cls._load_state_for_turn(
+            persistent_state=persistent_state,
+            mode=mode,
+        )
+        output = await graph.run(
+            state=state,
             deps=cls.build_deps(model_name=model_name),
             inputs=cls.parse_user_input(user_message),
         )
+        if mode == "state_per_thread":
+            cls._save_state_after_turn(
+                persistent_state=persistent_state,
+                state=state,
+            )
+
+        if keep_history:
+            cls._append_turn_history_record(
+                persistent_state=persistent_state,
+                user_message=user_message,
+                output=output,
+                state=state,
+            )
+
+        return output
+
+    @classmethod
+    def _load_state_for_turn(
+        cls,
+        *,
+        persistent_state: SupportsPersistentSubagentState | None,
+        mode: SubagentPersistenceMode,
+    ) -> StateT:
+        if mode != "state_per_thread":
+            return cls.build_state()
+
+        if persistent_state is None or persistent_state.thread_id is None:
+            return cls.build_state()
+
+        by_subagent = persistent_state.subagent_state.get(cls.subagent_name, {})
+        raw_payload = by_subagent.get(persistent_state.thread_id)
+        payload = raw_payload if isinstance(raw_payload, Mapping) else None
+        return cls.hydrate_state(payload)
+
+    @classmethod
+    def _save_state_after_turn(
+        cls,
+        *,
+        persistent_state: SupportsPersistentSubagentState | None,
+        state: StateT,
+    ) -> None:
+        if persistent_state is None or persistent_state.thread_id is None:
+            return
+
+        by_subagent = persistent_state.subagent_state.setdefault(cls.subagent_name, {})
+        payload = cls.serialize_state(state)
+        if payload is None:
+            by_subagent.pop(persistent_state.thread_id, None)
+            return
+        by_subagent[persistent_state.thread_id] = payload
+
+    @classmethod
+    def _append_turn_history_record(
+        cls,
+        *,
+        persistent_state: SupportsPersistentSubagentState | None,
+        user_message: str,
+        output: object,
+        state: StateT,
+    ) -> None:
+        if persistent_state is None or persistent_state.thread_id is None:
+            return
+
+        by_subagent = persistent_state.subagent_turn_history.setdefault(cls.subagent_name, {})
+        thread_history = by_subagent.setdefault(persistent_state.thread_id, [])
+        output_payload = cls.output_to_json(output)
+        record = SubagentTurnRecord(
+            timestamp_ms=int(time() * 1000),
+            thread_id=persistent_state.thread_id,
+            run_id=persistent_state.run_id,
+            user_message=user_message,
+            assistant_message=cls.extract_assistant_message(output),
+            output_payload=output_payload,
+            notes=cls.build_turn_notes(
+                user_message=user_message,
+                output=output,
+                state=state,
+            ),
+        )
+        thread_history.append(record.model_dump(mode="json"))
 
     @classmethod
     def build_catalog_item(cls) -> SubagentCatalogItem:
@@ -204,15 +402,26 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
         )
 
     @classmethod
-    def build_agent(cls, *, explicit_model: str | None = None) -> Agent[None, str]:
+    def build_agent(
+        cls,
+        *,
+        explicit_model: str | None = None,
+        persistent_state: SupportsPersistentSubagentState | None = None,
+    ) -> Agent[None, str]:
         """Build a pydantic-ai Agent that dispatches one turn into this subgraph."""
 
         resolved_model_name = cls.resolve_model_name(explicit_model=explicit_model)
         subgraph_cls = cast("type[SubgraphAgent[object, object, object, object]]", cls)
         model = FunctionModel(
-            _build_subgraph_function(subgraph_cls, model_name=resolved_model_name),
+            _build_subgraph_function(
+                subgraph_cls,
+                model_name=resolved_model_name,
+                persistent_state=persistent_state,
+            ),
             stream_function=_build_subgraph_stream_function(
-                subgraph_cls, model_name=resolved_model_name
+                subgraph_cls,
+                model_name=resolved_model_name,
+                persistent_state=persistent_state,
             ),
             model_name=cls.agent_key(),
         )
@@ -228,11 +437,16 @@ def _build_subgraph_function(
     subgraph_cls: type[SubgraphAgent],
     *,
     model_name: str,
+    persistent_state: SupportsPersistentSubagentState | None,
 ) -> Callable[[list[ModelMessage], AgentInfo], Awaitable[ModelResponse]]:
     async def _run(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         _ = info
         user_message = _latest_user_prompt_text(messages)
-        output = await subgraph_cls.run_one_turn(user_message=user_message, model_name=model_name)
+        output = await subgraph_cls.run_one_turn(
+            user_message=user_message,
+            model_name=model_name,
+            persistent_state=persistent_state,
+        )
         assistant_text = subgraph_cls.extract_assistant_message(output)
         return ModelResponse(
             parts=[TextPart(content=assistant_text)],
@@ -246,11 +460,16 @@ def _build_subgraph_stream_function(
     subgraph_cls: type[SubgraphAgent],
     *,
     model_name: str,
+    persistent_state: SupportsPersistentSubagentState | None,
 ) -> Callable[[list[ModelMessage], AgentInfo], AsyncIterator[str]]:
     async def _run_stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
         _ = info
         user_message = _latest_user_prompt_text(messages)
-        output = await subgraph_cls.run_one_turn(user_message=user_message, model_name=model_name)
+        output = await subgraph_cls.run_one_turn(
+            user_message=user_message,
+            model_name=model_name,
+            persistent_state=persistent_state,
+        )
         yield subgraph_cls.extract_assistant_message(output)
 
     return _run_stream
@@ -279,5 +498,8 @@ def _first_user_prompt_content(parts: Sequence[ModelRequestPart]) -> str | None:
 __all__ = [
     "SubagentCatalogItem",
     "SubagentDescription",
+    "SubagentPersistenceMode",
+    "SubagentTurnRecord",
     "SubgraphAgent",
+    "SupportsPersistentSubagentState",
 ]

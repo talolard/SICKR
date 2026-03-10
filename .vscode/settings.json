@@ -1,5 +1,7 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.languageServer": "None",
+  "python.pyrefly.displayTypeErrors": "force-on",
   "python.terminal.useEnvFile": true,
   "python.envFile": "${workspaceFolder}/.env",
   "python.testing.pytestEnabled": true,
@@ -47,7 +49,8 @@
     "**/.coverage.*": true,
     "**/htmlcov": true,
     "**/uv.lock": true,
-    "**/*.duckdb": true
+    "**/*.duckdb": true,
+    "**/.beads": true
   },
   "files.associations": {
     "*.sql": "sql"

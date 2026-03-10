@@ -84,18 +84,18 @@ async def _decider_for_testing(
             next_action="render",
             assistant_message="Rendering a draft now.",
             room_type=state.room_type,
+            width_cm=state.width_cm,
             length_cm=state.length_cm,
-            depth_cm=state.depth_cm,
-            wall_height_cm=state.wall_height_cm,
+            height_cm=state.height_cm,
             orientation_context_collected=True,
         )
     return FloorPlanIntakeDecision(
         next_action="ask_constraints",
         assistant_message="Tell me fixed constraints before rendering.",
         room_type=state.room_type,
+        width_cm=state.width_cm,
         length_cm=state.length_cm,
-        depth_cm=state.depth_cm,
-        wall_height_cm=state.wall_height_cm,
+        height_cm=state.height_cm,
         orientation_context_collected=state.orientation_context_collected,
     )
 
@@ -211,7 +211,9 @@ def test_run_from_raw_input_accepts_plain_text(monkeypatch: MonkeyPatch) -> None
     output = asyncio.run(run_from_raw_input("room is 300 by 400"))
 
     assert output["status"] == "ask_user"
-    assert output["assistant_message"] == "Echo: room is 300 by 400"
+    assistant_msg = str(output["assistant_message"])
+    assert "Echo: room is 300 by 400" in assistant_msg
+    assert "assuming a 280 cm wall height" in assistant_msg
 
 
 def test_run_floor_plan_intake_fails_when_prompt_is_missing(

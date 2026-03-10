@@ -698,7 +698,10 @@ def create_app(
         )
 
     catalog = list_subagent_catalog()
-    subagent_agents = {item["name"]: build_subagent_ag_ui_agent(item["name"]) for item in catalog}
+    subagent_agents = {
+        item["name"]: build_subagent_ag_ui_agent(item["name"], persistent_state=deps.state)
+        for item in catalog
+    }
 
     if mount_ag_ui:
         _register_ag_ui_routes(

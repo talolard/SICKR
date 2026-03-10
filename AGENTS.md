@@ -1,3 +1,11 @@
+## Subagent Creation Standard
+
+Use the `build-graph-agent` skill as the standard way to create new subagents in this repository.
+
+- Skill file: `/Users/tal/dev/tal_maria_ikea/.codex/skills/build-graph-agent/SKILL.md`
+- Target area: `src/ikea_agent/chat/subagents/`
+- Expected scaffold includes a class-based subagent in `agent.py`, graph/nodes/prompt/tools, explicit `subagents/index.py` registration, and contract tests.
+
 # AGENTS.md
 
 Repository-local collaboration and implementation rules.
@@ -29,6 +37,82 @@ When using libraries search for documentation in
 - Commit at the end of each implementation subtask.
 - Commit messages must be high-level and human-readable, focused on intent.
 - Commit bodies should explain problem -> approach -> outcome, not just file lists.
+
+## Multi-Agent Worktree Protocol
+
+- Any non-trivial mutating implementation task must run in a dedicated git worktree.
+- Read-only tasks (planning, retrospectives, discovery, architecture review) may run in the main tree.
+- Always use `bd worktree create` and `bd worktree remove`; do not use raw `git worktree` commands.
+- Worktree scope is **per epic** (not per task).
+- Branch scope is **per epic** (not per task).
+- All tasks under a single epic are expected to run in that epic's worktree and branch.
+- Do not mix tasks from unrelated epics in one worktree.
+
+## Worktree Location Policy
+
+- Default root for agent worktrees is `${TMPDIR%/}/tal_maria_ikea-worktrees`.
+- Use `<epic-id>-<short-slug>` for the epic worktree directory name.
+- Use `epic/<epic-id>-<short-slug>` for the epic branch name.
+- We intentionally keep worktrees outside the repo root to avoid VS Code/Copilot workspace context pollution.
+
+## Epic Task Commit Policy
+
+- Expected default: **one commit per task**.
+- Feedback-driven follow-up changes can be added as **feedback commits** on the same epic branch.
+- Do not collapse unrelated tasks into a single shared commit.
+- Keep commit messages aligned to task intent and include bead references where relevant.
+
+## Epic Lifecycle Checklist
+
+1. Claim the epic in beads: `bd update <epic-id> --status in_progress --json`.
+2. Create one epic worktree and epic branch with `bd worktree create`.
+3. Bootstrap once in that worktree (`uv sync --all-groups`, `make ui-install`, isolated runtime paths).
+4. Execute epic tasks in that same worktree/branch.
+5. Create **one commit per task**; add feedback commits only when review follow-up is needed.
+6. Run quality gate (`make tidy`) before declaring epic implementation complete.
+7. Create a `merge-request` child under `awaiting-merge` when epic work is ready to merge.
+8. After merge verification, close merge-request + epic and retire worktree with `bd worktree remove`.
+
+## Required Per-Worktree Bootstrap
+
+- In each new worktree, run `uv sync --all-groups`.
+- In each new worktree, run `make ui-install` (or use `scripts/worktree/bootstrap.sh`, which does both by default).
+- Ensure local `.env` exists (copy from canonical repo `.env` or `.env.example`).
+- Keep runtime writable state isolated per worktree:
+  - `DUCKDB_PATH=.tmp_untracked/runtime/ikea.duckdb`
+  - `MILVUS_LITE_URI=.tmp_untracked/runtime/milvus_lite.db`
+  - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
+  - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
+- Copy DuckDB and Milvus files from canonical repo paths for each worktree; never run multiple agents against the same writable DB files.
+- Keep `data/parquet` as shared read-only source-of-truth artifacts.
+
+## Port Allocation Policy
+
+- Every agent must use explicit ports for backend and UI.
+- Reserved backend port range: `8100-8199`.
+- Reserved UI port range: `3100-3199`.
+- Slot mapping:
+  - backend port = `8100 + slot`
+  - UI port = `3100 + slot`
+- Launch commands must be explicit:
+  - `make chat PORT=<backend_port>`
+  - `make ui-dev-real UI_PORT=<ui_port> PY_AG_UI_URL=http://127.0.0.1:<backend_port>/ag-ui/`
+
+## Merge Backlog Policy
+
+- Persistent merge queue epic: `awaiting-merge`.
+- When an implementation epic is complete and waiting to merge, add a child issue under `awaiting-merge` of type `merge-request`.
+- Each `merge-request` item must include:
+  - source branch
+  - PR link/number
+  - CI status summary
+  - risk and rollback notes
+- A merge-focused agent processes `awaiting-merge` and closes queue items after merge verification.
+
+## Output Hygiene
+
+- Generated runtime/test outputs must stay in ignored paths like `.tmp_untracked/`, `artifacts/`, and `comments/`.
+- Do not commit copied DB files, local lock files, generated artifacts, or temporary worktree environment files.
 
 ## Tooling Standards
 
@@ -315,6 +399,7 @@ bd close bd-42 --reason "Completed" --json
 - `task` - Work item (tests, docs, refactoring)
 - `epic` - Large feature with subtasks
 - `chore` - Maintenance (dependencies, tooling)
+- `merge-request` - Queue item for implementation-complete branch waiting on merge handling
 
 ### Priorities
 

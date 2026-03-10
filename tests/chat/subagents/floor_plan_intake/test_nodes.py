@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from ikea_agent.chat.subagents.floor_plan_intake.nodes import (
+    _default_constraints_message,
+    _default_dimensions_message,
+    _default_render_message,
     _infer_room_type,
     _is_finish_signal,
     _orientation_prompt,
     _parse_dimensions_cm,
     _parse_height_cm,
     _wants_render_now,
+    _with_height_assumption_notice,
 )
+from ikea_agent.chat.subagents.floor_plan_intake.types import FloorPlanIntakeState
 
 
 def test_parse_dimensions_cm_from_plain_text() -> None:
@@ -41,3 +46,19 @@ def test_finish_signals_match_all_exit_phrases() -> None:
     assert _is_finish_signal("that's perfect")
     assert _is_finish_signal("that's close enough")
     assert _is_finish_signal("let's give up")
+
+
+def test_default_messages_use_width_length_language() -> None:
+    assert "width 300 and length 400" in _default_dimensions_message()
+    assert "wall height" not in _default_constraints_message().lower()
+    assert "initial floor-plan draft" in _default_render_message().lower()
+
+
+def test_height_assumption_notice_added_once() -> None:
+    state = FloorPlanIntakeState(height_assumed_default=True, height_default_notified=False)
+    message = _with_height_assumption_notice(state=state, base_message="Base")
+    assert "assuming a 280 cm wall height" in message
+    assert state.height_default_notified is True
+
+    second = _with_height_assumption_notice(state=state, base_message="Again")
+    assert second == "Again"

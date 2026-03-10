@@ -7,6 +7,7 @@
 Active runtime uses DuckDB for:
 - `app.products_canonical` (catalog metadata)
 - `app.product_embeddings` (embedding snapshot source used to build Milvus)
+- `app.product_embedding_neighbors` (precomputed cosine neighbors used by MMR diversification)
 
 ### Milvus Lite (`data/milvus_lite.db`)
 
@@ -22,9 +23,10 @@ Active runtime uses Milvus Lite collection:
 ## Data Lifecycle
 
 1. Embedding snapshots live in DuckDB/parquet data artifacts.
-2. A dedicated ingest script loads Milvus Lite from DuckDB embeddings.
-3. Query flow retrieves vector candidates from Milvus.
-4. DuckDB hydrates and filters candidate products.
+2. Ingest hydrates Milvus Lite from DuckDB embeddings.
+3. Ingest precomputes top-k embedding neighbors and stores them in DuckDB.
+4. Query flow retrieves vector candidates from Milvus.
+5. DuckDB hydrates/filter candidates and provides neighbor similarities for MMR.
 
 ## Tool Sample Inputs
 - Floor planner sample inputs live in typed tests under `tests/tools/test_floor_planner_*.py`.
