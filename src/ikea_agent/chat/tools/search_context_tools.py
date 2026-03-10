@@ -13,7 +13,6 @@ from ikea_agent.chat.graph import (
     ParseUserIntentNode,
     build_chat_graph,
 )
-from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.chat.tools.support import (
     build_room_3d_snapshot_context_payload,
     room_3d_repository,
@@ -37,38 +36,38 @@ def register_search_context_tools(agent: Agent[ChatAgentDeps, str]) -> None:
         candidate_pool_limit: int | None = None,
         filters: RetrievalFilters | None = None,
     ) -> SearchGraphToolResult:
-        """Run semantic search, diversify repetitive families, and return typed results."""
+        """Run semantic search, apply rerank + MMR diversification, and return results."""
 
         target_pool_limit = candidate_pool_limit
         if target_pool_limit is not None:
             target_pool_limit = max(limit, min(500, target_pool_limit))
         graph = build_chat_graph()
         result = await graph.run(
-            ParseUserIntentNode(user_message=semantic_query, result_limit=target_pool_limit),
+            ParseUserIntentNode(
+                user_message=semantic_query,
+                result_limit=limit,
+                candidate_pool_limit=target_pool_limit,
+            ),
             state=ChatGraphState(filters=filters),
             deps=ChatGraphDeps(runtime=ctx.deps.runtime),
-        )
-        diversified = diversify_results(
-            results=result.output.product_matches,
-            limit=limit,
         )
         logger.info(
             "graph_query_completed",
             extra={
                 "query_text": semantic_query,
-                "result_count": len(result.output.product_matches),
-                "returned_result_count": len(diversified.results),
+                "result_count": result.output.total_candidates,
+                "returned_result_count": len(result.output.product_matches),
                 "dominance_warning": (
-                    diversified.warning.dominant_family if diversified.warning else None
+                    result.output.warning.dominant_family if result.output.warning else None
                 ),
                 **telemetry_context(ctx),
             },
         )
         output = SearchGraphToolResult(
-            results=diversified.results,
-            warning=diversified.warning,
-            total_candidates=len(result.output.product_matches),
-            returned_count=len(diversified.results),
+            results=result.output.product_matches,
+            warning=result.output.warning,
+            total_candidates=result.output.total_candidates,
+            returned_count=len(result.output.product_matches),
         )
         search_repo = search_repository(ctx)
         if search_repo is not None:
@@ -77,9 +76,9 @@ def register_search_context_tools(agent: Agent[ChatAgentDeps, str]) -> None:
                 run_id=ctx.deps.state.run_id,
                 query_text=semantic_query,
                 filters=filters,
-                warning=diversified.warning,
-                total_candidates=len(result.output.product_matches),
-                results=diversified.results,
+                warning=result.output.warning,
+                total_candidates=result.output.total_candidates,
+                results=result.output.product_matches,
             )
         return output
 

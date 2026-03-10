@@ -28,8 +28,12 @@ def _build_default_decider_instructions() -> str:
         "Do not claim to parse images. If images are mentioned in payload context "
         "and parsing is unsupported, "
         "focus on text-only continuation guidance. "
-        "Extract any newly stated room dimensions, wall height, room type, "
+        "Extract any newly stated room dimensions (width and length), room height, room type, "
         "orientation coverage, and fixed constraints. "
+        "Keep room_type stable once established unless user explicitly corrects room type. "
+        "Do not treat movable furniture mentions (for example 'kitchen table') as room_type "
+        "switch signals. "
+        "If room_type is ambiguous, keep the previous room_type and ask a clarifying question. "
         "If user asks to move on or provide corrections after a prior draft, choose render."
     )
 
@@ -41,8 +45,13 @@ def _build_decider_instructions(*, prompt_instructions: str) -> str:
         "- Choose exactly one next_action from: complete, ask_dimensions, ask_orientation, "
         "ask_constraints, render.\n"
         "- Return concise assistant_message in the same collaborative tone.\n"
-        "- Extract any newly stated room dimensions, wall height, room type, orientation coverage, "
+        "- Extract any newly stated room dimensions (width and length), room height, "
+        "room type, orientation coverage, "
         "and fixed constraints.\n"
+        "- Keep room_type stable once established unless user explicitly corrects room type.\n"
+        "- Do not treat movable furniture mentions (for example 'kitchen table') as room_type "
+        "switch signals.\n"
+        "- If room_type is ambiguous, keep previous room_type and ask a clarifying question.\n"
         "- If user asks to move on or provide corrections after a prior draft, choose render.\n"
     )
 
@@ -72,9 +81,10 @@ def _build_decider_agent(
 def _build_decider_prompt(*, state: FloorPlanIntakeState, payload: FloorPlanIntakeInput) -> str:
     state_payload = {
         "room_type": state.room_type,
+        "width_cm": state.width_cm,
         "length_cm": state.length_cm,
-        "depth_cm": state.depth_cm,
-        "wall_height_cm": state.wall_height_cm,
+        "height_cm": state.height_cm,
+        "height_assumed_default": state.height_assumed_default,
         "orientation_context_collected": state.orientation_context_collected,
         "fixed_constraints": state.fixed_constraints,
         "question_rounds": state.question_rounds,

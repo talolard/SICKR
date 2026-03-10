@@ -5,6 +5,7 @@ import { beforeEach, vi } from "vitest";
 import Home from "./page";
 
 type ThreadSessionState = {
+  agentKey: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -18,6 +19,7 @@ const mockAgent = {
 };
 
 let currentThreadSession: ThreadSessionState = {
+  agentKey: "ikea_agent",
   threadId: null,
   threadIds: [],
   warning: null,
@@ -42,6 +44,10 @@ vi.mock("@/app/CopilotKitProviders", () => ({
 
 vi.mock("@/components/attachments/AttachmentComposer", () => ({
   AttachmentComposer: (): ReactElement => <div data-testid="attachment-composer" />,
+}));
+
+vi.mock("@/components/navigation/AppNavBanner", () => ({
+  AppNavBanner: (): ReactElement => <div data-testid="app-nav-banner" />,
 }));
 
 vi.mock("@/components/copilotkit/CopilotToolRenderers", () => ({
@@ -79,11 +85,16 @@ vi.mock("@/lib/feedbackCapture", () => ({
   startFeedbackCapture: vi.fn(),
 }));
 
+vi.mock("@/lib/subagents", () => ({
+  fetchSubagents: vi.fn(async () => []),
+}));
+
 describe("Home page", () => {
   beforeEach(() => {
     sidebarProps.length = 0;
     mockAgent.setState.mockReset();
     currentThreadSession = {
+      agentKey: "ikea_agent",
       threadId: null,
       threadIds: [],
       warning: null,
@@ -94,6 +105,7 @@ describe("Home page", () => {
     const { rerender } = render(<Home />);
 
     currentThreadSession = {
+      agentKey: "ikea_agent",
       threadId: "900339f6",
       threadIds: ["900339f6"],
       warning: null,

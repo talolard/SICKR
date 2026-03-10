@@ -37,48 +37,62 @@ const THREAD_PREFIX = "copilotkit_ui_thread_";
 const THREAD_IDS_KEY = "copilotkit_ui_thread_ids";
 const RESUMABLE_THREAD_IDS_KEY = "copilotkit_ui_resumable_thread_ids_tmp";
 const ROOM_3D_SNAPSHOT_PREFIX = "copilotkit_ui_room3d_snapshots_";
+const DEFAULT_AGENT_KEY = "ikea_agent";
 
-function threadKey(threadId: string): string {
-  return `${THREAD_PREFIX}${threadId}`;
+function scopedKey(baseKey: string, agentKey: string): string {
+  return `${baseKey}_${agentKey}`;
 }
 
-export function loadActiveThreadId(): string | null {
+function threadKey(agentKey: string, threadId: string): string {
+  return `${THREAD_PREFIX}${agentKey}_${threadId}`;
+}
+
+export function loadActiveThreadId(agentKey: string = DEFAULT_AGENT_KEY): string | null {
   if (typeof window === "undefined") {
     return null;
   }
-  return window.localStorage.getItem(ACTIVE_THREAD_KEY);
+  return window.localStorage.getItem(scopedKey(ACTIVE_THREAD_KEY, agentKey));
 }
 
-export function saveActiveThreadId(threadId: string): void {
+export function saveActiveThreadId(
+  threadId: string,
+  agentKey: string = DEFAULT_AGENT_KEY,
+): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(ACTIVE_THREAD_KEY, threadId);
+  window.localStorage.setItem(scopedKey(ACTIVE_THREAD_KEY, agentKey), threadId);
 }
 
-export function loadThreadSnapshot(threadId: string): ThreadSnapshot | null {
+export function loadThreadSnapshot(
+  threadId: string,
+  agentKey: string = DEFAULT_AGENT_KEY,
+): ThreadSnapshot | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const raw = window.localStorage.getItem(threadKey(threadId));
+  const raw = window.localStorage.getItem(threadKey(agentKey, threadId));
   if (!raw) {
     return null;
   }
   return JSON.parse(raw) as ThreadSnapshot;
 }
 
-export function saveThreadSnapshot(snapshot: ThreadSnapshot): void {
+export function saveThreadSnapshot(
+  snapshot: ThreadSnapshot,
+  agentKey: string = DEFAULT_AGENT_KEY,
+): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(threadKey(snapshot.threadId), JSON.stringify(snapshot));
+  window.localStorage.setItem(threadKey(agentKey, snapshot.threadId), JSON.stringify(snapshot));
 }
 
-export function loadThreadIds(): string[] {
+export function loadThreadIds(agentKey: string = DEFAULT_AGENT_KEY): string[] {
   if (typeof window === "undefined") {
     return [];
   }
-  const raw = window.localStorage.getItem(THREAD_IDS_KEY);
+  const raw = window.localStorage.getItem(scopedKey(THREAD_IDS_KEY, agentKey));
   if (!raw) {
     return [];
   }
@@ -90,27 +104,37 @@ export function loadThreadIds(): string[] {
 }
 
 export function saveThreadIds(threadIds: string[]): void {
+  saveThreadIdsForAgent(threadIds, DEFAULT_AGENT_KEY);
+}
+
+export function saveThreadIdsForAgent(
+  threadIds: string[],
+  agentKey: string = DEFAULT_AGENT_KEY,
+): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(THREAD_IDS_KEY, JSON.stringify(threadIds));
+  window.localStorage.setItem(scopedKey(THREAD_IDS_KEY, agentKey), JSON.stringify(threadIds));
 }
 
-export function upsertThreadId(threadId: string): string[] {
-  const current = loadThreadIds();
+export function upsertThreadId(
+  threadId: string,
+  agentKey: string = DEFAULT_AGENT_KEY,
+): string[] {
+  const current = loadThreadIds(agentKey);
   if (current.includes(threadId)) {
     return current;
   }
   const next = [threadId, ...current];
-  saveThreadIds(next);
+  saveThreadIdsForAgent(next, agentKey);
   return next;
 }
 
-export function loadResumableThreadIds(): string[] {
+export function loadResumableThreadIds(agentKey: string = DEFAULT_AGENT_KEY): string[] {
   if (typeof window === "undefined") {
     return [];
   }
-  const raw = window.sessionStorage.getItem(RESUMABLE_THREAD_IDS_KEY);
+  const raw = window.sessionStorage.getItem(scopedKey(RESUMABLE_THREAD_IDS_KEY, agentKey));
   if (!raw) {
     return [];
   }
@@ -121,22 +145,31 @@ export function loadResumableThreadIds(): string[] {
   return parsed.filter((value): value is string => typeof value === "string");
 }
 
-export function saveResumableThreadIds(threadIds: string[]): void {
+export function saveResumableThreadIds(
+  threadIds: string[],
+  agentKey: string = DEFAULT_AGENT_KEY,
+): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.sessionStorage.setItem(RESUMABLE_THREAD_IDS_KEY, JSON.stringify(threadIds));
+  window.sessionStorage.setItem(
+    scopedKey(RESUMABLE_THREAD_IDS_KEY, agentKey),
+    JSON.stringify(threadIds),
+  );
 }
 
-function room3dSnapshotKey(threadId: string): string {
-  return `${ROOM_3D_SNAPSHOT_PREFIX}${threadId}`;
+function room3dSnapshotKey(agentKey: string, threadId: string): string {
+  return `${ROOM_3D_SNAPSHOT_PREFIX}${agentKey}_${threadId}`;
 }
 
-export function loadRoom3DSnapshots(threadId: string): Room3DSnapshotContext[] {
+export function loadRoom3DSnapshots(
+  threadId: string,
+  agentKey: string = DEFAULT_AGENT_KEY,
+): Room3DSnapshotContext[] {
   if (typeof window === "undefined") {
     return [];
   }
-  const raw = window.localStorage.getItem(room3dSnapshotKey(threadId));
+  const raw = window.localStorage.getItem(room3dSnapshotKey(agentKey, threadId));
   if (!raw) {
     return [];
   }
@@ -156,11 +189,12 @@ export function loadRoom3DSnapshots(threadId: string): Room3DSnapshotContext[] {
 export function saveRoom3DSnapshots(
   threadId: string,
   snapshots: Room3DSnapshotContext[],
+  agentKey: string = DEFAULT_AGENT_KEY,
 ): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(room3dSnapshotKey(threadId), JSON.stringify(snapshots));
+  window.localStorage.setItem(room3dSnapshotKey(agentKey, threadId), JSON.stringify(snapshots));
 }
 
 export type { ThreadSnapshot };

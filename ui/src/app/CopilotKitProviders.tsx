@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
+import { usePathname } from "next/navigation";
 
 import {
   loadActiveThreadId,
@@ -25,6 +26,8 @@ type CopilotKitProvidersProps = {
 };
 
 type ThreadSessionContextValue = {
+  agentKey: string;
+  subagentName: string | null;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -35,8 +38,16 @@ type ThreadSessionContextValue = {
 
 const ThreadSessionContext = createContext<ThreadSessionContextValue | null>(null);
 
-function randomThreadId(): string {
-  return crypto.randomUUID().slice(0, 8);
+function resolveAgentContext(pathname: string): { agentKey: string; subagentName: string | null } {
+  const match = pathname.match(/^\/subagents\/([^/]+)/);
+  if (match && match[1]) {
+    return { agentKey: `subagent_${match[1]}`, subagentName: match[1] };
+  }
+  return { agentKey: "ikea_agent", subagentName: null };
+}
+
+function randomThreadId(agentKey: string): string {
+  return `${agentKey.replace(/[^a-z0-9_]/gi, "").slice(0, 20)}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function setUrlThread(threadId: string): void {
@@ -48,6 +59,8 @@ function setUrlThread(threadId: string): void {
 export function CopilotKitProviders({
   children,
 }: CopilotKitProvidersProps): ReactElement {
+  const pathname = usePathname();
+  const { agentKey, subagentName } = useMemo(() => resolveAgentContext(pathname), [pathname]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadIds, setThreadIds] = useState<string[]>([]);
   const [resumableThreadIds, setResumableThreadIds] = useState<string[]>([]);
@@ -63,11 +76,11 @@ export function CopilotKitProviders({
 
   const activateThread = useCallback((nextThreadId: string): void => {
     setThreadId(nextThreadId);
-    saveActiveThreadId(nextThreadId);
-    const updatedThreadIds = upsertThreadId(nextThreadId);
+    saveActiveThreadId(nextThreadId, agentKey);
+    const updatedThreadIds = upsertThreadId(nextThreadId, agentKey);
     setThreadIds(updatedThreadIds);
     setUrlThread(nextThreadId);
-  }, []);
+  }, [agentKey]);
 
   const markResumable = useCallback((nextThreadId: string): void => {
     setResumableThreadIds((current) => {
@@ -75,17 +88,17 @@ export function CopilotKitProviders({
         return current;
       }
       const next = [nextThreadId, ...current];
-      saveResumableThreadIds(next);
+      saveResumableThreadIds(next, agentKey);
       return next;
     });
-  }, []);
+  }, [agentKey]);
 
   const createThread = useCallback((): void => {
-    const nextThreadId = randomThreadId();
+    const nextThreadId = randomThreadId(agentKey);
     activateThread(nextThreadId);
     markResumable(nextThreadId);
     setWarning(null);
-  }, [activateThread, markResumable]);
+  }, [activateThread, agentKey, markResumable]);
 
   const selectThread = useCallback(
     (requestedThreadId: string): void => {
@@ -98,23 +111,23 @@ export function CopilotKitProviders({
         setWarning(null);
         return;
       }
-      const nextThreadId = randomThreadId();
+      const nextThreadId = randomThreadId(agentKey);
       activateThread(nextThreadId);
       markResumable(nextThreadId);
       setWarning(
         `Temporary limitation: thread ${requestedThreadId} is not available on the backend. Started new thread ${nextThreadId}.`,
       );
     },
-    [activateThread, markResumable, resumableThreadIds, threadId],
+    [activateThread, agentKey, markResumable, resumableThreadIds, threadId],
   );
 
   useEffect(() => {
     const url = new URL(window.location.href);
     const threadFromUrl = url.searchParams.get("thread");
-    const threadFromStorage = loadActiveThreadId();
-    const resolvedThreadId = threadFromUrl ?? threadFromStorage ?? randomThreadId();
-    const indexedThreadIds = loadThreadIds();
-    const restoredResumable = loadResumableThreadIds();
+    const threadFromStorage = loadActiveThreadId(agentKey);
+    const resolvedThreadId = threadFromUrl ?? threadFromStorage ?? randomThreadId(agentKey);
+    const indexedThreadIds = loadThreadIds(agentKey);
+    const restoredResumable = loadResumableThreadIds(agentKey);
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time bootstrap from URL/storage.
     replaceThreadIds(
@@ -126,12 +139,14 @@ export function CopilotKitProviders({
     const nextResumable = restoredResumable.includes(resolvedThreadId)
       ? restoredResumable
       : [resolvedThreadId, ...restoredResumable];
-    saveResumableThreadIds(nextResumable);
+    saveResumableThreadIds(nextResumable, agentKey);
     replaceResumableThreadIds(nextResumable);
-  }, [activateThread, replaceResumableThreadIds, replaceThreadIds]);
+  }, [activateThread, agentKey, replaceResumableThreadIds, replaceThreadIds]);
 
   const contextValue = useMemo<ThreadSessionContextValue>(
     () => ({
+      agentKey,
+      subagentName,
       threadId,
       threadIds,
       warning,
@@ -139,14 +154,15 @@ export function CopilotKitProviders({
       createThread,
       clearWarning: () => setWarning(null),
     }),
-    [createThread, selectThread, threadId, threadIds, warning],
+    [agentKey, createThread, selectThread, subagentName, threadId, threadIds, warning],
   );
 
   return (
     <ThreadSessionContext.Provider value={contextValue}>
       <CopilotKit
-        runtimeUrl="/api/copilotkit"
-        agent="ikea_agent"
+        key={agentKey}
+        runtimeUrl={`/api/copilotkit?agent=${encodeURIComponent(agentKey)}`}
+        agent={agentKey}
         {...(threadId ? { threadId } : {})}
       >
         {children}

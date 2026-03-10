@@ -59,6 +59,30 @@ class FloorPlannerSubgraphAgent(
         return FloorPlanIntakeState()
 
     @classmethod
+    def build_turn_notes(
+        cls,
+        *,
+        user_message: str,
+        output: object,
+        state: FloorPlanIntakeState,
+    ) -> list[str]:
+        """Capture high-signal floor-plan notes that don't fit typed state fields."""
+
+        _ = user_message
+        notes: list[str] = []
+        if state.height_assumed_default:
+            notes.append("Used default room height assumption: 280 cm.")
+        if state.fixed_constraints:
+            notes.append(
+                "Captured fixed constraints: "
+                + ", ".join(sorted(set(state.fixed_constraints)))
+                + "."
+            )
+        if isinstance(output, FloorPlanIntakeOutcome) and output.status == "rendered_draft":
+            notes.append(f"Rendered draft revision {output.scene_revision}.")
+        return notes
+
+    @classmethod
     def build_deps(cls, *, model_name: str) -> FloorPlanIntakeDeps:
         """Build typed dependencies for one graph turn."""
 

@@ -1,27 +1,19 @@
 # Agent Tool Bridge Pattern
 
 ## Purpose
-Tools are exposed directly in the active chat agent module.
+Tools are exposed directly in the active chat agent runtime.
 
 - Domain logic lives in `ikea_agent.tools.<tool_name>`.
-- Registration happens in `src/ikea_agent/chat/agent.py` via `@agent.tool` / `@agent.tool_plain`.
+- Registration is grouped under `src/ikea_agent/chat/tools/` modules and wired from
+  `src/ikea_agent/chat/agent.py`.
 - Return shapes are typed Pydantic models (and optionally `ToolReturn` for binary content).
 
 ## Current Pattern
-`build_chat_agent` registers:
+`build_chat_agent` registers grouped tool registries:
 
-- `run_search_graph(...)` via `@agent.tool`
-- `list_uploaded_images(...)` via `@agent.tool`
-- `generate_floor_plan_preview_image()` via `@agent.tool_plain`
-- `list_room_3d_snapshot_context()` via `@agent.tool`
-- `render_floor_plan(request: FloorPlanRenderRequest)` via `@agent.tool_plain`
-- `load_floor_plan_scene_yaml(yaml_text: str, scene_level: Literal["baseline", "detailed"])`
-  via `@agent.tool_plain`
-- `export_floor_plan_scene_yaml()` via `@agent.tool_plain`
-- `detect_objects_in_image(request: ObjectDetectionRequest)` via `@agent.tool`
-- `estimate_depth_map(request: DepthEstimationRequest)` via `@agent.tool`
-- `segment_image_with_prompt(request: SegmentationRequest)` via `@agent.tool`
-- `analyze_room_photo(request: RoomPhotoAnalysisRequest)` via `@agent.tool`
+- `register_search_context_tools(...)`
+- `register_floor_plan_tools(...)`
+- `register_image_analysis_tools(...)`
 
 `render_floor_plan` delegates to `ikea_agent.tools.floorplanner.tool.render_floor_plan`.
 The floor planner path also uses a per-thread scene store in chat deps:
@@ -41,15 +33,15 @@ Return payload includes stable UI/render metadata:
 
 Image analysis tools delegate to `ikea_agent.tools.image_analysis.tool`.
 
-`run_search_graph` now returns a structured `SearchGraphToolResult`:
+`run_search_graph` returns a structured `SearchGraphToolResult`:
 
-- `results`: diversified list of `ShortRetrievalResult`
-- `total_candidates`: count before tool-level limit
-- `returned_count`: count after diversification + limit
-- `warning`: optional `SearchResultDiversityWarning` when one product family dominates
+- `results`: MMR-selected list of `ShortRetrievalResult`
+- `total_candidates`: candidate count before MMR selection
+- `returned_count`: count after MMR selection + limit
+- `warning`: optional `SearchResultDiversityWarning` when selected output is concentrated
 
 The tool also accepts an optional `candidate_pool_limit` argument so the model can expand
-retrieval depth before diversification when search is too narrow.
+retrieval depth before MMR selection when search is too narrow.
 
 `list_room_3d_snapshot_context` returns a merged payload:
 - `state_snapshots`: UI-provided `room_3d_snapshots` from AG-UI shared state

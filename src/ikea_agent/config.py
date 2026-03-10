@@ -17,6 +17,10 @@ class SubagentModelConfig(BaseModel):
     """Optional model override configuration for one subagent."""
 
     model: str | None = Field(default=None)
+    persistence_mode: Literal["state_per_thread", "data_per_turn", "disabled"] | None = Field(
+        default=None
+    )
+    capture_turn_history: bool | None = Field(default=None)
 
 
 class AppSettings(BaseSettings):
@@ -73,18 +77,39 @@ class AppSettings(BaseSettings):
     embedding_neighbor_limit: int = Field(default=0, ge=0, le=10000)
     subagents: dict[str, SubagentModelConfig] = Field(default_factory=dict)
 
+    def _resolve_subagent_config(self, subagent_name: str) -> SubagentModelConfig | None:
+        direct = self.subagents.get(subagent_name)
+        if direct is not None:
+            return direct
+        lower = self.subagents.get(subagent_name.lower())
+        if lower is not None:
+            return lower
+        return self.subagents.get(subagent_name.upper())
+
     def subagent_model(self, subagent_name: str) -> str | None:
         """Return configured model override for one subagent when present."""
 
-        direct = self.subagents.get(subagent_name)
-        if direct and direct.model:
-            return direct.model
-        lower = self.subagents.get(subagent_name.lower())
-        if lower and lower.model:
-            return lower.model
-        upper = self.subagents.get(subagent_name.upper())
-        if upper and upper.model:
-            return upper.model
+        resolved = self._resolve_subagent_config(subagent_name)
+        if resolved and resolved.model:
+            return resolved.model
+        return None
+
+    def subagent_persistence_mode(
+        self, subagent_name: str
+    ) -> Literal["state_per_thread", "data_per_turn", "disabled"] | None:
+        """Return configured persistence mode override for one subagent."""
+
+        resolved = self._resolve_subagent_config(subagent_name)
+        if resolved is not None:
+            return resolved.persistence_mode
+        return None
+
+    def subagent_capture_turn_history(self, subagent_name: str) -> bool | None:
+        """Return configured turn-history capture override for one subagent."""
+
+        resolved = self._resolve_subagent_config(subagent_name)
+        if resolved is not None:
+            return resolved.capture_turn_history
         return None
 
 

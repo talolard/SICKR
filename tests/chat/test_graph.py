@@ -20,6 +20,8 @@ class _SettingsStub:
     default_query_limit: int = 25
     retrieval_candidate_limit: int = 250
     gemini_model: str = "gemini-embedding-001"
+    mmr_lambda: float = 0.8
+    mmr_preselect_limit: int = 30
 
 
 class _EmbedderStub:
@@ -60,6 +62,15 @@ class _CatalogStub:
         _ = (candidates, filters, result_limit)
         self.last_result_limit = result_limit
         return self._results
+
+    def read_neighbor_similarities(
+        self,
+        *,
+        embedding_model: str,
+        product_keys: list[str],
+    ) -> dict[tuple[str, str], float]:
+        _ = (embedding_model, product_keys)
+        return {}
 
 
 class _RerankerStub:
@@ -124,6 +135,7 @@ def test_graph_returns_empty_matches_when_no_results() -> None:
 
     assert output.request_id != ""
     assert output.product_matches == []
+    assert output.total_candidates == 0
 
 
 def test_graph_returns_ranked_results() -> None:
@@ -148,10 +160,11 @@ def test_graph_returns_ranked_results() -> None:
     assert output.product_matches[0].product_id == "1-DE"
     assert output.product_matches[0].product_name == "Lamp"
     assert output.product_matches[0].product_type == "Lamp"
+    assert output.total_candidates == 1
     assert catalog.last_result_limit == 200
 
 
-def test_graph_uses_result_limit_override_from_parse_node() -> None:
+def test_graph_uses_candidate_pool_limit_override_from_parse_node() -> None:
     catalog = _CatalogStub(results=[_sample_result()])
     runtime = _RuntimeStub(
         settings=_SettingsStub(),
@@ -163,9 +176,13 @@ def test_graph_uses_result_limit_override_from_parse_node() -> None:
     graph = build_chat_graph()
 
     _ = graph.run_sync(
-        ParseUserIntentNode(user_message="need a lamp", result_limit=80),
+        ParseUserIntentNode(
+            user_message="need a lamp",
+            result_limit=20,
+            candidate_pool_limit=280,
+        ),
         state=ChatGraphState(),
         deps=ChatGraphDeps(runtime=cast("ChatRuntime", runtime)),
     ).output
 
-    assert catalog.last_result_limit == 80
+    assert catalog.last_result_limit == 280
