@@ -1,11 +1,3 @@
-## Subagent Creation Standard
-
-Use the `build-graph-agent` skill as the standard way to create new subagents in this repository.
-
-- Skill file: `/Users/tal/dev/tal_maria_ikea/.codex/skills/build-graph-agent/SKILL.md`
-- Target area: `src/ikea_agent/chat/subagents/`
-- Expected scaffold includes a class-based subagent in `agent.py`, graph/nodes/prompt/tools, explicit `subagents/index.py` registration, and contract tests.
-
 # AGENTS.md
 
 Repository-local collaboration and implementation rules.
@@ -38,81 +30,23 @@ When using libraries search for documentation in
 - Commit messages must be high-level and human-readable, focused on intent.
 - Commit bodies should explain problem -> approach -> outcome, not just file lists.
 
-## Multi-Agent Worktree Protocol
+## Agent Fast Paths
 
-- Any non-trivial mutating implementation task must run in a dedicated git worktree.
-- Read-only tasks (planning, retrospectives, discovery, architecture review) may run in the main tree.
-- Always use `bd worktree create` and `bd worktree remove`; do not use raw `git worktree` commands.
-- Worktree scope is **per epic** (not per task).
-- Branch scope is **per epic** (not per task).
-- All tasks under a single epic are expected to run in that epic's worktree and branch.
-- Do not mix tasks from unrelated epics in one worktree.
+- Mutating implementation work must start in a dedicated worktree:
+  - `make agent-start SLOT=<0-99> ISSUE=<bead-id>`
+  - `make agent-start SLOT=<0-99> QUERY="<text>"`
+- Merge runs are explicit and should not use normal `bd ready` pickup:
+  - `make merge-list`
+  - Follow `docs/merge_runbook.md` for one-by-one merge handling.
 
-## Worktree Location Policy
+## Worktree + Merge Queue Policy
 
-- Default root for agent worktrees is `${TMPDIR%/}/tal_maria_ikea-worktrees`.
-- Use `<epic-id>-<short-slug>` for the epic worktree directory name.
-- Use `epic/<epic-id>-<short-slug>` for the epic branch name.
-- We intentionally keep worktrees outside the repo root to avoid VS Code/Copilot workspace context pollution.
+- Keep one worktree per epic/major task branch and avoid mutating work in the main checkout.
+- Merge queue parent is `tal_maria_ikea-0uk` (`awaiting-merge`).
+- Merge queue items must be `issue_type=merge-request`, `status=blocked`, and assigned to `merger-agent`.
+- Because merge queue items are blocked, they should never appear in default `bd ready` pickup.
+- Use `make merge-normalize` to enforce queue structure after migrations/drift.
 
-## Epic Task Commit Policy
-
-- Expected default: **one commit per task**.
-- Feedback-driven follow-up changes can be added as **feedback commits** on the same epic branch.
-- Do not collapse unrelated tasks into a single shared commit.
-- Keep commit messages aligned to task intent and include bead references where relevant.
-
-## Epic Lifecycle Checklist
-
-1. Claim the epic in beads: `bd update <epic-id> --status in_progress --json`.
-2. Create one epic worktree and epic branch with `bd worktree create`.
-3. Bootstrap once in that worktree (`uv sync --all-groups`, `make ui-install`, isolated runtime paths).
-4. Execute epic tasks in that same worktree/branch.
-5. Create **one commit per task**; add feedback commits only when review follow-up is needed.
-6. Run quality gate (`make tidy`) before declaring epic implementation complete.
-7. Create a `merge-request` child under `awaiting-merge` when epic work is ready to merge.
-8. After merge verification, close merge-request + epic and retire worktree with `bd worktree remove`.
-
-## Required Per-Worktree Bootstrap
-
-- In each new worktree, run `uv sync --all-groups`.
-- In each new worktree, run `make ui-install` (or use `scripts/worktree/bootstrap.sh`, which does both by default).
-- Ensure local `.env` exists (copy from canonical repo `.env` or `.env.example`).
-- Keep runtime writable state isolated per worktree:
-  - `DUCKDB_PATH=.tmp_untracked/runtime/ikea.duckdb`
-  - `MILVUS_LITE_URI=.tmp_untracked/runtime/milvus_lite.db`
-  - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
-  - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
-- Copy DuckDB and Milvus files from canonical repo paths for each worktree; never run multiple agents against the same writable DB files.
-- Keep `data/parquet` as shared read-only source-of-truth artifacts.
-
-## Port Allocation Policy
-
-- Every agent must use explicit ports for backend and UI.
-- Reserved backend port range: `8100-8199`.
-- Reserved UI port range: `3100-3199`.
-- Slot mapping:
-  - backend port = `8100 + slot`
-  - UI port = `3100 + slot`
-- Launch commands must be explicit:
-  - `make chat PORT=<backend_port>`
-  - `make ui-dev-real UI_PORT=<ui_port> PY_AG_UI_URL=http://127.0.0.1:<backend_port>/ag-ui/`
-
-## Merge Backlog Policy
-
-- Persistent merge queue epic: `awaiting-merge`.
-- When an implementation epic is complete and waiting to merge, add a child issue under `awaiting-merge` of type `merge-request`.
-- Each `merge-request` item must include:
-  - source branch
-  - PR link/number
-  - CI status summary
-  - risk and rollback notes
-- A merge-focused agent processes `awaiting-merge` and closes queue items after merge verification.
-
-## Output Hygiene
-
-- Generated runtime/test outputs must stay in ignored paths like `.tmp_untracked/`, `artifacts/`, and `comments/`.
-- Do not commit copied DB files, local lock files, generated artifacts, or temporary worktree environment files.
 
 ## Tooling Standards
 
@@ -338,104 +272,24 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking except the exceptions described below
-Plans and specs give our direction, define the work in beads.
+Use **bd** as the only issue tracker.
 
-Each task in beads that you add should
+- Default workflow:
+  - `bd ready --json` for normal implementation pickup
+  - `bd update <id> --status in_progress --json` to claim
+  - `bd close <id> --reason "Done" --json` when complete
+- Do not create beads for pure planning/research or tiny exploratory checks.
+- Every created issue should include: context, definition of done, and references.
+- Before closing an implementation issue: run `make tidy`, commit, then close.
 
-- Have a title of what the task is "Save vectors in parquet format" not "Use parquet"
-- Have a context section "Currently we recompute vectors in dev, easier to store in parquet so duckdb can just load them quickly"
-- Have a definition of done section "All embeddings are stored in parquet, paritioned, test checks we can load them and create an index + queries still work"
-- Reference plan spec and additional md files , as well as the docs and external docs.
+### Merge Queue Exception
 
-### When not to use bd / beads
-
-- When the user asks you to plan or research, don't put planning and research in beads just do it.
-- When the user asks for small exploratory work or a check ("which file is this function in?", "what does this error mean?") do the work and report back without creating beads. If you find something that needs follow-up work, create a bead for the follow-up but not for the initial exploration.
-
-### Closing a task
-
-- Before closing: run `make tidy`, ensure coverage, write a descriptive commit message, and commit. Then close the task.
-
-### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-### Quick Start
-
-**Check for ready work:**
-
-```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update bd-42 --status in_progress --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-- `merge-request` - Queue item for implementation-complete branch waiting on merge handling
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task**: `bd update <id> --status in_progress`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-### Auto-Sync
-
-bd automatically syncs with git:
-
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
-
-### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists aside from what the user tells you to.
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
+- Merge queue work is not part of normal `bd ready` pickup.
+- Use `make merge-list` for explicit merge runs.
+- Merge queue items under `tal_maria_ikea-0uk` must remain:
+  - `type=merge-request` when supported by current `bd` version
+  - otherwise keep `label=merge-request` as compatibility marker
+  - `status=blocked`
+  - `assignee=merger-agent`
 
 <!-- END BEADS INTEGRATION -->
