@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
-from ikea_agent.chat.agent import build_room_3d_snapshot_context_payload
-from ikea_agent.chat.deps import Room3DSnapshotContext
+from ikea_agent.chat.agents.shared import build_room_3d_snapshot_context_payload
+from ikea_agent.chat.agents.state import Room3DSnapshotContext
 from ikea_agent.persistence.room_3d_repository import Room3DSnapshotEntry
 
 

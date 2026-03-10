@@ -2,19 +2,19 @@
 
 import { useRouter } from "next/navigation";
 
-import type { SubagentItem } from "@/lib/subagents";
+import type { AgentItem } from "@/lib/agents";
 
 type AppNavBannerProps = {
-  currentSubagentName: string | null;
-  subagents: SubagentItem[];
+  currentAgentName: string | null;
+  agents: AgentItem[];
 };
 
 export function AppNavBanner({
-  currentSubagentName,
-  subagents,
+  currentAgentName,
+  agents,
 }: AppNavBannerProps): React.ReactElement {
   const router = useRouter();
-  const selectedValue = currentSubagentName ?? "__home__";
+  const selectedValue = currentAgentName ?? "__home__";
 
   return (
     <header className="border-b border-gray-300 bg-gray-50 px-4 py-3">
@@ -30,12 +30,12 @@ export function AppNavBanner({
           <div>
             <div className="text-sm text-gray-600">IKEA Agent Workspace</div>
             <h1 className="text-base font-semibold text-gray-900">
-              {currentSubagentName ? `Subagent: ${currentSubagentName}` : "Main agent"}
+              {currentAgentName ? `Agent: ${currentAgentName}` : "Agents"}
             </h1>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700">
-          <span>My subagents</span>
+          <span>My agents</span>
           <select
             className="rounded border border-gray-400 bg-white px-2 py-1"
             onChange={(event) => {
@@ -44,14 +44,14 @@ export function AppNavBanner({
                 router.push("/");
                 return;
               }
-              router.push(`/subagents/${next}`);
+              router.push(`/agents/${next}`);
             }}
             value={selectedValue}
           >
             <option value="__home__">Home</option>
-            {subagents.map((subagent) => (
-              <option key={subagent.name} value={subagent.name}>
-                {subagent.name}
+            {agents.map((agent) => (
+              <option key={agent.name} value={agent.name}>
+                {agent.name}
               </option>
             ))}
           </select>

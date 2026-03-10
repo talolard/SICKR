@@ -37,7 +37,7 @@ const THREAD_PREFIX = "copilotkit_ui_thread_";
 const THREAD_IDS_KEY = "copilotkit_ui_thread_ids";
 const RESUMABLE_THREAD_IDS_KEY = "copilotkit_ui_resumable_thread_ids_tmp";
 const ROOM_3D_SNAPSHOT_PREFIX = "copilotkit_ui_room3d_snapshots_";
-const DEFAULT_AGENT_KEY = "ikea_agent";
+const DEFAULT_AGENT_KEY = "agent_floor_plan_intake";
 
 function scopedKey(baseKey: string, agentKey: string): string {
   return `${baseKey}_${agentKey}`;

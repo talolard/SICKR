@@ -1,21 +1,23 @@
-# Current Graph Data Access
+# Current Search Data Access
 
-This document captures how the active pydantic-graph runtime accesses data today.
+This document captures how the active search pipeline accesses data today.
 
-## Graph Path
+## Search Pipeline Path
 
-The active graph nodes in `src/ikea_agent/chat/graph.py` run:
+The active orchestration in `src/ikea_agent/chat/search_pipeline.py` runs:
 
-1. `ParseUserIntentNode`
-2. `RetrieveCandidatesNode`
-3. `RerankNode`
-4. `ReturnAnswerNode`
+1. Build `RetrievalRequest` from user query + filters.
+2. Embed query text via runtime embedder (`chat/runtime.py`).
+3. Search Milvus Lite vectors and hydrate candidates from DuckDB.
+4. Rerank candidates.
+5. Apply MMR diversification.
+6. Return `SearchGraphToolResult` for tool/UI rendering.
 
 ## Retrieval Data Path
 
-`RetrieveCandidatesNode` uses runtime helpers in `chat/runtime.py`:
+`run_search_pipeline` uses runtime helpers in `chat/runtime.py`:
 
-1. Embed query text through `pydantic_ai.Embedder` directly.
+1. Embed query text through `pydantic_ai.Embedder`.
 2. Search Milvus Lite collection for nearest vectors.
 3. Hydrate candidate keys in DuckDB (`app.products_canonical` + `app.product_embeddings`).
 4. Apply structured filters in inline SQL.
@@ -28,6 +30,6 @@ The active graph nodes in `src/ikea_agent/chat/graph.py` run:
 
 ## Legacy State Clarification
 
+- Old graph-orchestrated retrieval is removed from active runtime.
 - Old SQL-file-driven retrieval pipeline is archived under `legacy/sql/`.
-- Old Django/phase planning documents and phase modules are archived under `legacy/`.
-- Active runtime does not use `legacy/` modules.
+- Active runtime does not import from `legacy/` modules.

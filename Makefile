@@ -1,6 +1,7 @@
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
 	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
-	dev-all dev-all-mock reset agent-start merge-list merge-list-json merge-normalize
+	ui-test-e2e-real-ui-smoke dev-all dev-all-mock reset agent-start merge-list \
+	merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -57,6 +58,33 @@ ui-test-e2e:
 
 ui-test-e2e-real:
 	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
+
+ui-test-e2e-real-ui-smoke:
+	@set -eu; \
+	BACKEND_STARTED=0; \
+	BACKEND_PID=""; \
+	if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
+		echo "Backend already running at http://$(HOST):$(PORT)"; \
+	else \
+		echo "Backend not running; starting temporary backend on http://$(HOST):$(PORT)"; \
+		uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >/tmp/ikea-agent-ui-smoke-backend.log 2>&1 & \
+		BACKEND_PID=$$!; \
+		BACKEND_STARTED=1; \
+		trap 'if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
+		i=0; \
+		while [ "$$i" -lt 60 ]; do \
+			if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
+				break; \
+			fi; \
+			i=$$((i + 1)); \
+			sleep 1; \
+		done; \
+		if ! curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
+			echo "Backend did not become ready; see /tmp/ikea-agent-ui-smoke-backend.log"; \
+			exit 1; \
+		fi; \
+	fi; \
+	cd $(UI_DIR) && RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
 
 dev-all:
 	@set -e; \

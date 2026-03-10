@@ -8,6 +8,7 @@ import {
   listThreadAssets,
   type AssetListItem,
   type ThreadDetailItem,
+  ThreadDataRequestError,
 } from "@/lib/api/threadDataClient";
 
 type Props = {
@@ -18,10 +19,14 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
   const [detail, setDetail] = useState<ThreadDetailItem | null>(null);
   const [assets, setAssets] = useState<AssetListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [missingThreadData, setMissingThreadData] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
     setError(null);
+    setMissingThreadData(false);
+    setDetail(null);
+    setAssets([]);
     Promise.all([getThreadDetail(threadId), listThreadAssets(threadId)])
       .then(([nextDetail, nextAssets]) => {
         if (!active) {
@@ -32,6 +37,10 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
       })
       .catch((requestError: unknown) => {
         if (!active) {
+          return;
+        }
+        if (requestError instanceof ThreadDataRequestError && requestError.status === 404) {
+          setMissingThreadData(true);
           return;
         }
         const message =
@@ -48,6 +57,9 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
   }
 
   if (detail === null) {
+    if (missingThreadData) {
+      return <p className="text-xs text-gray-500">Thread data will appear after the first save.</p>;
+    }
     return <p className="text-xs text-gray-500">Loading thread data...</p>;
   }
 
