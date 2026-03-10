@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
@@ -38,6 +38,7 @@ def build_subagent_web_agent(subagent_name: str) -> Agent[None, str]:
     registration = get_subagent(subagent_name)
     model = FunctionModel(
         _build_subagent_function(registration.run),
+        stream_function=_build_subagent_stream_function(registration.run),
         model_name=f"subagent_{subagent_name}",
     )
     return Agent[None, str](
@@ -66,6 +67,20 @@ def _build_subagent_function(
         )
 
     return _run
+
+
+def _build_subagent_stream_function(
+    runner: Callable[[str], Awaitable[dict[str, object]]],
+) -> Callable[[list[ModelMessage], AgentInfo], AsyncIterator[str]]:
+    async def _run_stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
+        _ = info
+        user_message = _latest_user_prompt_text(messages)
+        raw_input = json.dumps({"user_message": user_message}, ensure_ascii=True)
+        result = await runner(raw_input)
+        assistant_text = _extract_assistant_message(result)
+        yield assistant_text
+
+    return _run_stream
 
 
 def _latest_user_prompt_text(messages: list[ModelMessage]) -> str:
