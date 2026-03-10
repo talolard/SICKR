@@ -33,6 +33,17 @@ _HEIGHT_PATTERN = re.compile(
 )
 _MIN_ORIENTATION_TOKENS = 2
 
+_LIVING_ROOM_TOKENS: tuple[str, ...] = ("living room", "libing room", "lounge", "sitting room")
+_KITCHEN_EXPLICIT_TOKENS: tuple[str, ...] = (
+    "this is a kitchen",
+    "it's a kitchen",
+    "its a kitchen",
+    "my kitchen",
+    "in the kitchen",
+    "kitchen remodel",
+    "kitchen layout",
+)
+
 
 class RouteSignal(BaseModel):
     """Routing signal emitted by the first intake step."""
@@ -329,10 +340,12 @@ def _parse_height_cm(text: str) -> float | None:
 
 def _infer_room_type(text: str, current: RoomType) -> RoomType:
     lowered = text.lower()
+    if any(token in lowered for token in _LIVING_ROOM_TOKENS):
+        return "living_room"
+    if any(token in lowered for token in _KITCHEN_EXPLICIT_TOKENS):
+        return "kitchen"
     if "bathroom" in lowered:
         return "bathroom"
-    if "kitchen" in lowered:
-        return "kitchen"
     if "bedroom" in lowered:
         return "bedroom"
     if "hallway" in lowered or "corridor" in lowered:
@@ -418,6 +431,11 @@ def _orientation_prompt(room_type: RoomType) -> str:
         return (
             f"{base} For bedrooms, only call out bed details now "
             "if the bed is fixed/mounted and hard to move."
+        )
+    if room_type == "living_room":
+        return (
+            f"{base} For living rooms, focus on fixed architecture and openings first; "
+            "movable items like tables/couches should not change room type."
         )
     return base
 

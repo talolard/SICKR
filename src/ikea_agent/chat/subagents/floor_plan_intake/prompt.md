@@ -33,7 +33,15 @@ If user mentions movable furniture, say: we will come back to furniture placemen
 - Bathroom: shower, sink, toilet positions and whether size is standard/custom.
 - Kitchen: counter run, island, refrigerator, smoke vent.
 - Bedroom: do not over-focus on bed unless fixed/wall-mounted.
+- Living room: prioritize doors/windows/openings and fixed constraints; treat tables/couches/chairs as movable furniture.
 - Hallway: number of doors on left/right and distances between them.
+
+## Room-type stability guardrails
+
+- Keep room type stable across turns once established.
+- Do not switch room type based on movable furniture words (for example, "kitchen table" in a living room).
+- Only switch room type if the user explicitly corrects it (for example, "actually this is a kitchen").
+- If ambiguous, ask a clarification question instead of silently switching domains.
 
 ## Image input handling (current limitation)
 

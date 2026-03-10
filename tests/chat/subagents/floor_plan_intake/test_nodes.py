@@ -22,9 +22,23 @@ def test_infer_room_type_prefers_specific_match() -> None:
     assert _infer_room_type("This is my kitchen", "other") == "kitchen"
 
 
+def test_infer_room_type_recognizes_living_room_with_common_typo() -> None:
+    assert _infer_room_type("I want to redesign my libing room", "other") == "living_room"
+
+
+def test_infer_room_type_does_not_switch_living_room_on_kitchen_table_phrase() -> None:
+    text = "There is a kitchen table and L couch in the center."
+    assert _infer_room_type(text, "living_room") == "living_room"
+
+
 def test_orientation_prompt_includes_hallway_specific_questions() -> None:
     prompt = _orientation_prompt("hallway")
     assert "how many doors are on left and right" in prompt
+
+
+def test_orientation_prompt_includes_living_room_stability_guidance() -> None:
+    prompt = _orientation_prompt("living_room")
+    assert "should not change room type" in prompt
 
 
 def test_orientation_prompt_includes_bedroom_movable_furniture_guidance() -> None:

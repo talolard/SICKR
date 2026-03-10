@@ -82,6 +82,7 @@ def test_floor_planner_subgraph_agent_builds_agent_with_prompt_instructions() ->
 
     instructions = "\n".join(str(item) for item in agent._instructions)
     assert "Floor Plan Intake Subagent Prompt" in instructions
+    assert "Keep room type stable across turns once established." in instructions
 
 
 def test_floor_planner_subgraph_agent_run_one_turn_with_mocked_deps(
