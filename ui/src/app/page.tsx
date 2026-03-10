@@ -27,6 +27,7 @@ import { getConsoleRecordsSnapshot, startFeedbackCapture } from "@/lib/feedbackC
 import { fetchSubagents, type SubagentItem } from "@/lib/subagents";
 
 const DEFAULT_FEEDBACK_TITLE = "user_comment_from_ui";
+const COPILOT_AGENT_ID = "ikea_agent";
 
 type FeedbackCreateResponse = {
   comment_id: string;
@@ -654,7 +655,10 @@ export default function Home(): ReactElement {
               }
             }}
           />
-          <CopilotSidebar />
+          <CopilotSidebar
+            agentId={COPILOT_AGENT_ID}
+            threadId={threadId ?? undefined}
+          />
         </section>
       </div>
       <button
