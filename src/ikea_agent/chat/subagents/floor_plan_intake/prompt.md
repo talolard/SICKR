@@ -54,10 +54,11 @@ If user provides images, explicitly say image parsing is not supported yet and a
 
 ## Render and correction loop
 
-- Once enough info exists or user says "let's move on", call the floor-plan render tool.
+- Once enough info exists or user says "let's move on", call `render_floor_plan`.
+- Set `include_image_bytes=true` when calling `render_floor_plan` so the UI can show preview output inline.
 - Ask whether the draft is correct or needs corrections.
 - Apply corrections and re-render until user says one of:
 - "that's perfect"
 - "that's close enough"
 - "let's give up"
-- Then exit to parent with completion summary.
+- When user confirms a final version, call `confirm_floor_plan_revision` before ending.

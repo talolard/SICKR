@@ -1,109 +1,94 @@
-"""Class-based subgraph agent for floor-plan intake."""
+"""Plain pydantic-ai subagent for floor-plan intake."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from pydantic_graph.beta import Graph
+from pydantic_ai import Agent
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
+from pydantic_ai.providers.google import GoogleProvider
 
-from ikea_agent.chat.subagents.base import SubgraphAgent
-from ikea_agent.chat.subagents.floor_plan_intake.graph import (
-    DEFAULT_OUTPUT_DIR,
-    build_floor_plan_intake_deps,
-    build_floor_plan_intake_graph,
+from ikea_agent.chat.deps import ChatAgentDeps
+from ikea_agent.chat.tools.floor_plan_tools import register_floor_plan_tools
+from ikea_agent.config import get_settings
+
+SUBAGENT_NAME = "floor_plan_intake"
+DESCRIPTION = "Collect initial room architecture and render iterative floor-plan drafts."
+PROMPT_PATH = Path(__file__).with_name("prompt.md")
+TOOL_NAMES: tuple[str, ...] = (
+    "render_floor_plan",
+    "load_floor_plan_scene_yaml",
+    "export_floor_plan_scene_yaml",
+    "confirm_floor_plan_revision",
 )
-from ikea_agent.chat.subagents.floor_plan_intake.types import (
-    FloorPlanIntakeDeps,
-    FloorPlanIntakeInput,
-    FloorPlanIntakeOutcome,
-    FloorPlanIntakeState,
+NOTES = (
+    "Runs an iterative intake loop directly in a pydantic-ai agent and uses the shared "
+    "`render_floor_plan` tool contract so CopilotKit can render floor-plan outputs."
 )
 
 
-class FloorPlannerSubgraphAgent(
-    SubgraphAgent[
-        FloorPlanIntakeState,
-        FloorPlanIntakeDeps,
-        FloorPlanIntakeInput,
-        FloorPlanIntakeOutcome,
-    ]
-):
-    """Graph-backed floor-plan intake subagent with explicit prompt/tool contract."""
+def read_prompt_markdown() -> str:
+    """Load prompt markdown for this subagent."""
 
-    subagent_name = "floor_plan_intake"
-    description = "Collect initial room architecture and render iterative floor-plan drafts."
-    prompt_path = Path(__file__).with_name("prompt.md")
-    tool_names = ("decide_floor_plan_intake_step", "render_floor_plan_draft")
-    notes = (
-        "Runs an iterative intake loop and emits a floor-plan scene compatible with the "
-        "repository floorplanner renderer."
+    if not PROMPT_PATH.exists():
+        msg = f"Prompt file does not exist: {PROMPT_PATH}"
+        raise FileNotFoundError(msg)
+    return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _instruction_text_from_prompt() -> str:
+    raw = read_prompt_markdown().strip()
+    if raw.startswith("---"):
+        end = raw.find("---", 3)
+        if end != -1:
+            raw = raw[end + 3 :].lstrip("\n")
+    return raw.strip()
+
+
+def resolve_model_name(*, explicit_model: str | None = None) -> str:
+    """Resolve model using explicit override, subagent config, then global default."""
+
+    if explicit_model:
+        return explicit_model
+    settings = get_settings()
+    configured_model = settings.subagent_model(SUBAGENT_NAME)
+    if configured_model:
+        return configured_model
+    return settings.gemini_generation_model
+
+
+def build_floor_plan_intake_agent(
+    *, explicit_model: str | None = None
+) -> Agent[ChatAgentDeps, str]:
+    """Build the floor-plan intake subagent as a regular pydantic-ai agent."""
+
+    settings = get_settings()
+    model = GoogleModel(
+        resolve_model_name(explicit_model=explicit_model),
+        settings=GoogleModelSettings(
+            google_thinking_config=ThinkingConfigDict(include_thoughts=False),
+        ),
+        provider=GoogleProvider(api_key=settings.gemini_api_key or os.getenv("GOOGLE_API_KEY")),
     )
-
-    @classmethod
-    def build_graph(
-        cls,
-    ) -> Graph[
-        FloorPlanIntakeState,
-        FloorPlanIntakeDeps,
-        FloorPlanIntakeInput,
-        FloorPlanIntakeOutcome,
-    ]:
-        """Build the floor-plan intake graph instance."""
-
-        return build_floor_plan_intake_graph()
-
-    @classmethod
-    def build_state(cls) -> FloorPlanIntakeState:
-        """Return a fresh state object for one graph turn."""
-
-        return FloorPlanIntakeState()
-
-    @classmethod
-    def build_turn_notes(
-        cls,
-        *,
-        user_message: str,
-        output: object,
-        state: FloorPlanIntakeState,
-    ) -> list[str]:
-        """Capture high-signal floor-plan notes that don't fit typed state fields."""
-
-        _ = user_message
-        notes: list[str] = []
-        if state.height_assumed_default:
-            notes.append("Used default room height assumption: 280 cm.")
-        if state.fixed_constraints:
-            notes.append(
-                "Captured fixed constraints: "
-                + ", ".join(sorted(set(state.fixed_constraints)))
-                + "."
-            )
-        if isinstance(output, FloorPlanIntakeOutcome) and output.status == "rendered_draft":
-            notes.append(f"Rendered draft revision {output.scene_revision}.")
-        return notes
-
-    @classmethod
-    def build_deps(cls, *, model_name: str) -> FloorPlanIntakeDeps:
-        """Build typed dependencies for one graph turn."""
-
-        return build_floor_plan_intake_deps(
-            output_dir=DEFAULT_OUTPUT_DIR,
-            model_name=model_name,
-        )
-
-    @classmethod
-    def parse_user_input(cls, user_message: str) -> FloorPlanIntakeInput:
-        """Convert latest user text into the typed graph input payload."""
-
-        return FloorPlanIntakeInput(user_message=user_message)
-
-    @classmethod
-    def output_to_json(cls, output: object) -> dict[str, object]:
-        """Serialize known floor-plan outcomes; fall back to generic conversion."""
-
-        if isinstance(output, FloorPlanIntakeOutcome):
-            return output.model_dump(mode="json")
-        return super().output_to_json(output)
+    agent = Agent[ChatAgentDeps, str](
+        model=model,
+        deps_type=ChatAgentDeps,
+        output_type=str,
+        name="subagent_floor_plan_intake",
+        instructions=_instruction_text_from_prompt(),
+    )
+    register_floor_plan_tools(agent)
+    return agent
 
 
-__all__ = ["FloorPlannerSubgraphAgent"]
+__all__ = [
+    "DESCRIPTION",
+    "NOTES",
+    "PROMPT_PATH",
+    "SUBAGENT_NAME",
+    "TOOL_NAMES",
+    "build_floor_plan_intake_agent",
+    "read_prompt_markdown",
+    "resolve_model_name",
+]

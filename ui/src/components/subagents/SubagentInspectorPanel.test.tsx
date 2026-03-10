@@ -4,10 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { SubagentInspectorPanel } from "@/components/subagents/SubagentInspectorPanel";
 import type { SubagentMetadata } from "@/lib/subagents";
 
-vi.mock("@/components/subagents/MermaidDiagram", () => ({
-  MermaidDiagram: ({ source }: { source: string }) => <div data-testid="mermaid-source">{source}</div>,
-}));
-
 const metadata: SubagentMetadata = {
   name: "floor_plan_intake",
   description: "Collect initial room architecture and render iterative floor-plan drafts.",
@@ -23,8 +19,7 @@ const metadata: SubagentMetadata = {
     "",
     "Read the [graph notes](https://example.com/graph).",
   ].join("\n"),
-  mermaid: "stateDiagram-v2\nA --> B",
-  tools: ["decide_floor_plan_intake_step", "render_floor_plan_draft"],
+  tools: ["render_floor_plan", "confirm_floor_plan_revision"],
   notes: "Runtime notes",
 };
 
@@ -40,6 +35,5 @@ describe("SubagentInspectorPanel", () => {
       "href",
       "https://example.com/graph",
     );
-    expect(screen.getByTestId("mermaid-source")).toHaveTextContent("stateDiagram-v2");
   });
 });
