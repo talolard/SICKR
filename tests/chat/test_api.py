@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import (
+    _resolve_subagent_name_from_chat_payload,
     _resolve_subagent_name_from_referer,
     create_app,
 )
@@ -91,6 +92,15 @@ def test_resolve_subagent_name_from_referer_path() -> None:
         == "floor_plan_intake"
     )
     assert _resolve_subagent_name_from_referer("http://localhost:8000/") is None
+
+
+def test_resolve_subagent_name_from_chat_payload_model() -> None:
+    payload = b'{"model":"function:subagent_floor_plan_intake","messages":[]}'
+    resolved = _resolve_subagent_name_from_chat_payload(
+        payload,
+        model_id_to_subagent={"function:subagent_floor_plan_intake": "floor_plan_intake"},
+    )
+    assert resolved == "floor_plan_intake"
 
 
 def test_attachment_upload_and_fetch_round_trip() -> None:

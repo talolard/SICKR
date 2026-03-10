@@ -36,7 +36,10 @@ def build_subagent_web_agent(subagent_name: str) -> Agent[None, str]:
     """Build a lightweight web-chat adapter around one registered subagent runner."""
 
     registration = get_subagent(subagent_name)
-    model = FunctionModel(_build_subagent_function(registration.run))
+    model = FunctionModel(
+        _build_subagent_function(registration.run),
+        model_name=f"subagent_{subagent_name}",
+    )
     return Agent[None, str](
         model=model,
         deps_type=type(None),

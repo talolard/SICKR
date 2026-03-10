@@ -90,10 +90,32 @@ def _resolve_subagent_name_from_referer(referer: str | None) -> str | None:
     return None
 
 
+def _resolve_subagent_name_from_chat_payload(
+    body: bytes,
+    *,
+    model_id_to_subagent: dict[str, str],
+) -> str | None:
+    """Extract subagent selection from /api/chat payload model id when present."""
+
+    if not body:
+        return None
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    model = payload.get("model")
+    if not isinstance(model, str):
+        return None
+    return model_id_to_subagent.get(model)
+
+
 async def _proxy_request_to_starlette_app(
     *,
     target_app: ASGIApp,
     request: Request,
+    body: bytes | None = None,
 ) -> Response:
     """Forward one request to an in-process Starlette app and return its response."""
 
@@ -101,7 +123,7 @@ async def _proxy_request_to_starlette_app(
     if not sub_path:
         sub_path = "/"
     query = f"?{request.url.query}" if request.url.query else ""
-    body = await request.body()
+    request_body = body if body is not None else await request.body()
     headers = {
         key: value
         for key, value in request.headers.items()
@@ -116,7 +138,7 @@ async def _proxy_request_to_starlette_app(
             method=request.method,
             url=f"{sub_path}{query}",
             headers=headers,
-            content=body,
+            content=request_body,
         )
 
     return Response(
@@ -270,15 +292,26 @@ def _register_web_ui_api_dispatch_routes(
     *,
     main_api_app: ASGIApp,
     subagent_api_apps: dict[str, ASGIApp],
+    model_id_to_subagent: dict[str, str],
 ) -> None:
     async def _dispatch(request: Request) -> Response:
+        body = await request.body()
         subagent_name = _resolve_subagent_name_from_referer(request.headers.get("referer"))
+        if subagent_name is None and request.url.path == "/api/chat":
+            subagent_name = _resolve_subagent_name_from_chat_payload(
+                body,
+                model_id_to_subagent=model_id_to_subagent,
+            )
         target_app = (
             subagent_api_apps.get(subagent_name, main_api_app)
             if subagent_name is not None
             else main_api_app
         )
-        return await _proxy_request_to_starlette_app(target_app=target_app, request=request)
+        return await _proxy_request_to_starlette_app(
+            target_app=target_app,
+            request=request,
+            body=body,
+        )
 
     @app.options("/api/chat")
     async def api_chat_options(request: Request) -> Response:
@@ -752,16 +785,22 @@ def create_app(
     main_web_app = web_agent.to_web(deps=deps)
     main_api_app = create_api_app(web_agent, deps=deps)
     subagent_api_apps: dict[str, ASGIApp] = {}
-    for item in list_subagent_catalog():
+    model_id_to_subagent: dict[str, str] = {}
+    catalog = list_subagent_catalog()
+    for item in catalog:
         subagent_name = item["name"]
         subagent_web_agent = build_subagent_web_agent(subagent_name)
         app.mount(item["web_path"], subagent_web_agent.to_web(deps=None))
         subagent_api_apps[subagent_name] = create_api_app(subagent_web_agent, deps=None)
+        model_id_to_subagent[f"function:subagent_{subagent_name}"] = subagent_name
+    if len(catalog) == 1:
+        model_id_to_subagent["function:function:_run"] = catalog[0]["name"]
 
     _register_web_ui_api_dispatch_routes(
         app,
         main_api_app=main_api_app,
         subagent_api_apps=subagent_api_apps,
+        model_id_to_subagent=model_id_to_subagent,
     )
 
     if mount_web_ui:
