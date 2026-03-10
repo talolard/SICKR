@@ -9,7 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat_app.main import create_app
+from ikea_agent.chat_app.main import (
+    _resolve_subagent_name_from_referer,
+    create_app,
+)
 from ikea_agent.config import get_settings
 
 
@@ -78,6 +81,16 @@ def test_subagent_web_mount_exists() -> None:
 
     response = client.get("/subagents/floor_plan_intake/chat/")
     assert response.status_code != 404
+
+
+def test_resolve_subagent_name_from_referer_path() -> None:
+    assert (
+        _resolve_subagent_name_from_referer(
+            "http://localhost:8000/subagents/floor_plan_intake/chat/"
+        )
+        == "floor_plan_intake"
+    )
+    assert _resolve_subagent_name_from_referer("http://localhost:8000/") is None
 
 
 def test_attachment_upload_and_fetch_round_trip() -> None:

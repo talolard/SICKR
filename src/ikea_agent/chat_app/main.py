@@ -7,12 +7,16 @@ from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
+from pydantic_ai.ui._web.app import create_api_app
+from starlette.types import ASGIApp
 
 from ikea_agent.chat.agent import build_chat_agent
 from ikea_agent.chat.deps import ChatAgentDeps, ChatAgentState
@@ -60,6 +64,7 @@ from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+_SUBAGENT_REFERER_PARTS = 3
 logger = getLogger(__name__)
 
 
@@ -67,6 +72,62 @@ class _ArchivedMessagesResult(Protocol):
     def all_messages_json(self) -> bytes: ...
 
     def new_messages_json(self) -> bytes: ...
+
+
+def _resolve_subagent_name_from_referer(referer: str | None) -> str | None:
+    """Extract subagent name from a web UI referer path when present."""
+
+    if not referer:
+        return None
+    parsed = urlparse(referer)
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if (
+        len(path_parts) >= _SUBAGENT_REFERER_PARTS
+        and path_parts[0] == "subagents"
+        and path_parts[2] == "chat"
+    ):
+        return path_parts[1]
+    return None
+
+
+async def _proxy_request_to_starlette_app(
+    *,
+    target_app: ASGIApp,
+    request: Request,
+) -> Response:
+    """Forward one request to an in-process Starlette app and return its response."""
+
+    sub_path = request.url.path.removeprefix("/api")
+    if not sub_path:
+        sub_path = "/"
+    query = f"?{request.url.query}" if request.url.query else ""
+    body = await request.body()
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() not in {"host", "content-length"}
+    }
+    transport = httpx.ASGITransport(app=target_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://subagent.local",
+    ) as client:
+        upstream = await client.request(
+            method=request.method,
+            url=f"{sub_path}{query}",
+            headers=headers,
+            content=body,
+        )
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers={
+            key: value
+            for key, value in upstream.headers.items()
+            if key.lower() not in {"content-length", "transfer-encoding", "connection"}
+        },
+    )
 
 
 def _build_attachment_store(
@@ -202,6 +263,38 @@ def _register_subagent_catalog_routes(app: FastAPI) -> None:
         """Return all registered subagents and their mounted web paths."""
 
         return {"subagents": list_subagent_catalog()}
+
+
+def _register_web_ui_api_dispatch_routes(
+    app: FastAPI,
+    *,
+    main_api_app: ASGIApp,
+    subagent_api_apps: dict[str, ASGIApp],
+) -> None:
+    async def _dispatch(request: Request) -> Response:
+        subagent_name = _resolve_subagent_name_from_referer(request.headers.get("referer"))
+        target_app = (
+            subagent_api_apps.get(subagent_name, main_api_app)
+            if subagent_name is not None
+            else main_api_app
+        )
+        return await _proxy_request_to_starlette_app(target_app=target_app, request=request)
+
+    @app.options("/api/chat")
+    async def api_chat_options(request: Request) -> Response:
+        return await _dispatch(request)
+
+    @app.post("/api/chat")
+    async def api_chat_post(request: Request) -> Response:
+        return await _dispatch(request)
+
+    @app.get("/api/configure")
+    async def api_configure_get(request: Request) -> Response:
+        return await _dispatch(request)
+
+    @app.get("/api/health")
+    async def api_health_get(request: Request) -> Response:
+        return await _dispatch(request)
 
 
 def _resolve_feedback_images(
@@ -656,13 +749,23 @@ def create_app(
             run_history_repository=run_history_repository,
         )
 
+    main_web_app = web_agent.to_web(deps=deps)
+    main_api_app = create_api_app(web_agent, deps=deps)
+    subagent_api_apps: dict[str, ASGIApp] = {}
     for item in list_subagent_catalog():
         subagent_name = item["name"]
         subagent_web_agent = build_subagent_web_agent(subagent_name)
         app.mount(item["web_path"], subagent_web_agent.to_web(deps=None))
+        subagent_api_apps[subagent_name] = create_api_app(subagent_web_agent, deps=None)
+
+    _register_web_ui_api_dispatch_routes(
+        app,
+        main_api_app=main_api_app,
+        subagent_api_apps=subagent_api_apps,
+    )
 
     if mount_web_ui:
-        app.mount("/", web_agent.to_web(deps=deps))
+        app.mount("/", main_web_app)
 
     return app
 
