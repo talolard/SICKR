@@ -9,12 +9,28 @@ import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRendere
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { SubagentInspectorPanel } from "@/components/subagents/SubagentInspectorPanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
+import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
+import {
+  type FloorPlanPreviewState,
+  loadFloorPlanPreview,
+  saveFloorPlanPreview,
+} from "@/lib/floorPlanPreviewStore";
 import {
   fetchSubagentMetadata,
   fetchSubagents,
   type SubagentItem,
   type SubagentMetadata,
 } from "@/lib/subagents";
+
+function resolveAttachmentUri(uri: string): string {
+  if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
+    return uri;
+  }
+  if (uri.startsWith("/attachments/")) {
+    return uri;
+  }
+  return `/attachments/${uri.replace(/^\/+/, "")}`;
+}
 
 export default function SubagentChatPage(): React.ReactElement {
   const params = useParams<{ agent: string }>();
@@ -26,6 +42,7 @@ export default function SubagentChatPage(): React.ReactElement {
   const [subagents, setSubagents] = useState<SubagentItem[]>([]);
   const [metadata, setMetadata] = useState<SubagentMetadata | null>(null);
   const [error, setError] = useState<string>("");
+  const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
 
   useEffect(() => {
     void fetchSubagents()
@@ -54,6 +71,7 @@ export default function SubagentChatPage(): React.ReactElement {
     if (!threadId) {
       return;
     }
+    setFloorPlanPreview(loadFloorPlanPreview(threadId));
     const previousState =
       typeof agent.state === "object" && agent.state !== null
         ? (agent.state as Record<string, unknown>)
@@ -130,17 +148,34 @@ export default function SubagentChatPage(): React.ReactElement {
                 New thread
               </button>
             </div>
-            {warning ? (
+          {warning ? (
               <div className="mt-1 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
                 <span>{warning}</span>
                 <button className="underline" onClick={clearWarning} type="button">
                   Dismiss
                 </button>
               </div>
-            ) : null}
-            {threadId ? <ThreadDataPanel threadId={threadId} /> : null}
+          ) : null}
+          {threadId ? <ThreadDataPanel threadId={threadId} /> : null}
+          <FloorPlanPreviewPanel preview={floorPlanPreview} />
           </header>
-          <CopilotToolRenderers />
+          <CopilotToolRenderers
+            onFloorPlanRendered={(snapshot) => {
+              const resolvedImages = snapshot.images.map((image) => ({
+                ...image,
+                uri: resolveAttachmentUri(image.uri),
+              }));
+              const nextSnapshot: FloorPlanPreviewState = {
+                ...snapshot,
+                threadId: threadId ?? "pending",
+                images: resolvedImages,
+              };
+              setFloorPlanPreview(nextSnapshot);
+              if (threadId) {
+                saveFloorPlanPreview(nextSnapshot);
+              }
+            }}
+          />
           <CopilotSidebar />
         </section>
       </section>
