@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.chat.subagents.base import SubagentCatalogItem
 from ikea_agent.chat_app.main import (
     create_app,
 )
@@ -20,6 +24,46 @@ def _reset_settings_cache() -> Iterator[None]:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _set_fake_google_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-google-api-key")
+
+
+def _chat_request_payload(user_text: str) -> dict[str, object]:
+    return {
+        "trigger": "submit-message",
+        "id": "run-1",
+        "messages": [
+            {
+                "id": "message-1",
+                "role": "user",
+                "parts": [{"type": "text", "text": user_text}],
+            }
+        ],
+    }
+
+
+def _build_stream_only_agent(stream_text: str) -> Agent[None, str]:
+    async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise AssertionError("non-stream function path should not be called")
+
+    async def _stream(
+        _messages: list[ModelMessage],
+        _info: AgentInfo,
+    ) -> AsyncIterator[str]:
+        yield stream_text
+
+    return Agent(
+        model=FunctionModel(
+            function=_function,
+            stream_function=_stream,
+            model_name=f"stream-{stream_text}",
+        ),
+        deps_type=type(None),
+        output_type=str,
+    )
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:
@@ -96,6 +140,101 @@ def test_subagent_metadata_route_returns_prompt_and_mermaid() -> None:
     payload = response.json()
     assert payload["prompt_markdown"]
     assert "stateDiagram-v2" in payload["mermaid"]
+
+
+def test_subagent_web_chat_mount_boots_and_dispatches_to_subagent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _stubbed_ui_html(_html_source: str | Path | None = None) -> bytes:
+        return b"<!doctype html><html><body>subagent-ui</body></html>"
+
+    main_agent = _build_stream_only_agent("main-stream")
+    subagent_agent = _build_stream_only_agent("subagent-stream")
+    catalog_item: SubagentCatalogItem = {
+        "name": "floor_plan_intake",
+        "description": "Test subagent",
+        "agent_key": "subagent_floor_plan_intake",
+        "ag_ui_path": "/ag-ui/subagents/floor_plan_intake",
+        "web_path": "/subagents/floor_plan_intake/chat/",
+    }
+
+    def _build_subagent(name: str, *, explicit_model: str | None = None) -> Agent[None, str]:
+        _ = explicit_model
+        if name != "floor_plan_intake":
+            raise KeyError(f"Unknown subagent `{name}`.")
+        return subagent_agent
+
+    monkeypatch.setattr("pydantic_ai.ui._web.app._get_ui_html", _stubbed_ui_html)
+    monkeypatch.setattr("ikea_agent.chat_app.main.build_chat_agent", lambda: main_agent)
+    monkeypatch.setattr(
+        "ikea_agent.chat_app.main.list_subagent_catalog",
+        lambda: [catalog_item],
+    )
+    monkeypatch.setattr(
+        "ikea_agent.chat_app.main.build_subagent_ag_ui_agent",
+        _build_subagent,
+    )
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=True,
+            mount_ag_ui=False,
+        )
+    )
+    payload = _chat_request_payload("route-check")
+
+    boot_response = client.get("/subagents/floor_plan_intake/chat/")
+    subagent_response = client.post("/subagents/floor_plan_intake/chat/api/chat", json=payload)
+    main_response = client.post("/api/chat", json=payload)
+
+    assert boot_response.status_code == 200
+    assert "subagent-ui" in boot_response.text
+    assert subagent_response.status_code == 200
+    assert main_response.status_code == 200
+    assert subagent_response.headers["content-type"].startswith("text/event-stream")
+    assert main_response.headers["content-type"].startswith("text/event-stream")
+    assert "subagent-stream" in subagent_response.text
+    assert "main-stream" not in subagent_response.text
+    assert "main-stream" in main_response.text
+    assert "subagent-stream" not in main_response.text
+
+
+def test_function_model_web_adapter_uses_streaming_path_for_chat_dispatch(
+    tmp_path: Path,
+) -> None:
+    ui_html = tmp_path / "chat-ui.html"
+    ui_html.write_text("<!doctype html><html><body>stream-ui</body></html>", encoding="utf-8")
+
+    stream_calls = {"count": 0}
+
+    async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise AssertionError("non-stream function path should not be called")
+
+    async def _stream(
+        _messages: list[ModelMessage],
+        _info: AgentInfo,
+    ) -> AsyncIterator[str]:
+        stream_calls["count"] += 1
+        yield "stream-only-response"
+
+    stream_agent = Agent(
+        model=FunctionModel(
+            function=_function,
+            stream_function=_stream,
+            model_name="stream-only-test-agent",
+        ),
+        deps_type=type(None),
+        output_type=str,
+    )
+    client = TestClient(stream_agent.to_web(deps=None, html_source=ui_html))
+
+    response = client.post("/api/chat", json=_chat_request_payload("stream-check"))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "stream-only-response" in response.text
+    assert stream_calls["count"] == 1
 
 
 def test_attachment_upload_and_fetch_round_trip() -> None:

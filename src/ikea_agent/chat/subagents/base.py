@@ -47,6 +47,7 @@ class SubagentCatalogItem(TypedDict):
     description: str
     agent_key: str
     ag_ui_path: str
+    web_path: str
 
 
 class SubagentDescription(SubagentCatalogItem):
@@ -101,6 +102,12 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
         """Stable AG-UI endpoint path for this subagent."""
 
         return f"/ag-ui/subagents/{cls.subagent_name}"
+
+    @classmethod
+    def web_path(cls) -> str:
+        """Stable web-chat endpoint path for this subagent."""
+
+        return f"/subagents/{cls.subagent_name}/chat/"
 
     @classmethod
     def read_prompt_markdown(cls) -> str:
@@ -379,6 +386,7 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
             description=cls.description,
             agent_key=cls.agent_key(),
             ag_ui_path=cls.ag_ui_path(),
+            web_path=cls.web_path(),
         )
 
     @classmethod
@@ -395,6 +403,7 @@ class SubgraphAgent[StateT, DepsT, InputT, OutputT](Agent[None, str]):
             description=cls.description,
             agent_key=cls.agent_key(),
             ag_ui_path=cls.ag_ui_path(),
+            web_path=cls.web_path(),
             prompt_markdown=cls.read_prompt_markdown(),
             mermaid=mermaid,
             tools=list(cls.tool_names),

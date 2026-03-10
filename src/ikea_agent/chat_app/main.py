@@ -643,7 +643,6 @@ def create_app(
     chat_runtime = build_chat_runtime() if runtime is None else runtime
     if hasattr(chat_runtime, "sqlalchemy_engine"):
         ensure_persistence_schema(chat_runtime.sqlalchemy_engine)
-    web_agent = build_chat_agent()
     asset_repository = (
         AssetRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -702,8 +701,15 @@ def create_app(
         item["name"]: build_subagent_ag_ui_agent(item["name"], persistent_state=deps.state)
         for item in catalog
     }
+    subagent_web_apps = (
+        {item["name"]: subagent_agents[item["name"]].to_web(deps=None) for item in catalog}
+        if mount_web_ui
+        else {}
+    )
 
+    web_agent: Agent[ChatAgentDeps, str] | None = None
     if mount_ag_ui:
+        web_agent = build_chat_agent()
         _register_ag_ui_routes(
             app,
             main_agent=web_agent,
@@ -712,9 +718,13 @@ def create_app(
             run_history_repository=run_history_repository,
         )
 
-    main_web_app = web_agent.to_web(deps=deps)
-
     if mount_web_ui:
+        if web_agent is None:
+            web_agent = build_chat_agent()
+        for item in catalog:
+            subagent_mount_path = item["web_path"].rstrip("/")
+            app.mount(subagent_mount_path, subagent_web_apps[item["name"]])
+        main_web_app = web_agent.to_web(deps=deps)
         app.mount("/", main_web_app)
 
     return app
