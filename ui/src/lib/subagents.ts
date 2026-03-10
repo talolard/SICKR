@@ -11,7 +11,6 @@ export type SubagentMetadata = {
   agent_key: string;
   ag_ui_path: string;
   prompt_markdown: string;
-  mermaid: string;
   tools: string[];
   notes: string;
 };

@@ -12,7 +12,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat.subagents.base import SubagentCatalogItem
+from ikea_agent.chat.subagents.index import SubagentCatalogItem
 from ikea_agent.chat_app.main import (
     create_app,
 )
@@ -45,7 +45,7 @@ def _chat_request_payload(user_text: str) -> dict[str, object]:
     }
 
 
-def _build_stream_only_agent(stream_text: str) -> Agent[None, str]:
+def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
     async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         raise AssertionError("non-stream function path should not be called")
 
@@ -61,7 +61,7 @@ def _build_stream_only_agent(stream_text: str) -> Agent[None, str]:
             stream_function=_stream,
             model_name=f"stream-{stream_text}",
         ),
-        deps_type=type(None),
+        deps_type=object,
         output_type=str,
     )
 
@@ -126,7 +126,7 @@ def test_subagent_ag_ui_route_exists() -> None:
     assert response.status_code != 404
 
 
-def test_subagent_metadata_route_returns_prompt_and_mermaid() -> None:
+def test_subagent_metadata_route_returns_prompt_and_tools() -> None:
     client = TestClient(
         create_app(
             runtime=cast("ChatRuntime", object()),
@@ -139,7 +139,7 @@ def test_subagent_metadata_route_returns_prompt_and_mermaid() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["prompt_markdown"]
-    assert "stateDiagram-v2" in payload["mermaid"]
+    assert "render_floor_plan" in payload["tools"]
 
 
 def test_subagent_web_chat_mount_boots_and_dispatches_to_subagent(
@@ -158,7 +158,11 @@ def test_subagent_web_chat_mount_boots_and_dispatches_to_subagent(
         "web_path": "/subagents/floor_plan_intake/chat/",
     }
 
-    def _build_subagent(name: str, *, explicit_model: str | None = None) -> Agent[None, str]:
+    def _build_subagent(
+        name: str,
+        *,
+        explicit_model: str | None = None,
+    ) -> Agent[object, str]:
         _ = explicit_model
         if name != "floor_plan_intake":
             raise KeyError(f"Unknown subagent `{name}`.")

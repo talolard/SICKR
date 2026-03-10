@@ -3,7 +3,6 @@
 import type { SubagentMetadata } from "@/lib/subagents";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MermaidDiagram } from "@/components/subagents/MermaidDiagram";
 
 type SubagentInspectorPanelProps = {
   metadata: SubagentMetadata | null;
@@ -71,10 +70,6 @@ export function SubagentInspectorPanel({
             {metadata.prompt_markdown}
           </ReactMarkdown>
         </div>
-      </details>
-      <details open>
-        <summary className="cursor-pointer font-medium text-gray-900">Graph (Mermaid)</summary>
-        <MermaidDiagram source={metadata.mermaid} />
       </details>
       <details open>
         <summary className="cursor-pointer font-medium text-gray-900">Tools and runtime notes</summary>

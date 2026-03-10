@@ -537,7 +537,7 @@ def _register_ag_ui_routes(  # noqa: C901
     app: FastAPI,
     *,
     main_agent: Agent[ChatAgentDeps, str],
-    subagent_agents: dict[str, Agent[None, str]],
+    subagent_agents: dict[str, Agent[ChatAgentDeps, str]],
     deps: ChatAgentDeps,
     run_history_repository: RunHistoryRepository | None,
 ) -> None:
@@ -619,7 +619,7 @@ def _register_ag_ui_routes(  # noqa: C901
                 return await handle_ag_ui_request(
                     agent,
                     request,
-                    deps=None,
+                    deps=deps,
                     on_complete=on_complete,
                 )
         except Exception as exc:
@@ -697,12 +697,9 @@ def create_app(
         )
 
     catalog = list_subagent_catalog()
-    subagent_agents = {
-        item["name"]: build_subagent_ag_ui_agent(item["name"], persistent_state=deps.state)
-        for item in catalog
-    }
+    subagent_agents = {item["name"]: build_subagent_ag_ui_agent(item["name"]) for item in catalog}
     subagent_web_apps = (
-        {item["name"]: subagent_agents[item["name"]].to_web(deps=None) for item in catalog}
+        {item["name"]: subagent_agents[item["name"]].to_web(deps=deps) for item in catalog}
         if mount_web_ui
         else {}
     )
