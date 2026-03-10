@@ -6,13 +6,30 @@ import json
 from pathlib import Path
 
 
-def load_prompt(prompt_path: Path) -> str:
+def read_prompt_markdown(prompt_path: Path) -> str:
     """Load markdown prompt content and fail loudly when missing."""
 
     if not prompt_path.exists():
         msg = f"Prompt file does not exist: {prompt_path}"
         raise FileNotFoundError(msg)
     return prompt_path.read_text(encoding="utf-8")
+
+
+def instruction_text_from_prompt(prompt_path: Path) -> str:
+    """Load prompt markdown and strip optional YAML front-matter."""
+
+    raw = read_prompt_markdown(prompt_path).strip()
+    if raw.startswith("---"):
+        end = raw.find("---", 3)
+        if end != -1:
+            raw = raw[end + 3 :].lstrip("\n")
+    return raw.strip()
+
+
+def load_prompt(prompt_path: Path) -> str:
+    """Backward-compatible alias for prompt markdown loading."""
+
+    return read_prompt_markdown(prompt_path)
 
 
 def parse_json_or_text(raw_input: str) -> dict[str, object]:
