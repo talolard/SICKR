@@ -7,6 +7,7 @@ import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { useThreadSession } from "@/app/CopilotKitProviders";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
+import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
@@ -23,6 +24,7 @@ import {
   saveRoom3DSnapshots,
 } from "@/lib/threadStore";
 import { getConsoleRecordsSnapshot, startFeedbackCapture } from "@/lib/feedbackCapture";
+import { fetchSubagents, type SubagentItem } from "@/lib/subagents";
 
 const DEFAULT_FEEDBACK_TITLE = "user_comment_from_ui";
 
@@ -64,8 +66,8 @@ function collectStorageByPrefix(storage: Storage, prefix: string): Record<string
 }
 
 export default function Home(): ReactElement {
-  const { agent } = useAgent({ agentId: "ikea_agent" });
   const {
+    agentKey,
     threadId,
     threadIds,
     warning: threadWarning,
@@ -73,6 +75,8 @@ export default function Home(): ReactElement {
     createThread,
     clearWarning,
   } = useThreadSession();
+  const { agent } = useAgent({ agentId: agentKey });
+  const [subagents, setSubagents] = useState<SubagentItem[]>([]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [room3dSnapshots, setRoom3dSnapshots] = useState<Room3DSnapshotContext[]>([]);
@@ -96,6 +100,12 @@ export default function Home(): ReactElement {
 
   useEffect(() => {
     startFeedbackCapture();
+  }, []);
+
+  useEffect(() => {
+    void fetchSubagents()
+      .then((items) => setSubagents(items))
+      .catch(() => setSubagents([]));
   }, []);
 
   useEffect(() => {
@@ -127,8 +137,8 @@ export default function Home(): ReactElement {
       return;
     }
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
-    setRoom3dSnapshots(loadRoom3DSnapshots(threadId));
-  }, [threadId]);
+    setRoom3dSnapshots(loadRoom3DSnapshots(threadId, agentKey));
+  }, [agentKey, threadId]);
 
   useEffect(() => {
     const unsubscribe = subscribeFloorPlanRendered((detail) => {
@@ -311,7 +321,7 @@ export default function Home(): ReactElement {
           lighting: snapshot.lighting,
         },
       ];
-      saveRoom3DSnapshots(threadId, next);
+      saveRoom3DSnapshots(threadId, next, agentKey);
       return next;
     });
   };
@@ -563,7 +573,9 @@ export default function Home(): ReactElement {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1700px] flex-col gap-4 p-6">
+    <main className="min-h-screen bg-white">
+      <AppNavBanner currentSubagentName={null} subagents={subagents} />
+      <section className="mx-auto flex max-w-[1700px] flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">IKEA Agent</h1>
         <p className="text-sm text-gray-600">
@@ -762,6 +774,7 @@ export default function Home(): ReactElement {
           </section>
         </div>
       ) : null}
+      </section>
     </main>
   );
 }

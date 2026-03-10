@@ -30,6 +30,24 @@ When using libraries search for documentation in
 - Commit messages must be high-level and human-readable, focused on intent.
 - Commit bodies should explain problem -> approach -> outcome, not just file lists.
 
+## Agent Fast Paths
+
+- Mutating implementation work must start in a dedicated worktree:
+  - `make agent-start SLOT=<0-99> ISSUE=<bead-id>`
+  - `make agent-start SLOT=<0-99> QUERY="<text>"`
+- Merge runs are explicit and should not use normal `bd ready` pickup:
+  - `make merge-list`
+  - Follow `docs/merge_runbook.md` for one-by-one merge handling.
+
+## Worktree + Merge Queue Policy
+
+- Keep one worktree per epic/major task branch and avoid mutating work in the main checkout.
+- Merge queue parent is `tal_maria_ikea-0uk` (`awaiting-merge`).
+- Merge queue items must be `issue_type=merge-request`, `status=blocked`, and assigned to `merger-agent`.
+- Because merge queue items are blocked, they should never appear in default `bd ready` pickup.
+- Use `make merge-normalize` to enforce queue structure after migrations/drift.
+
+
 ## Tooling Standards
 
 - Python environment and commands run through UV.
@@ -254,103 +272,24 @@ These are the protocol-level practices we follow for the CopilotKit UI integrati
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking except the exceptions described below
-Plans and specs give our direction, define the work in beads.
+Use **bd** as the only issue tracker.
 
-Each task in beads that you add should
+- Default workflow:
+  - `bd ready --json` for normal implementation pickup
+  - `bd update <id> --status in_progress --json` to claim
+  - `bd close <id> --reason "Done" --json` when complete
+- Do not create beads for pure planning/research or tiny exploratory checks.
+- Every created issue should include: context, definition of done, and references.
+- Before closing an implementation issue: run `make tidy`, commit, then close.
 
-- Have a title of what the task is "Save vectors in parquet format" not "Use parquet"
-- Have a context section "Currently we recompute vectors in dev, easier to store in parquet so duckdb can just load them quickly"
-- Have a definition of done section "All embeddings are stored in parquet, paritioned, test checks we can load them and create an index + queries still work"
-- Reference plan spec and additional md files , as well as the docs and external docs.
+### Merge Queue Exception
 
-### When not to use bd / beads
-
-- When the user asks you to plan or research, don't put planning and research in beads just do it.
-- When the user asks for small exploratory work or a check ("which file is this function in?", "what does this error mean?") do the work and report back without creating beads. If you find something that needs follow-up work, create a bead for the follow-up but not for the initial exploration.
-
-### Closing a task
-
-- Before closing: run `make tidy`, ensure coverage, write a descriptive commit message, and commit. Then close the task.
-
-### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-### Quick Start
-
-**Check for ready work:**
-
-```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update bd-42 --status in_progress --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task**: `bd update <id> --status in_progress`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-### Auto-Sync
-
-bd automatically syncs with git:
-
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
-
-### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists aside from what the user tells you to.
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
+- Merge queue work is not part of normal `bd ready` pickup.
+- Use `make merge-list` for explicit merge runs.
+- Merge queue items under `tal_maria_ikea-0uk` must remain:
+  - `type=merge-request` when supported by current `bd` version
+  - otherwise keep `label=merge-request` as compatibility marker
+  - `status=blocked`
+  - `assignee=merger-agent`
 
 <!-- END BEADS INTEGRATION -->

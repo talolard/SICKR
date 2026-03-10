@@ -36,6 +36,8 @@ venv/
 data/*.csv
 data/*.db*
 data/.milvus_*
+data/traces/
+data/trace_files_by_commit.jsonl
 artifacts/
 comments/
 .tmp_untracked/
@@ -50,3 +52,8 @@ node_modules/
 **/.next/
 playwright-report/
 test-results/
+tal_maria_ikea-ndq/
+# bd worktree
+tal_maria_ikea-427/
+# bd worktree
+tal_maria_ikea-gim/

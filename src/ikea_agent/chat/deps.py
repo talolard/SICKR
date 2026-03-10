@@ -50,6 +50,10 @@ class ChatAgentState(BaseModel):
     run_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)
     room_3d_snapshots: list[Room3DSnapshotContext] = Field(default_factory=list)
+    subagent_state: dict[str, dict[str, dict[str, object]]] = Field(default_factory=dict)
+    subagent_turn_history: dict[str, dict[str, list[dict[str, object]]]] = Field(
+        default_factory=dict
+    )
 
 
 @dataclass(slots=True)

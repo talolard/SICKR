@@ -11,6 +11,7 @@ from sqlalchemy import (
     TIMESTAMP,
     VARCHAR,
     Column,
+    Index,
     MetaData,
     Table,
 )
@@ -54,4 +55,19 @@ product_embeddings = Table(
     Column("embedding_vector", ARRAY(FLOAT)),
     Column("embedded_text", VARCHAR),
     Column("embedded_at", TIMESTAMP(timezone=False)),
+)
+
+product_embedding_neighbors = Table(
+    "product_embedding_neighbors",
+    retrieval_metadata,
+    Column("embedding_model", VARCHAR, primary_key=True),
+    Column("source_product_key", VARCHAR, primary_key=True),
+    Column("neighbor_product_key", VARCHAR, primary_key=True),
+    Column("neighbor_rank", BIGINT),
+    Column("cosine_similarity", DOUBLE),
+    Index(
+        "ix_product_embedding_neighbors_model_source",
+        "embedding_model",
+        "source_product_key",
+    ),
 )

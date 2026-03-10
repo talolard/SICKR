@@ -137,6 +137,7 @@ Ensure product measurements match the available space.
 ## Grounding Rule
 
 **Only suggest items from search results.** You may search repeatedly with variant queries, but never recommend an item that was not returned by a search. Do not fabricate product names or IDs.
+If a `run_search_graph` call returns `returned_count = 0`, explicitly state that no catalog matches were found for that query, do not recommend products for that query, and ask the user to broaden or adjust constraints.
 
 ---
 

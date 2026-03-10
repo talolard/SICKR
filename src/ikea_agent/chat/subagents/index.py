@@ -8,6 +8,7 @@ from ikea_agent.chat.subagents.base import (
     SubagentCatalogItem,
     SubagentDescription,
     SubgraphAgent,
+    SupportsPersistentSubagentState,
 )
 from ikea_agent.chat.subagents.floor_plan_intake.agent import FloorPlannerSubgraphAgent
 
@@ -45,10 +46,14 @@ def build_subagent_ag_ui_agent(
     name: str,
     *,
     explicit_model: str | None = None,
+    persistent_state: SupportsPersistentSubagentState | None = None,
 ) -> Agent[None, str]:
     """Build one AG-UI agent instance for a registered subgraph-agent class."""
 
-    return get_subgraph_agent(name).build_agent(explicit_model=explicit_model)
+    return get_subgraph_agent(name).build_agent(
+        explicit_model=explicit_model,
+        persistent_state=persistent_state,
+    )
 
 
 __all__ = [

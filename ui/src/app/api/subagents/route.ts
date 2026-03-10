@@ -3,7 +3,8 @@ import { NextRequest } from "next/server";
 type SubagentItem = {
   name: string;
   description: string;
-  web_path: string;
+  agent_key: string;
+  ag_ui_path: string;
 };
 
 type SubagentListResponse = {
@@ -27,14 +28,9 @@ export async function GET(request: NextRequest): Promise<Response> {
     headers: { accept: "application/json" },
   });
 
-  const baseUrl = new URL("../", agUiUrl);
   const payload = (await upstreamResponse.json()) as SubagentListResponse;
   const shaped = {
-    subagents: payload.subagents.map((item) => ({
-      ...item,
-      chat_proxy_path: `/api/subagents/${item.name}/chat/`,
-      chat_url: new URL(item.web_path, baseUrl).toString(),
-    })),
+    subagents: payload.subagents,
   };
 
   return new Response(JSON.stringify(shaped), {

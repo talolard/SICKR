@@ -89,6 +89,14 @@ flowchart LR
 - Lint/format/typecheck pipeline: `make format-all`
 - Pre-commit quality gate: `make tidy`
 
+## Multi-Agent Shortcuts
+
+- Start mutating task work in an isolated worktree:
+  - `make agent-start SLOT=<0-99> ISSUE=<bead-id>`
+  - `make agent-start SLOT=<0-99> QUERY="<text>"`
+- List explicit merge queue items for merge runs:
+  - `make merge-list`
+
 ## Image analysis setup
 
 - Add `FAI_AI_API_KEY=...` to `.env` (or `FAL_KEY=...`).
