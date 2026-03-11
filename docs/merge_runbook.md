@@ -20,7 +20,16 @@ Because items are blocked, they do not appear in normal `bd ready` pickup.
 make merge-list
 ```
 
-This lists blocked merge-request items owned by `merger-agent` in deterministic order.
+This lists blocked merge-request items owned by `merger-agent` that are green on required checks.
+
+Other views:
+
+```bash
+make merge-list-all
+make merge-list-failing
+```
+
+Use `make merge-list-failing` to review non-green PRs and copy suggested `bd update ... --assignee <agent>` commands.
 
 ## Process Loop (Per Item)
 

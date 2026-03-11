@@ -1,7 +1,7 @@
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
 	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
 	ui-test-e2e-real-ui-smoke dev-all dev-all-mock reset agent-start merge-list \
-	merge-list-json merge-normalize
+	merge-list-all merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -120,6 +120,12 @@ agent-start:
 
 merge-list:
 	./scripts/beads/merge_list.sh
+
+merge-list-all:
+	./scripts/beads/merge_list.sh --all
+
+merge-list-failing:
+	./scripts/beads/merge_list.sh --failing
 
 merge-list-json:
 	./scripts/beads/merge_list.sh --json

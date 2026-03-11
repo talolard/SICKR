@@ -91,12 +91,12 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run ESLint with GitHub annotations (non-blocking)
+      - name: Run ESLint with GitHub annotations
         id: frontend_lint
         run: |
           mkdir -p ../artifacts
           set +e
-          pnpm exec eslint . --format json --output-file ../artifacts/eslint.json
+          pnpm exec eslint . --max-warnings=0 --format json --output-file ../artifacts/eslint.json
           eslint_exit=$?
           node -e '
           const fs = require("fs");
@@ -108,7 +108,7 @@ jobs:
             const filePath = file.filePath || "";
             for (const msg of file.messages || []) {
               count += 1;
-              const level = msg.severity === 2 ? "error" : "warning";
+              const level = "error";
               const line = msg.line || 1;
               const col = msg.column || 1;
               const rule = msg.ruleId ? ` [${msg.ruleId}]` : "";
@@ -119,10 +119,13 @@ jobs:
           process.stdout.write(`ESLint issues: ${count}\n`);
           '
           echo "exit_code=${eslint_exit}" >> "$GITHUB_OUTPUT"
-          if [ "${eslint_exit}" -ne 0 ]; then
-            echo "ESLint reported issues (non-blocking baseline lane)."
-          fi
           exit 0
+
+      - name: Fail if ESLint failed
+        if: ${{ steps.frontend_lint.outputs.exit_code != '0' }}
+        run: |
+          echo "Frontend lint failed. See annotations above."
+          exit 1
 
       - name: Run TypeScript check with GitHub annotations
         id: frontend_typecheck

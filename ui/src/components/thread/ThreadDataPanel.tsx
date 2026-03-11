@@ -23,15 +23,13 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
 
   useEffect(() => {
     let active = true;
-    setError(null);
-    setMissingThreadData(false);
-    setDetail(null);
-    setAssets([]);
     Promise.all([getThreadDetail(threadId), listThreadAssets(threadId)])
       .then(([nextDetail, nextAssets]) => {
         if (!active) {
           return;
         }
+        setError(null);
+        setMissingThreadData(false);
         setDetail(nextDetail);
         setAssets(nextAssets);
       })

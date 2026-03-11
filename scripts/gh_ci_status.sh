@@ -176,3 +176,7 @@ else
     echo "(Showing first $PRINTED)"
   fi
 fi
+
+echo
+echo "For full local triage bundle:"
+echo "scripts/gh_ci_pull_run.sh --run $RUN_ID --repo $REPO"

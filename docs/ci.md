@@ -33,7 +33,7 @@ Checks emit annotations in GitHub UI for:
 - Test failures through JUnit + `dorny/test-reporter`
 
 Current gating behavior:
-- ESLint is non-blocking for now (annotation-only) because there is existing lint baseline debt.
+- ESLint is blocking (`--max-warnings=0`).
 - TypeScript and all test lanes are blocking.
 
 ## No-Secrets / No-Paid-Calls Test Guard
@@ -58,4 +58,19 @@ scripts/gh_ci_status.sh
 scripts/gh_ci_status.sh --pr 123
 scripts/gh_ci_status.sh --run 123456789
 scripts/gh_ci_status.sh --pr 123 --limit 100
+```
+
+Deep triage script: `scripts/gh_ci_pull_run.sh`
+
+What it does:
+- Resolves a run by explicit run ID or latest run for a branch.
+- Pulls run metadata, jobs, PR checks, annotations, and failed logs into a local folder.
+- Generates `summary.md` with top failing files/messages and suggested local commands.
+
+Usage:
+
+```bash
+scripts/gh_ci_pull_run.sh --run 123456789
+scripts/gh_ci_pull_run.sh --branch epic/my-branch
+scripts/gh_ci_pull_run.sh --branch epic/my-branch --required-only
 ```

@@ -27,6 +27,7 @@ export function ImageToolOutputRenderer({
             onClick={() => setSelectedImage(image)}
             type="button"
           >
+            {/* eslint-disable-next-line @next/next/no-img-element -- Attachment thumbnails may point to runtime-generated blob/data URLs. */}
             <img
               alt={image.file_name ?? "Generated image"}
               className="h-24 w-24 rounded border object-cover"
@@ -42,6 +43,7 @@ export function ImageToolOutputRenderer({
           data-testid="image-viewer-modal"
         >
           <div className="max-w-4xl rounded bg-white p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- Modal displays exact attachment bytes without image optimization transforms. */}
             <img
               alt={selectedImage.file_name ?? "Generated image"}
               className="max-h-[70vh] max-w-[80vw]"

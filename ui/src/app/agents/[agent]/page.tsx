@@ -62,7 +62,7 @@ export default function AgentChatPage(): ReactElement {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const [error, setError] = useState<string>("");
-  const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
+  const [activeFloorPlanPreview, setActiveFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
   const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
   const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
@@ -172,6 +172,23 @@ export default function AgentChatPage(): ReactElement {
     });
   }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
 
+  const persistedFloorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
+    if (!threadId) {
+      return null;
+    }
+    return loadFloorPlanPreview(threadId);
+  }, [threadId]);
+
+  const floorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
+    if (!threadId) {
+      return null;
+    }
+    if (activeFloorPlanPreview?.threadId === threadId) {
+      return activeFloorPlanPreview;
+    }
+    return persistedFloorPlanPreview;
+  }, [activeFloorPlanPreview, persistedFloorPlanPreview, threadId]);
+
   const selected = useMemo(() => {
     return agents.find((item) => item.name === currentAgent) ?? null;
   }, [currentAgent, agents]);
@@ -247,7 +264,7 @@ export default function AgentChatPage(): ReactElement {
                 </button>
               </div>
             ) : null}
-            {threadId ? <ThreadDataPanel threadId={threadId} /> : null}
+            {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
             <FloorPlanPreviewPanel preview={floorPlanPreview} />
             {currentAgent === "image_analysis" ? (
               <AgentImageAttachmentPanel
@@ -284,7 +301,7 @@ export default function AgentChatPage(): ReactElement {
                     threadId: threadId ?? "pending",
                     images: resolvedImages,
                   };
-                  setFloorPlanPreview(nextSnapshot);
+                  setActiveFloorPlanPreview(nextSnapshot);
                   if (threadId) {
                     saveFloorPlanPreview(nextSnapshot);
                   }
