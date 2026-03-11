@@ -43,12 +43,8 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/ikea_agent"]
 
-[[tool.uv.index]]
-url = "https://pkgs.dev.azure.com/primer-ai/_packaging/Common/pypi/simple/"
-
 [tool.uv]
 environments = ["sys_platform != 'emscripten'"]
-index-strategy = "unsafe-best-match"
 
 [tool.pytest.ini_options]
 addopts = "-ra"

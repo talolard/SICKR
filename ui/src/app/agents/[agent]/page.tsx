@@ -97,7 +97,7 @@ export default function AgentChatPage(): ReactElement {
   useEffect(() => {
     let active = true;
     if (!threadId) {
-      setFloorPlanPreview(null);
+      setActiveFloorPlanPreview(null);
       setBundleProposals([]);
       setBundleProposalError(null);
       setIsLoadingBundleProposals(false);
@@ -106,7 +106,7 @@ export default function AgentChatPage(): ReactElement {
       };
     }
 
-    setFloorPlanPreview(loadFloorPlanPreview(threadId));
+    setActiveFloorPlanPreview(loadFloorPlanPreview(threadId));
     if (currentAgent !== "search") {
       setBundleProposals([]);
       setBundleProposalError(null);
