@@ -1,7 +1,7 @@
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
-Before acting, read `AGENTS.md`, `.codex/agents/prompt.spec_planner.md`, `.codex/prompt_support/spec_planner_guide.md`, and `.codex/prompt_support/openai_plan_mode.md`.
+Before acting, read `AGENTS.md`, `.codex/agents/spec_planner/prompt.spec_planner.md`, `.codex/prompt_support/spec_planner_guide.md`, and `.codex/prompt_support/openai_plan_mode.md`.
 Treat the prompt and support files as the role-specific planning contract.
 Stay in spec/planning mode unless explicitly told to hand off or implement.
 """

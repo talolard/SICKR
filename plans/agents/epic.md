@@ -81,24 +81,24 @@ This means the top-level role should be configured and prompted as a coordinator
 We will use a file layout like:
 
 - `.codex/config.toml`
-- `.codex/agents/default.toml`
-- `.codex/agents/prompt.default.md`
-- `.codex/agents/spec_planner.toml`
-- `.codex/agents/prompt.spec_planner.md`
-- `.codex/agents/epic_writer.toml`
-- `.codex/agents/prompt.epic_writer.md`
-- `.codex/agents/epic_worker.toml`
-- `.codex/agents/prompt.epic_worker.md`
-- `.codex/agents/worker.toml`
-- `.codex/agents/prompt.worker.md`
-- `.codex/agents/repo_explorer.toml`
-- `.codex/agents/prompt.repo_explorer.md`
-- `.codex/agents/docs_researcher.toml`
-- `.codex/agents/prompt.docs_researcher.md`
-- `.codex/agents/pr_reviewer.toml`
-- `.codex/agents/prompt.pr_reviewer.md`
-- `.codex/agents/merge_coordinator.toml`
-- `.codex/agents/prompt.merge_coordinator.md`
+- `.codex/agents/default/config.default.toml`
+- `.codex/agents/default/prompt.default.md`
+- `.codex/agents/spec_planner/config.spec_planner.toml`
+- `.codex/agents/spec_planner/prompt.spec_planner.md`
+- `.codex/agents/epic_writer/config.epic_writer.toml`
+- `.codex/agents/epic_writer/prompt.epic_writer.md`
+- `.codex/agents/epic_worker/config.epic_worker.toml`
+- `.codex/agents/epic_worker/prompt.epic_worker.md`
+- `.codex/agents/worker/config.worker.toml`
+- `.codex/agents/worker/prompt.worker.md`
+- `.codex/agents/repo_explorer/config.repo_explorer.toml`
+- `.codex/agents/repo_explorer/prompt.repo_explorer.md`
+- `.codex/agents/docs_researcher/config.docs_researcher.toml`
+- `.codex/agents/docs_researcher/prompt.docs_researcher.md`
+- `.codex/agents/pr_reviewer/config.pr_reviewer.toml`
+- `.codex/agents/pr_reviewer/prompt.pr_reviewer.md`
+- `.codex/agents/merge_coordinator/config.merge_coordinator.toml`
+- `.codex/agents/merge_coordinator/prompt.merge_coordinator.md`
 
 Rule:
 - each role TOML contains the role metadata/config
@@ -110,29 +110,34 @@ Rule:
 To avoid ambiguity, each role should have a single obvious prompt file path.
 
 Example:
-- role config: `.codex/agents/epic_worker.toml`
-- role prompt: `.codex/agents/prompt.epic_worker.md`
+- role config: `.codex/agents/epic_worker/config.epic_worker.toml`
+- role prompt: `.codex/agents/epic_worker/prompt.epic_worker.md`
 
 The TOML/config should reference the prompt path explicitly, or the role instructions should explicitly say to load that exact file before acting.
 
-### 4. Shared prompt-support files should hold reusable structure and process guidance
+### 4. Reusable support files should be colocated with the planning agent they primarily serve
 
 Not every useful instruction belongs directly inside one role prompt.
-Some guidance is reusable across multiple roles and should live in shared prompt-support files.
+Some guidance is reusable, but it should still live in an agent-specific planning folder so the ownership is obvious.
 
-In particular we should introduce:
+At the executable layer, we should keep the shared support files under `.codex/prompt_support/`:
 - `.codex/prompt_support/epic_structure.md`
 - `.codex/prompt_support/spec_planner_guide.md`
 - `.codex/prompt_support/openai_plan_mode.md`
 
+In the design/planning layer, we should mirror those files inside the folder of the agent that primarily owns them:
+- `plans/agents/epic_writer/epic_structure.md`
+- `plans/agents/spec_planner/spec_planner_guide.md`
+- `plans/agents/spec_planner/openai_plan_mode.md`
+
 How they should be used:
 - `epic_writer` should read and apply `epic_structure.md` when decomposing approved work.
 - `spec_planner` should read and apply `spec_planner_guide.md` and `openai_plan_mode.md` when helping the user iterate on a specification.
-- `epic_worker` should also read `epic_structure.md` so it understands what a strong epic/task breakdown looks like and can sanity-check whether the implementation work graph is adequate.
+- `epic_worker` should also read the `epic_writer` structure guide so it understands what a strong epic/task breakdown looks like and can sanity-check whether the implementation work graph is adequate.
 
 Why:
 - It avoids duplicating the same structural guidance across multiple prompts.
-- It keeps prompts focused on role mission and behavior, while shared files hold reusable process patterns.
+- It keeps prompts focused on role mission and behavior, while still making the primary owner of each support file obvious.
 - It lets us improve the reusable structure once and benefit across multiple roles.
 
 ### 5. `AGENTS.md` remains the repo-wide source of truth for invariants
@@ -177,7 +182,7 @@ Responsibilities:
 - separate what is known from what is still speculative
 - shape a good approach before work is decomposed into Beads
 - explicitly ask whether we have what we need, whether the goal is clear, and whether the key decisions are known
-- use the shared guidance in `.codex/prompt_support/spec_planner_guide.md` and `.codex/prompt_support/openai_plan_mode.md`
+- use the shared guidance in `.codex/prompt_support/spec_planner_guide.md` and `.codex/prompt_support/openai_plan_mode.md`, with the design references living at `plans/agents/spec_planner/spec_planner_guide.md` and `plans/agents/spec_planner/openai_plan_mode.md`
 
 Why:
 - separates planning/spec thinking from task breakdown and implementation
@@ -191,7 +196,7 @@ Responsibilities:
 - create goals, epics, tasks, dependencies, acceptance criteria, references
 - create the merge-request task and GitHub-check gateway structure
 - ensure the work graph matches the intended implementation/merge workflow
-- apply the structural guidance in `.codex/prompt_support/epic_structure.md`
+- apply the structural guidance in `.codex/prompt_support/epic_structure.md`, mirrored in the planning layer at `plans/agents/epic_writer/epic_structure.md`
 
 Why:
 - separates decomposition from implementation
@@ -208,7 +213,7 @@ Responsibilities:
 - poll GitHub checks periodically
 - fix failing checks
 - refresh with `main` and resolve conflicts before calling the branch ready
-- understand the intended work graph and acceptance criteria by reading `.codex/prompt_support/epic_structure.md`
+- understand the intended work graph and acceptance criteria by reading `.codex/prompt_support/epic_structure.md`, with the design reference mirrored at `plans/agents/epic_writer/epic_structure.md`
 - hand back: worktree, branch, commit, PR, validations, blockers
 
 Why:
@@ -371,8 +376,8 @@ These are coordinator behaviors, not repo invariants:
 - clarify goals, tradeoffs, and risks
 - encourage iterative questioning and reflective summaries
 - explicitly ask meta-questions like “do we have what we need?”, “do we know the goal?”, and “do we know the key decisions?”
-- read `.codex/prompt_support/spec_planner_guide.md`
-- read `.codex/prompt_support/openai_plan_mode.md`
+- read `.codex/prompt_support/spec_planner_guide.md` (design mirror: `plans/agents/spec_planner/spec_planner_guide.md`)
+- read `.codex/prompt_support/openai_plan_mode.md` (design mirror: `plans/agents/spec_planner/openai_plan_mode.md`)
 - no code edits
 
 ## Move to `prompt.epic_writer.md`
@@ -380,14 +385,14 @@ These are coordinator behaviors, not repo invariants:
 - create goals/epics/tasks from approved requirements
 - write explicit dependencies, acceptance criteria, references
 - always model merge-request task + GitHub-check gateway
-- read `.codex/prompt_support/epic_structure.md`
+- read `.codex/prompt_support/epic_structure.md` (design mirror: `plans/agents/epic_writer/epic_structure.md`)
 - do not implement code
 
 ## Move to `prompt.epic_worker.md`
 
 - work only in the assigned worktree
 - own the specified epic/tasks/files
-- read `.codex/prompt_support/epic_structure.md` so the worker understands what a good epic/task graph should look like
+- read `.codex/prompt_support/epic_structure.md` (design mirror: `plans/agents/epic_writer/epic_structure.md`) so the worker understands what a good epic/task graph should look like
 - open/update the PR
 - poll GitHub checks
 - fix failing checks
@@ -519,33 +524,36 @@ Resolution:
 ### Shared prompt-support files
 
 - `.codex/prompt_support/epic_structure.md`
+- `plans/agents/epic_writer/epic_structure.md`
 - `.codex/prompt_support/spec_planner_guide.md`
+- `plans/agents/spec_planner/spec_planner_guide.md`
 - `.codex/prompt_support/openai_plan_mode.md`
+- `plans/agents/spec_planner/openai_plan_mode.md`
 
 ### Config and role files
 
 - `.codex/config.toml`
-- `.codex/agents/default.toml`
-- `.codex/agents/spec_planner.toml`
-- `.codex/agents/epic_writer.toml`
-- `.codex/agents/epic_worker.toml`
-- `.codex/agents/worker.toml`
-- `.codex/agents/repo_explorer.toml`
-- `.codex/agents/docs_researcher.toml`
-- `.codex/agents/pr_reviewer.toml`
-- `.codex/agents/merge_coordinator.toml`
+- `.codex/agents/default/config.default.toml`
+- `.codex/agents/spec_planner/config.spec_planner.toml`
+- `.codex/agents/epic_writer/config.epic_writer.toml`
+- `.codex/agents/epic_worker/config.epic_worker.toml`
+- `.codex/agents/worker/config.worker.toml`
+- `.codex/agents/repo_explorer/config.repo_explorer.toml`
+- `.codex/agents/docs_researcher/config.docs_researcher.toml`
+- `.codex/agents/pr_reviewer/config.pr_reviewer.toml`
+- `.codex/agents/merge_coordinator/config.merge_coordinator.toml`
 
 ### Prompt files for review
 
-- `.codex/agents/prompt.default.md`
-- `.codex/agents/prompt.spec_planner.md`
-- `.codex/agents/prompt.epic_writer.md`
-- `.codex/agents/prompt.epic_worker.md`
-- `.codex/agents/prompt.worker.md`
-- `.codex/agents/prompt.repo_explorer.md`
-- `.codex/agents/prompt.docs_researcher.md`
-- `.codex/agents/prompt.pr_reviewer.md`
-- `.codex/agents/prompt.merge_coordinator.md`
+- `.codex/agents/default/prompt.default.md`
+- `.codex/agents/spec_planner/prompt.spec_planner.md`
+- `.codex/agents/epic_writer/prompt.epic_writer.md`
+- `.codex/agents/epic_worker/prompt.epic_worker.md`
+- `.codex/agents/worker/prompt.worker.md`
+- `.codex/agents/repo_explorer/prompt.repo_explorer.md`
+- `.codex/agents/docs_researcher/prompt.docs_researcher.md`
+- `.codex/agents/pr_reviewer/prompt.pr_reviewer.md`
+- `.codex/agents/merge_coordinator/prompt.merge_coordinator.md`
 
 ### Repo guidance updates
 

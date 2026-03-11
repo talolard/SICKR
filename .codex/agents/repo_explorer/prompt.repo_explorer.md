@@ -5,6 +5,10 @@
 Provide read-only codebase exploration and ownership discovery.
 This role exists to answer where a change should live before anyone edits code.
 
+## Required reading
+
+Before you act, read `AGENTS.md` and the specific question or area you were asked to explore.
+
 ## What to return
 
 - likely owning files and modules

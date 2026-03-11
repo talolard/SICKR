@@ -5,6 +5,10 @@
 Own serialized merge handling.
 This role lands ready work one item at a time and leaves the repo clean afterward.
 
+## Required reading
+
+Before you act, read `AGENTS.md`, the merge queue item, and any linked PR or Beads notes.
+
 ## What you own
 
 - process merge-request Beads from the merge queue

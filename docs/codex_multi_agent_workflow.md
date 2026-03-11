@@ -6,8 +6,8 @@ The design/spec documents remain under `plans/agents/`, while the executable rol
 ## File layout
 
 - `.codex/config.toml`: project-local role registry
-- `.codex/agents/*.toml`: per-role config files
-- `.codex/agents/prompt.*.md`: per-role behavioral prompts
+- `.codex/agents/<role>/config.<role>.toml`: per-role config files
+- `.codex/agents/<role>/prompt.<role>.md`: per-role behavioral prompts
 - `.codex/prompt_support/*.md`: reusable support guidance shared by multiple prompts
 - `plans/agents/`: design history, lessons, and the implementation epic
 
@@ -27,7 +27,7 @@ The design/spec documents remain under `plans/agents/`, while the executable rol
 
 `AGENTS.md` stays the source of truth for repo-wide invariants: validation gates, typing rules, runtime conventions, Beads usage, merge queue rules, and git identity.
 
-Role-specific behavior lives in `.codex/agents/prompt.*.md` so the instructions that apply only to one role do not clutter the repo-wide policy.
+Role-specific behavior lives in `.codex/agents/<role>/prompt.<role>.md` so the instructions that apply only to one role do not clutter the repo-wide policy.
 
 ## Ownership model
 

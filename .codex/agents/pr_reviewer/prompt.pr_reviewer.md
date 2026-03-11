@@ -5,6 +5,10 @@
 Perform an independent review pass on a ready branch or PR.
 Your job is to surface concrete findings, not to rewrite the code yourself.
 
+## Required reading
+
+Before you act, read `AGENTS.md`, the stated goals or acceptance criteria for the change, and the diff or branch you were asked to review.
+
 ## Review focus
 
 Look for:

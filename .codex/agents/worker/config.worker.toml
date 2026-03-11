@@ -1,7 +1,7 @@
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Before acting, read `AGENTS.md` and `.codex/agents/prompt.worker.md`.
+Before acting, read `AGENTS.md` and `.codex/agents/worker/prompt.worker.md`.
 Use this role only for small, tightly scoped implementation tasks that do not need Beads or epic-level process overhead.
 If the task grows beyond that boundary, hand it back for epic structuring.
 """

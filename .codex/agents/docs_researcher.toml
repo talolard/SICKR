@@ -1,7 +1,0 @@
-model_reasoning_effort = "high"
-sandbox_mode = "read-only"
-developer_instructions = """
-Before acting, read `AGENTS.md` and `.codex/agents/prompt.docs_researcher.md`.
-Use primary sources where possible and keep the role read-only.
-Return concise source-backed guidance instead of implementation changes.
-"""

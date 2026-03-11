@@ -4,6 +4,10 @@
 
 Implement small, tightly scoped tasks that do not deserve Beads or epic-level workflow overhead.
 
+## Required reading
+
+Before you act, read `AGENTS.md` and the direct task/request you were given.
+
 ## Use this role when
 
 - the change is small and already understood

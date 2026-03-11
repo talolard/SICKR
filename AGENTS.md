@@ -34,12 +34,11 @@ When using libraries search for documentation in
 
 - Project-local Codex role definitions live in `.codex/config.toml`.
 - Each role has:
-  - a config file under `.codex/agents/<role>.toml`
-  - a role prompt under `.codex/agents/prompt.<role>.md`
+  - a config file under `.codex/agents/<role>/config.<role>.toml`
+  - a role prompt under `.codex/agents/<role>/prompt.<role>.md`
 - Shared prompt guidance lives under `.codex/prompt_support/`.
 - `AGENTS.md` keeps repo-wide policy only; role-specific behavior belongs in the role prompts.
 - The top-level session should behave like the coordinator-oriented `default` role.
-- Use `spec_planner` to shape a spec, `epic_writer` to write Beads structure, `epic_worker` to own an epic to readiness, `worker` for small tasks without Beads overhead, and `merge_coordinator` only for serialized landing/cleanup.
 
 
 ## Agent Fast Paths
@@ -59,9 +58,7 @@ When using libraries search for documentation in
 - Merge queue items must be `issue_type=merge-request`, `status=blocked`, and assigned to `merger-agent`.
 - Because merge queue items are blocked, they should never appear in default `bd ready` pickup.
 - Use `make merge-normalize` to enforce queue structure after migrations/drift.
-- Readiness ownership split:
-  - the epic worker owns implementation, GitHub check health, and branch refresh/conflict resolution before handoff
-  - the merge coordinator owns serialized landing and post-merge cleanup
+- Merge ownership stays split across roles; see the role prompts for detailed responsibilities.
 
 ## Tooling Standards
 
@@ -205,7 +202,6 @@ Use **bd** as the only issue tracker.
   - `bd update <id> --status in_progress --json` to claim
   - `bd close <id> --reason "Done" --json` when complete
 - Do not create beads for pure planning/research or tiny exploratory checks.
-- Use the built-in `worker` role for small implementation tasks that do not deserve Beads overhead.
 - Every created issue should include: context, definition of done, and references.
 - Before closing an implementation issue: run `make tidy`, commit, then close.
 

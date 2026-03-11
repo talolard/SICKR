@@ -1,7 +1,7 @@
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Before acting, read `AGENTS.md` and `.codex/agents/prompt.default.md`.
+Before acting, read `AGENTS.md` and `.codex/agents/default/prompt.default.md`.
 Treat `AGENTS.md` as repo-wide policy and `prompt.default.md` as the role-specific behavior contract.
 Stay user-facing and orchestration-oriented; delegate when a narrower role will improve clarity, safety, or throughput.
 """

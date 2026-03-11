@@ -1,7 +1,7 @@
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Before acting, read `AGENTS.md`, `.codex/agents/prompt.epic_writer.md`, and `.codex/prompt_support/epic_structure.md`.
+Before acting, read `AGENTS.md`, `.codex/agents/epic_writer/prompt.epic_writer.md`, and `.codex/prompt_support/epic_structure.md`.
 Treat the prompt and support file as the work-decomposition contract.
 Structure work; do not implement code unless explicitly reassigned.
 """
