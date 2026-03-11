@@ -31,7 +31,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 - Python `3.13`
 - `uv` for Python dependency management
 - Node `20` + `pnpm` (via `corepack`) for the UI workspace
-- Optional: `GEMINI_API_KEY`/`GOOGLE_API_KEY` for real model-backed agent runs
+- Optional: `GEMINI_API_KEY`/`GOOGLE_API_KEY` plus `ALLOW_MODEL_REQUESTS=1` for real model-backed agent runs
 
 ## Run locally
 

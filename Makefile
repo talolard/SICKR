@@ -67,7 +67,7 @@ ui-test-e2e-real-ui-smoke:
 		echo "Backend already running at http://$(HOST):$(PORT)"; \
 	else \
 		echo "Backend not running; starting temporary backend on http://$(HOST):$(PORT)"; \
-		uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >/tmp/ikea-agent-ui-smoke-backend.log 2>&1 & \
+		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >/tmp/ikea-agent-ui-smoke-backend.log 2>&1 & \
 		BACKEND_PID=$$!; \
 		BACKEND_STARTED=1; \
 		trap 'if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
