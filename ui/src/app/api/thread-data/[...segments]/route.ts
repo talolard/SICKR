@@ -14,7 +14,7 @@ async function proxyRequest(
 ): Promise<Response> {
   const query = request.nextUrl.search ? request.nextUrl.search : "";
   const upstreamUrl = buildUpstreamUrl(params.segments, query);
-  const body = request.method === "PATCH" ? await request.text() : null;
+  const body = request.method === "GET" ? null : await request.text();
   const upstreamResponse = await fetch(upstreamUrl, {
     method: request.method,
     headers: {
@@ -39,6 +39,13 @@ export async function GET(
 }
 
 export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ segments: string[] }> },
+): Promise<Response> {
+  return await proxyRequest(request, await params);
+}
+
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ segments: string[] }> },
 ): Promise<Response> {

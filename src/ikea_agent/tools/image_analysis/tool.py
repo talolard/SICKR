@@ -25,9 +25,12 @@ from ikea_agent.tools.image_analysis.models import (
     RoomPhotoAnalysisRequest,
     RoomPhotoAnalysisToolResult,
     SegmentationMask,
+    SegmentationQueryResult,
     SegmentationRequest,
     SegmentationToolResult,
 )
+
+BBOX_COORDINATE_COUNT = 4
 
 
 class FalImageAnalysisService:
@@ -155,22 +158,32 @@ class FalImageAnalysisService:
         *,
         prepared: PreparedImage | None = None,
     ) -> SegmentationToolResult:
-        """Run prompt-driven SAM segmentation and persist mask artifacts."""
+        """Run SAM-3 segmentation with one aggregate prompt and persist mask artifacts."""
 
         prepared_image = prepared or await self._core.prepare_image(request.image)
+        effective_prompt, normalized_queries = self._resolve_segmentation_prompt(request)
         payload = await self._core.call_model(
             model_id=SAM_MODEL_ID,
             arguments={
                 "image_url": prepared_image.fal_image_url,
-                "prompt": request.prompt,
+                "prompt": effective_prompt,
                 "return_multiple_masks": request.return_multiple_masks,
-                "mask_limit": request.mask_limit,
-                "keep_model_loaded": request.keep_model_loaded,
+                "max_masks": request.max_masks,
+                "include_scores": request.include_scores,
+                "include_boxes": request.include_boxes,
+                "include_mask_file": request.include_mask_file,
+                "apply_mask": request.apply_mask,
+                "output_format": request.output_format,
+                "sync_mode": request.sync_mode,
             },
             start_timeout=30.0,
             client_timeout=180.0,
         )
-        masks = await self._collect_masks_from_payload(payload=payload, limit=request.mask_limit)
+        masks = await self._collect_masks_from_payload(
+            payload=payload,
+            limit=request.max_masks,
+            query=normalized_queries[0] if len(normalized_queries) == 1 else None,
+        )
         overlay = (
             self._core.create_segmentation_overlay(
                 prepared=prepared_image,
@@ -184,11 +197,17 @@ class FalImageAnalysisService:
         if overlay is not None:
             output_images.insert(0, overlay)
 
+        query_results = self._build_query_results(
+            queries=normalized_queries,
+            matched_mask_count=len(masks),
+        )
         return SegmentationToolResult(
             caption="Segmentation completed for the prompt. Review masks for false positives.",
             images=output_images,
             model_id=SAM_MODEL_ID,
-            prompt=request.prompt,
+            prompt=effective_prompt,
+            queries=normalized_queries,
+            query_results=query_results,
             masks=masks,
             overlay_image=overlay,
         )
@@ -262,7 +281,10 @@ class FalImageAnalysisService:
         *,
         payload: dict[str, Any],
         limit: int,
+        query: str | None,
     ) -> list[SegmentationMask]:
+        scores = self._normalize_scores(payload.get("scores"))
+        boxes = self._normalize_boxes(payload.get("boxes"))
         mask_entries = payload.get("masks")
         masks: list[SegmentationMask] = []
         if isinstance(mask_entries, list):
@@ -277,13 +299,29 @@ class FalImageAnalysisService:
                             fallback_filename=f"segmentation-mask-{index + 1}.png",
                         )
                         label = str(entry.get("label") or entry.get("name") or f"mask-{index + 1}")
-                        masks.append(SegmentationMask(label=label, mask_image=mask_image))
+                        masks.append(
+                            SegmentationMask(
+                                label=label,
+                                query=query,
+                                score=scores[index] if index < len(scores) else None,
+                                bbox_xyxy_px=boxes[index] if index < len(boxes) else None,
+                                mask_image=mask_image,
+                            )
+                        )
                 elif isinstance(entry, str) and entry.startswith("http"):
                     mask_image = await self._core.download_to_attachment(
                         remote_url=entry,
                         fallback_filename=f"segmentation-mask-{index + 1}.png",
                     )
-                    masks.append(SegmentationMask(label=f"mask-{index + 1}", mask_image=mask_image))
+                    masks.append(
+                        SegmentationMask(
+                            label=f"mask-{index + 1}",
+                            query=query,
+                            score=scores[index] if index < len(scores) else None,
+                            bbox_xyxy_px=boxes[index] if index < len(boxes) else None,
+                            mask_image=mask_image,
+                        )
+                    )
         if masks:
             return masks
 
@@ -292,8 +330,102 @@ class FalImageAnalysisService:
                 remote_url=image_url,
                 fallback_filename=f"segmentation-mask-{index + 1}.png",
             )
-            masks.append(SegmentationMask(label=f"mask-{index + 1}", mask_image=mask_image))
+            masks.append(
+                SegmentationMask(
+                    label=f"mask-{index + 1}",
+                    query=query,
+                    score=scores[index] if index < len(scores) else None,
+                    bbox_xyxy_px=boxes[index] if index < len(boxes) else None,
+                    mask_image=mask_image,
+                )
+            )
         return masks
+
+    @staticmethod
+    def _resolve_segmentation_prompt(
+        request: SegmentationRequest,
+    ) -> tuple[str, list[str]]:
+        normalized_queries = [query.strip() for query in request.queries if query.strip()]
+        if request.prompt:
+            prompt = request.prompt.strip()
+            if prompt and prompt not in normalized_queries:
+                normalized_queries.append(prompt)
+        effective_prompt = ", ".join(normalized_queries)
+        return effective_prompt, normalized_queries
+
+    @staticmethod
+    def _normalize_scores(value: object) -> list[float]:
+        if not isinstance(value, list):
+            return []
+        return [float(item) for item in value if isinstance(item, int | float)]
+
+    @staticmethod
+    def _normalize_boxes(value: object) -> list[tuple[int, int, int, int]]:
+        if not isinstance(value, list):
+            return []
+        boxes: list[tuple[int, int, int, int]] = []
+        for item in value:
+            parsed = FalImageAnalysisService._parse_box(item)
+            if parsed is not None:
+                boxes.append(parsed)
+        return boxes
+
+    @staticmethod
+    def _parse_box(value: object) -> tuple[int, int, int, int] | None:
+        if isinstance(value, list) and len(value) == BBOX_COORDINATE_COUNT:
+            if all(isinstance(item, int | float) for item in value):
+                x1, y1, x2, y2 = value
+                return (
+                    round(float(x1)),
+                    round(float(y1)),
+                    round(float(x2)),
+                    round(float(y2)),
+                )
+            return None
+        if not isinstance(value, Mapping):
+            return None
+        if all(isinstance(value.get(key), int | float) for key in ("x1", "y1", "x2", "y2")):
+            return (
+                round(float(value["x1"])),
+                round(float(value["y1"])),
+                round(float(value["x2"])),
+                round(float(value["y2"])),
+            )
+        if all(isinstance(value.get(key), int | float) for key in ("x", "y", "w", "h")):
+            x = float(value["x"])
+            y = float(value["y"])
+            w = float(value["w"])
+            h = float(value["h"])
+            return (
+                round(x),
+                round(y),
+                round(x + w),
+                round(y + h),
+            )
+        return None
+
+    @staticmethod
+    def _build_query_results(
+        *,
+        queries: list[str],
+        matched_mask_count: int,
+    ) -> list[SegmentationQueryResult]:
+        if not queries:
+            return []
+        if matched_mask_count <= 0:
+            status = "no_match"
+        elif len(queries) == 1:
+            status = "matched"
+        else:
+            status = "unattributed"
+        return [
+            SegmentationQueryResult(
+                query=query,
+                status=status,
+                matched_mask_count=matched_mask_count,
+            )
+            for query in queries
+        ]
 
     @staticmethod
     def _extract_named_image_urls(payload: dict[str, Any]) -> dict[str, str]:  # noqa: C901

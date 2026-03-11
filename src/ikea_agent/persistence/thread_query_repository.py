@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from typing import Literal
+from typing import cast as type_cast
+from uuid import uuid4
 
 from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
 from ikea_agent.chat_app.thread_api_models import (
+    AnalysisFeedbackItem,
     AnalysisListItem,
     AssetListItem,
     DetectionListItem,
@@ -19,12 +24,15 @@ from ikea_agent.chat_app.thread_api_models import (
 from ikea_agent.persistence.models import (
     AgentRunRecord,
     AnalysisDetectionRecord,
+    AnalysisFeedbackRecord,
     AnalysisRunRecord,
     AssetRecord,
     FloorPlanRevisionRecord,
     SearchRunRecord,
     ThreadRecord,
 )
+
+AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
 
 
 class ThreadQueryRepository:
@@ -244,6 +252,101 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
+    def list_analysis_feedback(
+        self,
+        *,
+        thread_id: str,
+        analysis_id: str,
+    ) -> list[AnalysisFeedbackItem]:
+        """Return user feedback rows for one analysis within a thread."""
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    AnalysisFeedbackRecord.analysis_feedback_id,
+                    AnalysisFeedbackRecord.analysis_id,
+                    AnalysisFeedbackRecord.thread_id,
+                    AnalysisFeedbackRecord.run_id,
+                    AnalysisFeedbackRecord.feedback_kind,
+                    AnalysisFeedbackRecord.mask_ordinal,
+                    AnalysisFeedbackRecord.mask_label,
+                    AnalysisFeedbackRecord.query_text,
+                    AnalysisFeedbackRecord.note,
+                    cast(AnalysisFeedbackRecord.created_at, String),
+                )
+                .where(AnalysisFeedbackRecord.thread_id == thread_id)
+                .where(AnalysisFeedbackRecord.analysis_id == analysis_id)
+                .order_by(AnalysisFeedbackRecord.created_at.asc())
+            ).all()
+        return [
+            AnalysisFeedbackItem(
+                analysis_feedback_id=str(item.analysis_feedback_id),
+                analysis_id=str(item.analysis_id),
+                thread_id=str(item.thread_id),
+                run_id=str(item.run_id) if item.run_id is not None else None,
+                feedback_kind=_normalize_feedback_kind(item.feedback_kind),
+                mask_ordinal=int(item.mask_ordinal) if item.mask_ordinal is not None else None,
+                mask_label=str(item.mask_label) if item.mask_label is not None else None,
+                query_text=str(item.query_text) if item.query_text is not None else None,
+                note=str(item.note) if item.note is not None else None,
+                created_at=str(item.created_at),
+            )
+            for item in rows
+        ]
+
+    def create_analysis_feedback(
+        self,
+        *,
+        thread_id: str,
+        analysis_id: str,
+        feedback_kind: AnalysisFeedbackKind,
+        mask_ordinal: int | None,
+        mask_label: str | None,
+        query_text: str | None,
+        note: str | None,
+        run_id: str | None,
+    ) -> AnalysisFeedbackItem | None:
+        """Persist one analysis feedback row when the analysis exists for thread."""
+
+        now = datetime.now(UTC)
+        with self._session_factory() as session:
+            analysis_exists = session.execute(
+                select(AnalysisRunRecord.analysis_id)
+                .where(AnalysisRunRecord.thread_id == thread_id)
+                .where(AnalysisRunRecord.analysis_id == analysis_id)
+            ).scalar_one_or_none()
+            if analysis_exists is None:
+                return None
+            persisted_run_id = _resolve_existing_run_id(session=session, run_id=run_id)
+            feedback_id = f"analysis-fbk-{uuid4().hex[:24]}"
+            session.add(
+                AnalysisFeedbackRecord(
+                    analysis_feedback_id=feedback_id,
+                    analysis_id=analysis_id,
+                    thread_id=thread_id,
+                    run_id=persisted_run_id,
+                    feedback_kind=feedback_kind,
+                    mask_ordinal=mask_ordinal,
+                    mask_label=mask_label,
+                    query_text=query_text,
+                    note=note,
+                    created_at=now,
+                )
+            )
+            session.commit()
+            return AnalysisFeedbackItem(
+                analysis_feedback_id=feedback_id,
+                analysis_id=analysis_id,
+                thread_id=thread_id,
+                run_id=persisted_run_id,
+                feedback_kind=feedback_kind,
+                mask_ordinal=mask_ordinal,
+                mask_label=mask_label,
+                query_text=query_text,
+                note=note,
+                created_at=now.isoformat(),
+            )
+
     def list_detections_for_image(
         self,
         *,
@@ -301,6 +404,21 @@ def _count_rows(*, session: Session, statement: Select[tuple[int]]) -> int:
     return int(count_value)
 
 
+def _run_exists(*, session: Session, run_id: str) -> bool:
+    return (
+        session.execute(
+            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
+        ).scalar_one_or_none()
+        is not None
+    )
+
+
+def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
+    if run_id is None:
+        return None
+    return run_id if _run_exists(session=session, run_id=run_id) else None
+
+
 def _as_summary_dict(value: object) -> dict[str, object]:
     if not isinstance(value, str):
         return {}
@@ -308,3 +426,9 @@ def _as_summary_dict(value: object) -> dict[str, object]:
     if not isinstance(loaded, dict):
         return {}
     return {str(key): item for key, item in loaded.items()}
+
+
+def _normalize_feedback_kind(value: object) -> AnalysisFeedbackKind:
+    if value in {"confirm", "reject", "uncertain"}:
+        return type_cast("AnalysisFeedbackKind", value)
+    return "uncertain"

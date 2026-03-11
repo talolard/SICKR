@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -71,6 +73,32 @@ class AnalysisListItem(BaseModel):
     tool_name: str
     input_asset_id: str
     created_at: str | None
+
+
+class AnalysisFeedbackCreateRequest(BaseModel):
+    """Request payload to persist one user feedback decision on an analysis."""
+
+    feedback_kind: Literal["confirm", "reject", "uncertain"]
+    mask_ordinal: int | None = Field(default=None, ge=1)
+    mask_label: str | None = None
+    query_text: str | None = None
+    note: str | None = None
+    run_id: str | None = None
+
+
+class AnalysisFeedbackItem(BaseModel):
+    """One persisted user feedback decision for an analysis entry."""
+
+    analysis_feedback_id: str
+    analysis_id: str
+    thread_id: str
+    run_id: str | None
+    feedback_kind: Literal["confirm", "reject", "uncertain"]
+    mask_ordinal: int | None
+    mask_label: str | None
+    query_text: str | None
+    note: str | None
+    created_at: str
 
 
 class DetectionListItem(BaseModel):

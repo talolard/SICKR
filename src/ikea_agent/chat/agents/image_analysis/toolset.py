@@ -114,7 +114,7 @@ async def segment_image_with_prompt(
     )
     repository = analysis_repository(ctx.deps.runtime)
     if repository is not None:
-        repository.record_analysis(
+        analysis_id = repository.record_analysis(
             tool_name="segment_image_with_prompt",
             thread_id=ctx.deps.state.thread_id or "anonymous-thread",
             run_id=ctx.deps.state.run_id,
@@ -123,6 +123,8 @@ async def segment_image_with_prompt(
             result_json=result.model_dump(mode="json"),
             detections=[],
         )
+        if analysis_id is not None:
+            result = result.model_copy(update={"analysis_id": analysis_id})
     return result
 
 
