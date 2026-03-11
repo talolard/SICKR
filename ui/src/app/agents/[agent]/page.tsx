@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 
@@ -97,29 +97,33 @@ export default function AgentChatPage(): ReactElement {
   useEffect(() => {
     let active = true;
     if (!threadId) {
-      setActiveFloorPlanPreview(null);
-      setBundleProposals([]);
-      setBundleProposalError(null);
-      setIsLoadingBundleProposals(false);
+      startTransition(() => {
+        setBundleProposals([]);
+        setBundleProposalError(null);
+        setIsLoadingBundleProposals(false);
+      });
       return () => {
         active = false;
       };
     }
 
-    setActiveFloorPlanPreview(loadFloorPlanPreview(threadId));
     if (currentAgent !== "search") {
-      setBundleProposals([]);
-      setBundleProposalError(null);
-      setIsLoadingBundleProposals(false);
+      startTransition(() => {
+        setBundleProposals([]);
+        setBundleProposalError(null);
+        setIsLoadingBundleProposals(false);
+      });
       return () => {
         active = false;
       };
     }
 
     const localProposals = loadBundleProposals(threadId);
-    setBundleProposals(localProposals);
-    setBundleProposalError(null);
-    setIsLoadingBundleProposals(true);
+    startTransition(() => {
+      setBundleProposals(localProposals);
+      setBundleProposalError(null);
+      setIsLoadingBundleProposals(true);
+    });
     void listThreadBundleProposals(threadId)
       .then((persistedProposals) => {
         if (!active) {

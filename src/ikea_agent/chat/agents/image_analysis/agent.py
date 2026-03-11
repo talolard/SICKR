@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from google.genai.types import ThinkingLevel
 from pydantic_ai import Agent
-from pydantic_ai.models.google import GoogleModel, GoogleModelSettings, ThinkingConfigDict
-from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.models.google import GoogleModelSettings, ThinkingConfigDict
 
 from ikea_agent.chat.agents.common import AgentPrompt
 from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.image_analysis.toolset import TOOL_NAMES, build_image_analysis_toolset
+from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
 AGENT_NAME = "image_analysis"
@@ -46,10 +45,14 @@ def build_image_analysis_agent(
             thinking_level=ThinkingLevel.HIGH,
         )
     )
-    model = GoogleModel(
-        resolve_model_name(explicit_model=explicit_model),
-        settings=google_model_settings,
-        provider=GoogleProvider(api_key=settings.gemini_api_key or os.getenv("GOOGLE_API_KEY")),
+    model = build_google_or_test_model(
+        settings=settings,
+        model_name=resolve_model_name(explicit_model=explicit_model),
+        google_model_settings=google_model_settings,
+        disabled_reason=(
+            "Live model requests are disabled. "
+            "Set ALLOW_MODEL_REQUESTS=1 and GEMINI_API_KEY/GOOGLE_API_KEY for real responses."
+        ),
     )
     return Agent[ImageAnalysisAgentDeps, str](
         model=model,

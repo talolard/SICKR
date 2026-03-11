@@ -52,7 +52,14 @@ class AppSettings(BaseSettings):
     gemini_generation_model: str = Field(default="gemini-3.1-pro-preview")
     embedding_provider: str = Field(default="google-gla")
     embedding_model_uri: str = Field(default="google-gla:gemini-embedding-001")
-    gemini_api_key: str | None = Field(default=None)
+    gemini_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    )
+    allow_model_requests: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ALLOW_MODEL_REQUESTS", "APP_ALLOW_MODEL_REQUESTS"),
+    )
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     duckdb_path: str = Field(default="data/ikea.duckdb")

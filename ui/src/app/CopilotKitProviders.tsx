@@ -162,7 +162,7 @@ export function CopilotKitProviders({
     <ThreadSessionContext.Provider value={contextValue}>
       <CopilotKit
         key={agentKey}
-        runtimeUrl={`/api/copilotkit?agent=${encodeURIComponent(agentKey)}`}
+        runtimeUrl="/api/copilotkit"
         agent={agentKey}
         {...(threadId ? { threadId } : {})}
       >
