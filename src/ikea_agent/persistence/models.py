@@ -371,6 +371,36 @@ class SearchResultRecord(Base):
     price_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class BundleProposalRecord(Base):
+    """Persisted search bundle proposal payloads keyed by thread and run."""
+
+    __tablename__ = "bundle_proposals"
+    __table_args__ = (
+        Index("ix_bundle_proposals_thread_id", "thread_id"),
+        Index("ix_bundle_proposals_run_id", "run_id"),
+        {"schema": APP_SCHEMA},
+    )
+
+    bundle_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    budget_cap_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bundle_total_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)
+    validations_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 def ensure_persistence_schema(engine: Engine) -> None:
     """Create persistence schema and tables when missing."""
 

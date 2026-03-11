@@ -21,20 +21,27 @@ class _SettingsStub:
     embedding_query_batch_size: int = 16
 
 
+@dataclass(slots=True)
 class _CatalogStub:
+    neighbor_similarity_calls: list[list[str]] = field(default_factory=list)
+
     def read_neighbor_similarities(
         self,
         *,
         embedding_model: str,
         product_keys: list[str],
     ) -> dict[tuple[str, str], float]:
-        _ = (embedding_model, product_keys)
+        _ = embedding_model
+        self.neighbor_similarity_calls.append(product_keys)
         return {}
 
 
-class _RerankerStub:
+@dataclass(slots=True)
+class _RerankerSpy:
+    calls: list[tuple[str, int]] = field(default_factory=list)
+
     def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
-        _ = query_text
+        self.calls.append((query_text, len(results)))
         return [
             RerankedItem(
                 result=result,
@@ -49,7 +56,7 @@ class _RerankerStub:
 @dataclass(frozen=True, slots=True)
 class _RuntimeStub:
     settings: _SettingsStub
-    reranker: _RerankerStub
+    reranker: _RerankerSpy
     catalog_repository: _CatalogStub
 
 
@@ -114,7 +121,7 @@ def _sample_result(
 def _runtime() -> _RuntimeStub:
     return _RuntimeStub(
         settings=_SettingsStub(),
-        reranker=_RerankerStub(),
+        reranker=_RerankerSpy(),
         catalog_repository=_CatalogStub(),
     )
 
@@ -230,6 +237,34 @@ def test_search_pipeline_batch_embeds_queries_in_one_call(
     assert output.queries[0].results[0].product_name == "Desk lamp"
     assert output.queries[1].results[0].product_name == "Reading chair"
     assert search_spy.result_limits == [200, 200]
+
+
+def test_search_pipeline_skips_reranker_for_single_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    search_spy = _SearchCandidatesSpy(responses=[[_sample_result()]])
+    embed_spy = _EmbedQueriesSpy()
+
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+
+    output = asyncio.run(
+        run_search_pipeline_batch(
+            runtime=cast("ChatRuntime", runtime),
+            queries=[
+                SearchQueryInput(
+                    query_id="lighting",
+                    semantic_query="desk lamp",
+                    enable_diversification=True,
+                )
+            ],
+        )
+    )
+
+    assert runtime.reranker.calls == []
+    assert runtime.catalog_repository.neighbor_similarity_calls == []
+    assert output.queries[0].results[0].product_name == "Lamp"
 
 
 def test_search_pipeline_batch_rejects_empty_query_list() -> None:

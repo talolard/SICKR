@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
+    BundleProposalRecord,
     SearchResultRecord,
     SearchRunRecord,
     ensure_persistence_schema,
@@ -14,6 +15,9 @@ from ikea_agent.persistence.models import (
 from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import (
+    BundleProposalLineItem,
+    BundleProposalToolResult,
+    BundleValidationResult,
     DimensionAxisFilter,
     DimensionFilter,
     PriceFilterEUR,
@@ -142,3 +146,139 @@ def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
 
     assert ids[0] == second_id
     assert ids[1] == first_id
+
+
+def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = SearchRepository(session_factory)
+
+    bundle_id = repository.record_bundle_proposal(
+        thread_id="thread-search-order",
+        run_id=None,
+        proposal=BundleProposalToolResult(
+            bundle_id="bundle-1",
+            title="Desk starter bundle",
+            notes="Fits a compact office.",
+            budget_cap_eur=200.0,
+            items=[
+                BundleProposalLineItem(
+                    item_id="chair-1",
+                    product_name="Chair One",
+                    description_text="Desk chair",
+                    price_eur=79.99,
+                    quantity=2,
+                    line_total_eur=159.98,
+                    reason="Matched seating",
+                )
+            ],
+            bundle_total_eur=159.98,
+            validations=[
+                BundleValidationResult(
+                    kind="pricing_complete",
+                    status="pass",
+                    message="All bundle items have prices, so the total is complete.",
+                ),
+                BundleValidationResult(
+                    kind="budget_max_eur",
+                    status="pass",
+                    message="Bundle total €159.98 is within budget cap €200.00.",
+                ),
+            ],
+            created_at="2026-03-11T11:00:00+00:00",
+            run_id=None,
+        ),
+    )
+
+    with session_factory() as session:
+        row = session.execute(
+            select(
+                BundleProposalRecord.thread_id,
+                BundleProposalRecord.title,
+                BundleProposalRecord.items_json,
+                BundleProposalRecord.validations_json,
+            ).where(BundleProposalRecord.bundle_id == bundle_id)
+        ).one()
+
+    listed = repository.list_bundle_proposals(thread_id="thread-search-order")
+    parsed_items = json.loads(row.items_json)
+    parsed_validations = json.loads(row.validations_json)
+
+    assert row.thread_id == "thread-search-order"
+    assert row.title == "Desk starter bundle"
+    assert parsed_items[0]["item_id"] == "chair-1"
+    assert parsed_validations[1]["kind"] == "budget_max_eur"
+    assert listed[0].bundle_id == "bundle-1"
+    assert listed[0].items[0].line_total_eur == 159.98
+
+
+def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = SearchRepository(session_factory)
+
+    first = BundleProposalToolResult(
+        bundle_id="bundle-1",
+        title="Desk setup",
+        notes="Starter bundle",
+        budget_cap_eur=300.0,
+        items=[
+            BundleProposalLineItem(
+                item_id="chair-1",
+                product_name="Desk chair",
+                description_text="Supportive chair",
+                price_eur=99.0,
+                quantity=1,
+                line_total_eur=99.0,
+                reason="Primary seating",
+            )
+        ],
+        bundle_total_eur=99.0,
+        validations=[
+            BundleValidationResult(
+                kind="pricing_complete",
+                status="pass",
+                message="All bundle items have prices, so the total is complete.",
+            )
+        ],
+        created_at="2026-03-11T10:00:00+00:00",
+        run_id=None,
+    )
+    second = BundleProposalToolResult(
+        bundle_id="bundle-2",
+        title="Desk setup v2",
+        notes=None,
+        budget_cap_eur=350.0,
+        items=[
+            BundleProposalLineItem(
+                item_id="chair-2",
+                product_name="Guest chair",
+                description_text=None,
+                price_eur=49.0,
+                quantity=2,
+                line_total_eur=98.0,
+                reason="Guest seating",
+            )
+        ],
+        bundle_total_eur=98.0,
+        validations=[
+            BundleValidationResult(
+                kind="duplicate_items",
+                status="warn",
+                message="Merged 1 repeated product entry into combined quantities.",
+            )
+        ],
+        created_at="2026-03-11T11:00:00+00:00",
+        run_id=None,
+    )
+
+    repository.record_bundle_proposal(thread_id="thread-search", run_id=None, proposal=first)
+    repository.record_bundle_proposal(thread_id="thread-search", run_id=None, proposal=second)
+
+    listed = repository.list_bundle_proposals(thread_id="thread-search")
+
+    assert [item.bundle_id for item in listed] == ["bundle-2", "bundle-1"]
+    assert listed[0].validations[0].kind == "duplicate_items"
+
+    with session_factory() as session:
+        count = session.execute(select(BundleProposalRecord.bundle_id)).all()
+
+    assert len(count) == 2

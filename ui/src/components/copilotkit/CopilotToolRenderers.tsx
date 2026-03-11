@@ -26,7 +26,7 @@ import {
 } from "@/components/tooling/SegmentationToolRenderer";
 import { createAnalysisFeedback } from "@/lib/api/threadDataClient";
 import type { AttachmentRef } from "@/lib/attachments";
-import type { BundleProposal } from "@/lib/bundleProposalsStore";
+import { bundleProposalSchema, type BundleProposal } from "@/lib/bundleProposalsStore";
 import { publishFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
 import {
   buildFloorPlanSnapshot,
@@ -124,34 +124,6 @@ const floorPlanResultSchema = z.object({
     .optional(),
   legend_items: z.array(z.string()).optional(),
 });
-const bundleProposalSchema = z.object({
-  bundle_id: z.string(),
-  title: z.string(),
-  notes: z.string().nullable(),
-  budget_cap_eur: z.number().nullable(),
-  items: z.array(
-    z.object({
-      item_id: z.string(),
-      product_name: z.string(),
-      description_text: z.string().nullable(),
-      price_eur: z.number().nullable(),
-      quantity: z.number(),
-      line_total_eur: z.number().nullable(),
-      reason: z.string(),
-    }),
-  ),
-  bundle_total_eur: z.number().nullable(),
-  validations: z.array(
-    z.object({
-      kind: z.enum(["budget_max_eur"]),
-      status: z.enum(["pass", "fail", "unknown"]),
-      message: z.string(),
-    }),
-  ),
-  created_at: z.string(),
-  run_id: z.string().nullable(),
-});
-
 type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
 
 function parseResult(result: unknown): unknown {

@@ -7,16 +7,20 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import String, cast, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
     AgentRunRecord,
+    BundleProposalRecord,
     SearchResultRecord,
     SearchRunRecord,
     ThreadRecord,
 )
 from ikea_agent.shared.types import (
+    BundleProposalLineItem,
+    BundleProposalToolResult,
+    BundleValidationResult,
     RetrievalFilters,
     SearchResultDiversityWarning,
     ShortRetrievalResult,
@@ -100,6 +104,82 @@ class SearchRepository:
             ).scalars()
             return [str(item) for item in rows]
 
+    def record_bundle_proposal(
+        self,
+        *,
+        thread_id: str,
+        run_id: str | None,
+        proposal: BundleProposalToolResult,
+    ) -> str:
+        """Persist one hydrated bundle proposal for later thread reloads."""
+
+        created_at = datetime.fromisoformat(proposal.created_at)
+        with self._session_factory() as session:
+            self._ensure_thread(session=session, thread_id=thread_id, now=created_at)
+            session.flush()
+
+            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            session.merge(
+                BundleProposalRecord(
+                    bundle_id=proposal.bundle_id,
+                    thread_id=thread_id,
+                    run_id=persisted_run_id,
+                    title=proposal.title,
+                    notes=proposal.notes,
+                    budget_cap_eur=proposal.budget_cap_eur,
+                    bundle_total_eur=proposal.bundle_total_eur,
+                    items_json=json.dumps(
+                        [item.model_dump(mode="json") for item in proposal.items],
+                        sort_keys=True,
+                    ),
+                    validations_json=json.dumps(
+                        [item.model_dump(mode="json") for item in proposal.validations],
+                        sort_keys=True,
+                    ),
+                    created_at=created_at,
+                )
+            )
+            session.commit()
+        return proposal.bundle_id
+
+    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
+        """Return bundle proposals for a thread ordered newest-first."""
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    BundleProposalRecord.bundle_id,
+                    BundleProposalRecord.run_id,
+                    BundleProposalRecord.title,
+                    BundleProposalRecord.notes,
+                    BundleProposalRecord.budget_cap_eur,
+                    BundleProposalRecord.bundle_total_eur,
+                    BundleProposalRecord.items_json,
+                    BundleProposalRecord.validations_json,
+                    cast(BundleProposalRecord.created_at, String),
+                )
+                .where(BundleProposalRecord.thread_id == thread_id)
+                .order_by(BundleProposalRecord.created_at.desc())
+            ).all()
+        return [
+            BundleProposalToolResult(
+                bundle_id=str(item.bundle_id),
+                title=str(item.title),
+                notes=str(item.notes) if item.notes is not None else None,
+                budget_cap_eur=(
+                    float(item.budget_cap_eur) if item.budget_cap_eur is not None else None
+                ),
+                items=_load_bundle_items(item.items_json),
+                bundle_total_eur=(
+                    float(item.bundle_total_eur) if item.bundle_total_eur is not None else None
+                ),
+                validations=_load_bundle_validations(item.validations_json),
+                created_at=str(item.created_at),
+                run_id=str(item.run_id) if item.run_id is not None else None,
+            )
+            for item in rows
+        ]
+
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
         existing_thread_id = session.execute(
@@ -126,3 +206,21 @@ class SearchRepository:
         return session.execute(
             select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
         ).scalar_one_or_none()
+
+
+def _load_bundle_items(raw_items: object) -> list[BundleProposalLineItem]:
+    if not isinstance(raw_items, str):
+        return []
+    loaded = json.loads(raw_items)
+    if not isinstance(loaded, list):
+        return []
+    return [BundleProposalLineItem.model_validate(item) for item in loaded]
+
+
+def _load_bundle_validations(raw_validations: object) -> list[BundleValidationResult]:
+    if not isinstance(raw_validations, str):
+        return []
+    loaded = json.loads(raw_validations)
+    if not isinstance(loaded, list):
+        return []
+    return [BundleValidationResult.model_validate(item) for item in loaded]

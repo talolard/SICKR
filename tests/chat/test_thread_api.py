@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from ikea_agent.persistence.models import (
     AnalysisDetectionRecord,
     AnalysisRunRecord,
     AssetRecord,
+    BundleProposalRecord,
     FloorPlanRevisionRecord,
     Room3DAssetRecord,
     Room3DSnapshotRecord,
@@ -144,6 +146,40 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         )
         session.flush()
         session.add(
+            BundleProposalRecord(
+                bundle_id="bundle-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                title="Desk starter",
+                notes="Persisted bundle proposal",
+                budget_cap_eur=250.0,
+                bundle_total_eur=199.0,
+                items_json=json.dumps(
+                    [
+                        {
+                            "item_id": "prod-1",
+                            "product_name": "PAX",
+                            "description_text": "Slim wardrobe",
+                            "price_eur": 199.0,
+                            "quantity": 1,
+                            "line_total_eur": 199.0,
+                            "reason": "Primary storage",
+                        }
+                    ]
+                ),
+                validations_json=json.dumps(
+                    [
+                        {
+                            "kind": "budget_max_eur",
+                            "status": "pass",
+                            "message": "Bundle total €199.00 is within budget cap €250.00.",
+                        }
+                    ]
+                ),
+                created_at=now,
+            )
+        )
+        session.add(
             SearchResultRecord(
                 search_result_id="search-res-api",
                 search_id="search-api",
@@ -203,6 +239,7 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assets_response = client.get("/api/threads/thread-api/assets")
     revisions_response = client.get("/api/threads/thread-api/floor-plan-revisions")
     analyses_response = client.get("/api/threads/thread-api/analyses")
+    bundle_response = client.get("/api/threads/thread-api/bundle-proposals")
     detections_response = client.get("/api/threads/thread-api/images/asset-api/detections")
     room_assets_response = client.get("/api/threads/thread-api/room-3d-assets")
     room_snapshots_response = client.get("/api/threads/thread-api/room-3d-snapshots")
@@ -241,6 +278,7 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assert assets_response.status_code == 200
     assert revisions_response.status_code == 200
     assert analyses_response.status_code == 200
+    assert bundle_response.status_code == 200
     assert detections_response.status_code == 200
     assert room_assets_response.status_code == 200
     assert room_snapshots_response.status_code == 200
@@ -254,6 +292,9 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assert assets_response.json()[0]["asset_id"] == "asset-api"
     assert revisions_response.json()[0]["floor_plan_revision_id"] == "fprev-api"
     assert analyses_response.json()[0]["analysis_id"] == "analysis-api"
+    assert bundle_response.json()[0]["bundle_id"] == "bundle-api"
+    assert bundle_response.json()[0]["items"][0]["item_id"] == "prod-1"
+    assert bundle_response.json()[0]["validations"][0]["kind"] == "budget_max_eur"
     assert detections_response.json()[0]["analysis_detection_id"] == "det-api"
     assert room_assets_response.json()[0]["room_3d_asset_id"] == "room3d-asset-api"
     assert room_snapshots_response.json()[0]["room_3d_snapshot_id"] == "room3d-snapshot-api"

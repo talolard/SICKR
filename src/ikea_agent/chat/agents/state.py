@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ikea_agent.shared.types import AttachmentRef
+from ikea_agent.shared.types import AttachmentRef, BundleProposalToolResult
 
 
 class Room3DSnapshotCamera(BaseModel):
@@ -51,7 +51,18 @@ class SearchAgentState(CommonAgentState):
     """State for search agent runs."""
 
     room_3d_snapshots: list[Room3DSnapshotContext] = Field(default_factory=list)
-    bundle_proposals: list[dict[str, object]] = Field(default_factory=list)
+    bundle_proposals: list[BundleProposalToolResult] = Field(default_factory=list)
+
+    def append_bundle_proposal(self, proposal: BundleProposalToolResult) -> None:
+        """Append one bundle proposal when it is not already present.
+
+        Search bundle proposals can be replayed across AG-UI rerenders, so the
+        state object owns deduplication by stable `bundle_id`.
+        """
+
+        if any(item.bundle_id == proposal.bundle_id for item in self.bundle_proposals):
+            return
+        self.bundle_proposals.append(proposal)
 
 
 class ImageAnalysisAgentState(CommonAgentState):

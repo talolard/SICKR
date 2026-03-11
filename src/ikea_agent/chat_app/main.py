@@ -75,7 +75,7 @@ from ikea_agent.persistence.run_history_repository import (
     extract_last_user_prompt,
 )
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
-from ikea_agent.shared.types import ImageToolOutput
+from ikea_agent.shared.types import BundleProposalToolResult, ImageToolOutput
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
@@ -577,6 +577,13 @@ def _register_thread_data_routes(  # noqa: C901
     @app.get("/api/threads/{thread_id}/analyses", response_model=list[AnalysisListItem])
     async def list_thread_analyses(thread_id: str) -> list[AnalysisListItem]:
         return thread_query_repository.list_analyses(thread_id=thread_id)
+
+    @app.get(
+        "/api/threads/{thread_id}/bundle-proposals",
+        response_model=list[BundleProposalToolResult],
+    )
+    async def list_thread_bundle_proposals(thread_id: str) -> list[BundleProposalToolResult]:
+        return thread_query_repository.list_bundle_proposals(thread_id=thread_id)
 
     @app.get(
         "/api/threads/{thread_id}/analyses/{analysis_id}/feedback",

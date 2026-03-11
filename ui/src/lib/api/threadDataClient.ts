@@ -1,4 +1,5 @@
 import type { components } from "@/lib/api/generated";
+import type { BundleProposal } from "@/lib/bundleProposalsStore";
 
 export type ThreadDetailItem = components["schemas"]["ThreadDetailItem"];
 export type AssetListItem = components["schemas"]["AssetListItem"];
@@ -50,6 +51,10 @@ export async function getThreadDetail(threadId: string): Promise<ThreadDetailIte
 
 export async function listThreadAssets(threadId: string): Promise<AssetListItem[]> {
   return await readJson<AssetListItem[]>(`/api/thread-data/threads/${threadId}/assets`);
+}
+
+export async function listThreadBundleProposals(threadId: string): Promise<BundleProposal[]> {
+  return await readJson<BundleProposal[]>(`/api/thread-data/threads/${threadId}/bundle-proposals`);
 }
 
 export async function createAnalysisFeedback({
