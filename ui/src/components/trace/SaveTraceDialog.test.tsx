@@ -5,10 +5,12 @@ import { SaveTraceDialog } from "./SaveTraceDialog";
 
 const mocks = vi.hoisted(() => ({
   createTraceReport: vi.fn(),
+  fetchRecentTraceReports: vi.fn(),
 }));
 
 vi.mock("@/lib/api/traceReportsClient", () => ({
   createTraceReport: mocks.createTraceReport,
+  fetchRecentTraceReports: mocks.fetchRecentTraceReports,
 }));
 
 vi.mock("@/lib/feedbackCapture", () => ({
@@ -17,6 +19,8 @@ vi.mock("@/lib/feedbackCapture", () => ({
 
 describe("SaveTraceDialog", () => {
   it("requires a title before saving", async () => {
+    mocks.fetchRecentTraceReports.mockResolvedValueOnce([]);
+
     render(
       <SaveTraceDialog
         open
@@ -31,7 +35,61 @@ describe("SaveTraceDialog", () => {
     expect(await screen.findByText("Title is required.")).toBeInTheDocument();
   });
 
-  it("submits the trace payload and renders success", async () => {
+  it("loads and renders recent traces", async () => {
+    mocks.fetchRecentTraceReports.mockResolvedValueOnce([
+      {
+        trace_id: "trace-1",
+        title: "Recent trace",
+        created_at: "2026-03-11T10:00:00Z",
+        directory: "/tmp/traces/trace-1",
+        markdown_path: "/tmp/traces/trace-1/report.md",
+      },
+    ]);
+
+    render(
+      <SaveTraceDialog
+        open
+        threadId="thread-1"
+        agentName="search"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText(/Recent trace/)).toBeInTheDocument();
+    expect(screen.getByText("/tmp/traces/trace-1")).toBeInTheDocument();
+  });
+
+  it("renders a clearer mismatch diagnostic when trace capture backend is unavailable", async () => {
+    mocks.fetchRecentTraceReports.mockRejectedValueOnce(
+      new Error("Trace capture is unavailable. Enable TRACE_CAPTURE_ENABLED on the backend or hide the UI flag."),
+    );
+
+    render(
+      <SaveTraceDialog
+        open
+        threadId="thread-1"
+        agentName="search"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/frontend trace button is enabled, but the backend trace route is missing/i),
+    ).toBeInTheDocument();
+  });
+
+  it("submits the trace payload and renders success with the saved path", async () => {
+    mocks.fetchRecentTraceReports
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          trace_id: "trace-123",
+          title: "Investigate latency",
+          created_at: "2026-03-11T10:00:00Z",
+          directory: "/tmp/traces/trace-123",
+          markdown_path: "/tmp/traces/trace-123/report.md",
+        },
+      ]);
     mocks.createTraceReport.mockResolvedValueOnce({
       trace_id: "trace-123",
       directory: "/tmp/traces/trace-123",
@@ -68,6 +126,9 @@ describe("SaveTraceDialog", () => {
         }),
       );
     });
-    expect(await screen.findByText(/Saved trace trace-123 and created epic-1/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Saved trace trace-123 and created epic-1/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Saved at \/tmp\/traces\/trace-123/)).toBeInTheDocument();
   });
 });

@@ -547,3 +547,166 @@ def test_trace_report_route_persists_bundle_and_returns_beads_ids(
     markdown = (trace_dir / "report.md").read_text(encoding="utf-8")
     assert "Investigate search latency" in markdown
     assert "trace.json" in markdown
+
+
+def test_trace_report_route_lists_recent_bundles(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _persistence_runtime(tmp_path)
+    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
+    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    first_dir = tmp_path / "traces" / "trace-one"
+    first_dir.mkdir(parents=True)
+    (first_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "trace_id": "trace-one",
+                "title": "First trace",
+                "created_at": "2026-03-11T10:00:00Z",
+                "thread_id": "thread-a",
+                "agent_name": "search",
+            }
+        ),
+        encoding="utf-8",
+    )
+    second_dir = tmp_path / "traces" / "trace-two"
+    second_dir.mkdir(parents=True)
+    (second_dir / "metadata.json").write_text(
+        json.dumps(
+            {
+                "trace_id": "trace-two",
+                "title": "Second trace",
+                "created_at": "2026-03-11T11:00:00Z",
+                "thread_id": "thread-b",
+                "agent_name": "search",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.get("/api/traces/recent?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [trace["trace_id"] for trace in payload["traces"]] == ["trace-two", "trace-one"]
+
+
+def test_trace_report_route_redacts_sensitive_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _persistence_runtime(tmp_path)
+    repository = RunHistoryRepository(runtime.session_factory)
+    repository.record_run_start(
+        thread_id="thread-redact",
+        run_id="run-redact-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="token=secret-token",
+        agui_input_messages_json='[{"role":"user","content":"password hunter2"}]',
+    )
+    repository.record_run_complete(
+        run_id="run-redact-1",
+        pydantic_all_messages_json=b'[{"secret":"api-key-123"}]',
+        pydantic_new_messages_json=b'[{"ok":true}]',
+    )
+    repository.record_run_event_trace(
+        run_id="run-redact-1",
+        agui_event_trace_json='[{"type":"RUN_FINISHED","payload":{"authorization":"Bearer abc"}}]',
+    )
+
+    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
+    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
+    monkeypatch.setattr(
+        BeadsTraceIssueCreator,
+        "create_trace_epic_and_task",
+        lambda *_args, **_kwargs: BeadsTraceIssueResult(
+            epic_id="trace-epic-1", task_id="trace-epic-1.1"
+        ),
+    )
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.post(
+        "/api/traces",
+        json={
+            "title": "Investigate redaction",
+            "thread_id": "thread-redact",
+            "agent_name": "search",
+            "include_console_log": True,
+            "console_log": '[{"token":"abc123"}]',
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    trace_dir = Path(payload["directory"])
+    trace_json = (trace_dir / "trace.json").read_text(encoding="utf-8")
+    console_json = (trace_dir / "console_log.json").read_text(encoding="utf-8")
+
+    assert "secret-token" not in trace_json
+    assert "hunter2" not in trace_json
+    assert "api-key-123" not in trace_json
+    assert "Bearer abc" not in trace_json
+    assert "abc123" not in console_json
+    assert "[REDACTED]" in trace_json
+    assert "[REDACTED]" in console_json
+
+
+def test_trace_report_route_returns_partial_success_when_beads_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _persistence_runtime(tmp_path)
+    repository = RunHistoryRepository(runtime.session_factory)
+    repository.record_run_start(
+        thread_id="thread-partial",
+        run_id="run-partial-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="Need a lamp.",
+        agui_input_messages_json='[{"role":"user","content":"Need a lamp."}]',
+    )
+    repository.record_run_complete(
+        run_id="run-partial-1",
+        pydantic_all_messages_json=b'[{"kind":"request","text":"Need a lamp."}]',
+        pydantic_new_messages_json=b'[{"kind":"response","text":"Here is a lamp."}]',
+    )
+    repository.record_run_event_trace(
+        run_id="run-partial-1",
+        agui_event_trace_json='[{"type":"RUN_STARTED"},{"type":"RUN_FINISHED"}]',
+    )
+
+    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
+    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
+
+    def _raise_beads_failure(*_args: object, **_kwargs: object) -> BeadsTraceIssueResult:
+        raise RuntimeError("bd create failed")
+
+    monkeypatch.setattr(
+        BeadsTraceIssueCreator,
+        "create_trace_epic_and_task",
+        _raise_beads_failure,
+    )
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.post(
+        "/api/traces",
+        json={
+            "title": "Investigate partial success",
+            "thread_id": "thread-partial",
+            "agent_name": "search",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "saved_without_beads"
+    assert payload["beads_epic_id"] is None
+    assert payload["beads_task_id"] is None
+    trace_dir = Path(payload["directory"])
+    assert (trace_dir / "metadata.json").exists()
+    assert (trace_dir / "trace.json").exists()
+    assert (trace_dir / "report.md").exists()
