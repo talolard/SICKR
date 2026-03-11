@@ -3,21 +3,26 @@ import { render, screen } from "@testing-library/react";
 import { DefaultToolCallRenderer } from "./DefaultToolCallRenderer";
 
 describe("DefaultToolCallRenderer", () => {
-  it("renders run_search_graph result counts from results payload", () => {
+  it("renders run_search_graph result counts from batched results payload", () => {
     render(
       <DefaultToolCallRenderer
         name="run_search_graph"
         status="complete"
         result={{
-          results: [
-            { product_id: "a", product_name: "A" },
-            { product_id: "b", product_name: "B" },
+          queries: [
+            {
+              query_id: "a",
+              semantic_query: "corner shelf",
+              results: [
+                { product_id: "a", product_name: "A" },
+                { product_id: "b", product_name: "B" },
+              ],
+            },
           ],
-          total_candidates: 2,
-          returned_count: 2,
-          warning: null,
         }}
-        args={{ semantic_query: "corner shelf" }}
+        args={{
+          queries: [{ query_id: "a", semantic_query: "corner shelf" }],
+        }}
         errorMessage={undefined}
       />,
     );
@@ -25,13 +30,18 @@ describe("DefaultToolCallRenderer", () => {
     expect(screen.getByText("Result count: 2")).toBeInTheDocument();
   });
 
-  it("renders tool results for a successful call", () => {
+  it("renders tool results for a successful batched call", () => {
     render(
       <DefaultToolCallRenderer
         name="run_search_graph"
         status="complete"
         result={{ products: [{ id: "a" }, { id: "b" }] }}
-        args={{ semantic_query: "low light hallway plants" }}
+        args={{
+          queries: [
+            { query_id: "lighting", semantic_query: "low light hallway plants" },
+            { query_id: "storage", semantic_query: "narrow shelves" },
+          ],
+        }}
         errorMessage={undefined}
       />,
     );
@@ -41,7 +51,7 @@ describe("DefaultToolCallRenderer", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Status: complete")).toBeInTheDocument();
     expect(
-      screen.getByText("Search query: low light hallway plants"),
+      screen.getByText("Search queries: low light hallway plants · narrow shelves"),
     ).toBeInTheDocument();
     expect(screen.getByText("Result count: 2")).toBeInTheDocument();
   });

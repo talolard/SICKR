@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterable, Awaitable, Callable
 from dataclasses import asdict
 from logging import getLogger
 from pathlib import Path
@@ -11,7 +11,7 @@ from typing import Protocol, cast
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
 from starlette.types import ASGIApp
@@ -59,8 +59,12 @@ from ikea_agent.chat_app.thread_api_models import (
     ThreadDetailItem,
     ThreadListItem,
     ThreadTitleUpdateRequest,
+    TraceReportCreateRequest,
+    TraceReportCreateResponse,
 )
+from ikea_agent.chat_app.trace_reports import TraceReportInput, TraceReportWriter
 from ikea_agent.config import get_settings
+from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
@@ -85,6 +89,83 @@ class _ArchivedMessagesResult(Protocol):
     def all_messages_json(self) -> bytes: ...
 
     def new_messages_json(self) -> bytes: ...
+
+
+def _iter_sse_blocks(raw_stream: bytes) -> list[str]:
+    decoded = raw_stream.decode("utf-8", errors="replace")
+    return [block for block in decoded.split("\n\n") if block.strip()]
+
+
+def _parse_sse_payload(raw_data: str) -> object:
+    if not raw_data:
+        return {}
+    try:
+        return json.loads(raw_data)
+    except json.JSONDecodeError:
+        return raw_data
+
+
+def _parse_sse_block(block: str) -> tuple[str | None, object]:
+    event_name: str | None = None
+    data_parts: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("event: "):
+            event_name = line.removeprefix("event: ").strip()
+        elif line.startswith("data: "):
+            data_parts.append(line.removeprefix("data: "))
+    raw_data = "\n".join(data_parts).strip()
+    return event_name, _parse_sse_payload(raw_data)
+
+
+def _build_trace_entry(
+    *,
+    agent_name: str,
+    thread_id: str,
+    run_id: str,
+    index: int,
+    event_name: str | None,
+    parsed_data: object,
+) -> dict[str, object]:
+    event_type = event_name or "message"
+    timestamp: int | None = None
+    if isinstance(parsed_data, dict):
+        event_type = str(parsed_data.get("type") or event_type)
+        timestamp_obj = parsed_data.get("timestamp")
+        if isinstance(timestamp_obj, int):
+            timestamp = timestamp_obj
+    return {
+        "id": f"agent_{agent_name}:{index}",
+        "agentId": f"agent_{agent_name}",
+        "threadId": thread_id,
+        "runId": run_id,
+        "type": event_type,
+        "timestamp": timestamp,
+        "payload": parsed_data,
+    }
+
+
+def _serialize_agui_event_trace(
+    *,
+    raw_stream: bytes,
+    agent_name: str,
+    thread_id: str,
+    run_id: str,
+) -> str:
+    """Normalize one outbound AG-UI SSE stream into canonical JSON events."""
+
+    entries = [
+        _build_trace_entry(
+            agent_name=agent_name,
+            thread_id=thread_id,
+            run_id=run_id,
+            index=index,
+            event_name=event_name,
+            parsed_data=parsed_data,
+        )
+        for index, block in enumerate(_iter_sse_blocks(raw_stream), start=1)
+        for event_name, parsed_data in [_parse_sse_block(block)]
+    ]
+    return json.dumps(entries, ensure_ascii=True)
 
 
 def _build_attachment_store(
@@ -211,6 +292,73 @@ def _register_comment_routes(
             directory=result.directory,
             markdown_path=result.markdown_path,
             saved_images_count=result.saved_images_count,
+        )
+
+
+def _register_trace_routes(
+    app: FastAPI,
+    *,
+    trace_writer: TraceReportWriter,
+    beads_creator: BeadsTraceIssueCreator,
+    run_history_repository: RunHistoryRepository,
+) -> None:
+    @app.post("/api/traces", response_model=TraceReportCreateResponse)
+    async def create_trace_report(payload: TraceReportCreateRequest) -> TraceReportCreateResponse:
+        """Persist one current-thread trace report and create Beads triage work."""
+
+        normalized_title = payload.title.strip()
+        if not normalized_title:
+            raise HTTPException(status_code=422, detail="Trace title must not be blank.")
+
+        history = run_history_repository.list_thread_run_history(
+            thread_id=payload.thread_id,
+            agent_name=payload.agent_name,
+        )
+        if not history:
+            raise HTTPException(
+                status_code=404, detail="No archived runs found for that thread/agent."
+            )
+
+        result = trace_writer.write_bundle(
+            TraceReportInput(
+                title=normalized_title,
+                description=payload.description.strip() if payload.description else None,
+                page_url=payload.page_url,
+                thread_id=payload.thread_id,
+                agent_name=payload.agent_name,
+                user_agent=payload.user_agent,
+                console_log_json=payload.console_log if payload.include_console_log else None,
+                run_history=history,
+            )
+        )
+
+        try:
+            beads_result = beads_creator.create_trace_epic_and_task(
+                title=normalized_title,
+                description=payload.description.strip() if payload.description else None,
+                trace_directory=result.directory,
+                trace_json_path=result.trace_json_path,
+                thread_id=payload.thread_id,
+                agent_name=payload.agent_name,
+            )
+        except Exception:
+            logger.exception("trace_report_beads_create_failed")
+            return TraceReportCreateResponse(
+                trace_id=result.trace_id,
+                directory=result.directory,
+                trace_json_path=result.trace_json_path,
+                markdown_path=result.markdown_path,
+                status="saved_without_beads",
+            )
+
+        return TraceReportCreateResponse(
+            trace_id=result.trace_id,
+            directory=result.directory,
+            trace_json_path=result.trace_json_path,
+            markdown_path=result.markdown_path,
+            beads_epic_id=beads_result.epic_id,
+            beads_task_id=beads_result.task_id,
+            status="saved_and_linked",
         )
 
 
@@ -587,7 +735,11 @@ def _register_ag_ui_routes(  # noqa: C901
     deps_by_agent: dict[str, AnyAgentDeps],
     run_history_repository: RunHistoryRepository | None,
 ) -> None:
-    async def _parse_and_record_run_context(request: Request) -> tuple[bytes, str, str]:
+    async def _parse_and_record_run_context(
+        request: Request,
+        *,
+        agent_name: str,
+    ) -> tuple[bytes, str, str]:
         body = await request.body()
         run_id = f"agui-{uuid4().hex[:16]}"
         thread_id = "anonymous-thread"
@@ -606,6 +758,7 @@ def _register_ag_ui_routes(  # noqa: C901
                 run_history_repository.record_run_start(
                     thread_id=thread_id,
                     run_id=run_id,
+                    agent_name=agent_name,
                     parent_run_id=parent_run_id_value,
                     user_prompt_text=user_prompt_text,
                     agui_input_messages_json=json.dumps(messages),
@@ -634,7 +787,10 @@ def _register_ag_ui_routes(  # noqa: C901
         if agent is None or deps is None:
             raise HTTPException(status_code=404, detail=f"Unknown agent `{agent_name}`.")
 
-        _body, run_id, thread_id = await _parse_and_record_run_context(request)
+        _body, run_id, thread_id = await _parse_and_record_run_context(
+            request,
+            agent_name=agent_name,
+        )
         deps.state.thread_id = thread_id
         deps.state.run_id = run_id
         on_complete = _build_on_complete(run_id)
@@ -643,11 +799,53 @@ def _register_ag_ui_routes(  # noqa: C901
                 thread_id=deps.state.thread_id or "anonymous-thread",
                 run_id=deps.state.run_id,
             ):
-                return await handle_ag_ui_request(
+                response = await handle_ag_ui_request(
                     agent,
                     request,
                     deps=deps,
                     on_complete=on_complete,
+                )
+                if (
+                    run_history_repository is None
+                    or not response.headers.get("content-type", "").startswith("text/event-stream")
+                    or not hasattr(response, "body_iterator")
+                ):
+                    return response
+
+                history_repository = run_history_repository
+                body_iterator = cast("AsyncIterable[bytes]", response.body_iterator)
+                captured_chunks: list[bytes] = []
+
+                async def _capture_body() -> AsyncIterable[bytes]:
+                    try:
+                        async for chunk in body_iterator:
+                            chunk_bytes = (
+                                chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8")
+                            )
+                            captured_chunks.append(chunk_bytes)
+                            yield chunk
+                    finally:
+                        history_repository.record_run_event_trace(
+                            run_id=run_id,
+                            agui_event_trace_json=_serialize_agui_event_trace(
+                                raw_stream=b"".join(captured_chunks),
+                                agent_name=agent_name,
+                                thread_id=thread_id,
+                                run_id=run_id,
+                            ),
+                        )
+
+                headers = {
+                    key: value
+                    for key, value in response.headers.items()
+                    if key.lower() != "content-length"
+                }
+                return StreamingResponse(
+                    _capture_body(),
+                    status_code=response.status_code,
+                    headers=headers,
+                    media_type=response.media_type,
+                    background=response.background,
                 )
         except Exception as exc:
             if run_history_repository is not None:
@@ -744,6 +942,8 @@ def create_app(
         asset_repository=asset_repository,
     )
     feedback_writer = CommentBundleWriter(root_dir=Path(settings.feedback_root_dir))
+    trace_writer = TraceReportWriter(root_dir=Path(settings.trace_root_dir))
+    beads_creator = BeadsTraceIssueCreator(repo_root=Path.cwd())
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -767,6 +967,13 @@ def create_app(
         attachment_store=attachment_store,
         run_history_repository=run_history_repository,
     )
+    if settings.trace_capture_enabled and run_history_repository is not None:
+        _register_trace_routes(
+            app,
+            trace_writer=trace_writer,
+            beads_creator=beads_creator,
+            run_history_repository=run_history_repository,
+        )
     _register_agent_catalog_routes(app)
     _register_generated_image_routes(app, attachment_store)
     _register_openusd_routes(

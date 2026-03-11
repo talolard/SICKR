@@ -135,6 +135,58 @@ class CatalogRepository:
             lookup[(source_key, neighbor_key)] = similarity
         return lookup
 
+    def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
+        """Return one typed product row by canonical product key."""
+
+        if not product_key:
+            return None
+        with self._engine.connect() as connection:
+            row = connection.exec_driver_sql(
+                """
+                SELECT
+                    c.canonical_product_key,
+                    c.product_name,
+                    c.product_type,
+                    c.description_text,
+                    e.embedded_text,
+                    c.main_category,
+                    c.sub_category,
+                    c.dimensions_text,
+                    c.width_cm,
+                    c.depth_cm,
+                    c.height_cm,
+                    c.price_eur,
+                    c.url
+                FROM app.products_canonical AS c
+                LEFT JOIN app.product_embeddings AS e
+                  ON e.canonical_product_key = c.canonical_product_key
+                WHERE c.country = 'Germany'
+                  AND c.canonical_product_key = ?
+                LIMIT 1
+                """,
+                (product_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RetrievalResult(
+            canonical_product_key=str(row[0]),
+            product_name=str(row[1]),
+            product_type=_str_or_none(row[2]),
+            description_text=_str_or_none(row[3]),
+            embedding_text=_format_embedding_text(row[4]),
+            main_category=_str_or_none(row[5]),
+            sub_category=_str_or_none(row[6]),
+            dimensions_text=_str_or_none(row[7]),
+            width_cm=_float_or_none(row[8]),
+            depth_cm=_float_or_none(row[9]),
+            height_cm=_float_or_none(row[10]),
+            price_eur=_float_or_none(row[11]),
+            url=_str_or_none(row[12]),
+            semantic_score=0.0,
+            filter_pass_reasons=("product_lookup",),
+            rank_explanation="product lookup by canonical key",
+        )
+
 
 class EmbeddingSnapshotRepository:
     """Load embedding snapshot rows for external Milvus hydration scripts."""

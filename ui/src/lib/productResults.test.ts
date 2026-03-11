@@ -11,6 +11,27 @@ describe("parseProductResults", () => {
     expect(parsed).toEqual([{ id: "prod-1", name: "BRIMNES Wardrobe" }]);
   });
 
+  it("parses batched run_search_graph result payloads", () => {
+    const parsed = parseProductResults({
+      queries: [
+        {
+          query_id: "storage",
+          semantic_query: "narrow wardrobe",
+          results: [{ product_id: "prod-1", product_name: "BRIMNES Wardrobe" }],
+        },
+        {
+          query_id: "lighting",
+          semantic_query: "bedside lamp",
+          results: [{ product_id: "prod-2", product_name: "HEKTAR Lamp" }],
+        },
+      ],
+    });
+    expect(parsed).toEqual([
+      { id: "prod-1", name: "BRIMNES Wardrobe" },
+      { id: "prod-2", name: "HEKTAR Lamp" },
+    ]);
+  });
+
   it("parses empty run_search_graph result payloads", () => {
     const parsed = parseProductResults({
       results: [],

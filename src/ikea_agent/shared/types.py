@@ -150,6 +150,84 @@ class SearchGraphToolResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SearchQueryInput:
+    """One query object consumed by the batched search tool."""
+
+    query_id: str
+    semantic_query: str
+    limit: int = 20
+    candidate_pool_limit: int | None = None
+    filters: RetrievalFilters = RetrievalFilters()
+    enable_diversification: bool = True
+    purpose: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchQueryToolResult:
+    """Structured output for one query inside a batched search tool call."""
+
+    query_id: str
+    semantic_query: str
+    results: list[ShortRetrievalResult]
+    total_candidates: int
+    returned_count: int
+    warning: SearchResultDiversityWarning | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchBatchToolResult:
+    """Structured output returned by batched `run_search_graph` calls."""
+
+    queries: list[SearchQueryToolResult]
+
+
+@dataclass(frozen=True, slots=True)
+class BundleProposalItemInput:
+    """One requested bundle line before catalog hydration."""
+
+    item_id: str
+    quantity: int
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class BundleValidationResult:
+    """Validation outcome for a proposed bundle."""
+
+    kind: Literal["budget_max_eur"]
+    status: Literal["pass", "fail", "unknown"]
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class BundleProposalLineItem:
+    """Hydrated line item returned for one bundle proposal."""
+
+    item_id: str
+    product_name: str
+    description_text: str | None
+    price_eur: float | None
+    quantity: int
+    line_total_eur: float | None
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class BundleProposalToolResult:
+    """Structured bundle payload rendered outside the chat transcript."""
+
+    bundle_id: str
+    title: str
+    notes: str | None
+    budget_cap_eur: float | None
+    items: list[BundleProposalLineItem]
+    bundle_total_eur: float | None
+    validations: list[BundleValidationResult]
+    created_at: str
+    run_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class AttachmentRef:
     """Attachment pointer passed between upload UX, agent inputs, and tool outputs."""
 

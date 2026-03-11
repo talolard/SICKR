@@ -2,16 +2,26 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactElement } from "react";
 import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 
 import { useThreadSession } from "@/app/CopilotKitProviders";
+import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
 import { AgentImageAttachmentPanel } from "@/components/attachments/AgentImageAttachmentPanel";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
-import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
+import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
+import { SaveTraceButton } from "@/components/trace/SaveTraceButton";
+import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
 import type { AttachmentRef } from "@/lib/attachments";
+import {
+  appendBundleProposal,
+  type BundleProposal,
+  loadBundleProposals,
+} from "@/lib/bundleProposalsStore";
+import { startFeedbackCapture } from "@/lib/feedbackCapture";
 import {
   type FloorPlanPreviewState,
   loadFloorPlanPreview,
@@ -24,6 +34,8 @@ import {
   type AgentMetadata,
 } from "@/lib/agents";
 
+const traceCaptureEnabled = process.env.NEXT_PUBLIC_TRACE_CAPTURE_ENABLED === "1";
+
 function resolveAttachmentUri(uri: string): string {
   if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
     return uri;
@@ -34,7 +46,7 @@ function resolveAttachmentUri(uri: string): string {
   return `/attachments/${uri.replace(/^\/+/, "")}`;
 }
 
-export default function AgentChatPage(): React.ReactElement {
+export default function AgentChatPage(): ReactElement {
   const params = useParams<{ agent: string }>();
   const router = useRouter();
   const currentAgent = params.agent;
@@ -46,6 +58,12 @@ export default function AgentChatPage(): React.ReactElement {
   const [error, setError] = useState<string>("");
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
+  const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
+  const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    startFeedbackCapture();
+  }, []);
 
   useEffect(() => {
     void fetchAgents()
@@ -70,9 +88,18 @@ export default function AgentChatPage(): React.ReactElement {
 
   useEffect(() => {
     if (!threadId) {
+      setFloorPlanPreview(null);
+      setBundleProposals([]);
       return;
     }
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
+    setBundleProposals(currentAgent === "search" ? loadBundleProposals(threadId) : []);
+  }, [currentAgent, threadId]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
     const attachmentsForAgent = currentAgent === "image_analysis" ? imageAttachments : [];
     const previousState =
       typeof agent.state === "object" && agent.state !== null
@@ -83,8 +110,9 @@ export default function AgentChatPage(): React.ReactElement {
       session_id: threadId,
       thread_id: threadId,
       attachments: attachmentsForAgent,
+      bundle_proposals: currentAgent === "search" ? bundleProposals : [],
     });
-  }, [agent, currentAgent, imageAttachments, threadId]);
+  }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
 
   const selected = useMemo(() => {
     return agents.find((item) => item.name === currentAgent) ?? null;
@@ -120,7 +148,7 @@ export default function AgentChatPage(): React.ReactElement {
           <header className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-gray-900">{currentAgent}</h2>
             <p className="text-sm text-gray-600">{selected?.description ?? "Agent chat and tool-call stream."}</p>
-            <div className="mt-2 flex items-end gap-2">
+            <div className="mt-2 flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs text-gray-600">
                 Thread
                 <select
@@ -145,6 +173,13 @@ export default function AgentChatPage(): React.ReactElement {
               >
                 New thread
               </button>
+              {traceCaptureEnabled && threadId ? (
+                <SaveTraceButton
+                  onClick={() => {
+                    setIsTraceDialogOpen(true);
+                  }}
+                />
+              ) : null}
             </div>
             {warning ? (
               <div className="mt-1 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
@@ -163,25 +198,57 @@ export default function AgentChatPage(): React.ReactElement {
               />
             ) : null}
           </header>
-          <CopilotToolRenderers
-            threadId={threadId}
-            onFloorPlanRendered={(snapshot) => {
-              const resolvedImages = snapshot.images.map((image) => ({
-                ...image,
-                uri: resolveAttachmentUri(image.uri),
-              }));
-              const nextSnapshot: FloorPlanPreviewState = {
-                ...snapshot,
-                threadId: threadId ?? "pending",
-                images: resolvedImages,
-              };
-              setFloorPlanPreview(nextSnapshot);
-              if (threadId) {
-                saveFloorPlanPreview(nextSnapshot);
-              }
-            }}
-          />
-          <CopilotSidebar />
+          <div
+            className={
+              currentAgent === "search"
+                ? "grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]"
+                : "flex flex-1 flex-col gap-3"
+            }
+          >
+            <section className="flex min-h-0 flex-col gap-3">
+              <CopilotToolRenderers
+                threadId={threadId}
+                onBundleProposed={(proposal) => {
+                  if (!threadId) {
+                    setBundleProposals((current) =>
+                      current.some((item) => item.bundle_id === proposal.bundle_id)
+                        ? current
+                        : [proposal, ...current],
+                    );
+                    return;
+                  }
+                  setBundleProposals(appendBundleProposal(threadId, proposal));
+                }}
+                onFloorPlanRendered={(snapshot) => {
+                  const resolvedImages = snapshot.images.map((image) => ({
+                    ...image,
+                    uri: resolveAttachmentUri(image.uri),
+                  }));
+                  const nextSnapshot: FloorPlanPreviewState = {
+                    ...snapshot,
+                    threadId: threadId ?? "pending",
+                    images: resolvedImages,
+                  };
+                  setFloorPlanPreview(nextSnapshot);
+                  if (threadId) {
+                    saveFloorPlanPreview(nextSnapshot);
+                  }
+                }}
+              />
+              <CopilotSidebar />
+            </section>
+            {currentAgent === "search" ? <SearchBundlePanel proposals={bundleProposals} /> : null}
+          </div>
+          {traceCaptureEnabled && threadId ? (
+            <SaveTraceDialog
+              agentName={currentAgent}
+              onClose={() => {
+                setIsTraceDialogOpen(false);
+              }}
+              open={isTraceDialogOpen}
+              threadId={threadId}
+            />
+          ) : null}
         </section>
       </section>
     </main>
