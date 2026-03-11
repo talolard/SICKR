@@ -126,6 +126,7 @@ export function FloorPlanPreviewPanel({
 
       {activeTab === "2d" ? (
         <div className="mt-3 flex h-[76vh] items-center justify-center rounded border bg-gray-50 p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Floor plan previews can be local data/blob URIs. */}
           <img
             alt="Latest floor plan"
             className="h-full w-full object-contain"
@@ -231,6 +232,7 @@ export function FloorPlanPreviewPanel({
             className="max-w-[90vw] rounded bg-white p-4 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element -- Modal keeps original image bytes for export/debug parity. */}
             <img alt="Floor plan full view" className="max-h-[82vh] max-w-[88vw]" src={selectedUri} />
             <div className="mt-3 flex justify-end">
               <button

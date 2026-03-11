@@ -7,7 +7,7 @@
     "dev:mock": "NEXT_PUBLIC_USE_MOCK_AGENT=1 next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

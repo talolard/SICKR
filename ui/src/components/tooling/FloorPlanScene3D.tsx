@@ -2,7 +2,7 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { ElementRef, MutableRefObject, ReactElement } from "react";
 import {
   CanvasTexture,
@@ -166,7 +166,7 @@ function WallWithOpenings({ wall, wallTexture }: { wall: Wall3D; wallTexture: Te
 function RoomScene({ geometry }: { geometry: SceneGeometry }): ReactElement {
   const lightFixtures = geometry.fixtures.filter((fixture) => fixture.kind === "light");
   const socketFixtures = geometry.fixtures.filter((fixture) => fixture.kind === "socket");
-  const textures = useMemo(createSceneTextures, []);
+  const textures = useMemo(() => createSceneTextures(), []);
 
   return (
     <>
@@ -271,8 +271,10 @@ function CaptureBridge({
   cameraRef: MutableRefObject<PerspectiveCamera | null>;
 }): null {
   const { gl, camera } = useThree();
-  glRef.current = gl;
-  cameraRef.current = camera as PerspectiveCamera;
+  useEffect(() => {
+    glRef.current = gl;
+    cameraRef.current = camera as PerspectiveCamera;
+  }, [camera, cameraRef, gl, glRef]);
   return null;
 }
 
