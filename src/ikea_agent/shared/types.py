@@ -1,9 +1,16 @@
-"""Typed contracts for retrieval and chat runtime workflows."""
+"""Typed contracts for retrieval and chat runtime workflows.
+
+The retrieval layer mostly uses lightweight frozen dataclasses, while tool-facing
+bundle payloads use Pydantic models so they can flow through agent state,
+runtime persistence, and FastAPI responses without losing validation.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 MarketCode = Literal["DE"]
 EmbeddingProvider = Literal["pydantic_ai_google"]
@@ -181,40 +188,56 @@ class SearchBatchToolResult:
     queries: list[SearchQueryToolResult]
 
 
-@dataclass(frozen=True, slots=True)
-class BundleProposalItemInput:
-    """One requested bundle line before catalog hydration."""
+BundleValidationKind = Literal[
+    "budget_max_eur",
+    "pricing_complete",
+    "duplicate_items",
+]
+BundleValidationStatus = Literal["pass", "warn", "fail", "unknown"]
+
+
+class BundleProposalItemInput(BaseModel):
+    """One requested bundle line before catalog hydration.
+
+    This is a tool input model, so we keep validation close to the boundary and
+    reject impossible quantities before catalog hydration begins.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     item_id: str
-    quantity: int
+    quantity: int = Field(ge=1)
     reason: str
 
 
-@dataclass(frozen=True, slots=True)
-class BundleValidationResult:
+class BundleValidationResult(BaseModel):
     """Validation outcome for a proposed bundle."""
 
-    kind: Literal["budget_max_eur"]
-    status: Literal["pass", "fail", "unknown"]
+    model_config = ConfigDict(extra="forbid")
+
+    kind: BundleValidationKind
+    status: BundleValidationStatus
     message: str
 
 
-@dataclass(frozen=True, slots=True)
-class BundleProposalLineItem:
+class BundleProposalLineItem(BaseModel):
     """Hydrated line item returned for one bundle proposal."""
+
+    model_config = ConfigDict(extra="forbid")
 
     item_id: str
     product_name: str
     description_text: str | None
     price_eur: float | None
-    quantity: int
+    quantity: int = Field(ge=1)
     line_total_eur: float | None
     reason: str
 
 
-@dataclass(frozen=True, slots=True)
-class BundleProposalToolResult:
+class BundleProposalToolResult(BaseModel):
     """Structured bundle payload rendered outside the chat transcript."""
+
+    model_config = ConfigDict(extra="forbid")
 
     bundle_id: str
     title: str

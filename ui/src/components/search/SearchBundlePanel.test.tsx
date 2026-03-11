@@ -10,7 +10,7 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByText(/will appear here/i)).toBeInTheDocument();
   });
 
-  it("renders bundle proposals with totals and reasons", () => {
+  it("renders bundle proposals with validator surfacing and totals", () => {
     render(
       <SearchBundlePanel
         proposals={[
@@ -33,6 +33,16 @@ describe("SearchBundlePanel", () => {
             bundle_total_eur: 159.98,
             validations: [
               {
+                kind: "pricing_complete",
+                status: "pass",
+                message: "All bundle items have prices, so the total is complete.",
+              },
+              {
+                kind: "duplicate_items",
+                status: "warn",
+                message: "Merged 1 repeated product entry into combined quantities.",
+              },
+              {
                 kind: "budget_max_eur",
                 status: "pass",
                 message: "Bundle total €159.98 is within budget cap €200.00.",
@@ -47,8 +57,12 @@ describe("SearchBundlePanel", () => {
 
     expect(screen.getByText("Desk setup")).toBeInTheDocument();
     expect(screen.getByText("Balanced for reading and writing.")).toBeInTheDocument();
+    expect(screen.getByText("Budget cap: €200.00")).toBeInTheDocument();
     expect(screen.getByText("Chair One")).toBeInTheDocument();
     expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
+    expect(screen.getByText(/Pricing:/)).toBeInTheDocument();
+    expect(screen.getByText(/Duplicates:/)).toBeInTheDocument();
+    expect(screen.getByText(/Budget:/)).toBeInTheDocument();
     expect(screen.getByText("Total: €159.98")).toBeInTheDocument();
   });
 });

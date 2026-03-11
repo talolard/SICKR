@@ -1,17 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from pydantic_ai import RunContext
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
-from ikea_agent.chat.agents.search.toolset import propose_bundle
+from ikea_agent.chat.agents.search.toolset import propose_bundle, run_search_graph
 from ikea_agent.chat.agents.state import SearchAgentState
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.attachments import AttachmentStore
-from ikea_agent.shared.types import BundleProposalItemInput, RetrievalResult
+from ikea_agent.shared.types import (
+    BundleProposalItemInput,
+    BundleProposalToolResult,
+    RetrievalResult,
+    SearchBatchToolResult,
+    SearchQueryInput,
+    SearchQueryToolResult,
+    ShortRetrievalResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +54,61 @@ class _RuntimeStub:
     catalog_repository: _CatalogStub
 
 
+@dataclass(slots=True)
+class _SearchRepositorySpy:
+    proposals: list[BundleProposalToolResult] = field(default_factory=list)
+
+    def record_bundle_proposal(
+        self,
+        *,
+        thread_id: str,
+        run_id: str | None,
+        proposal: BundleProposalToolResult,
+    ) -> str:
+        _ = (thread_id, run_id)
+        self.proposals.append(proposal)
+        return proposal.bundle_id
+
+
+@dataclass(slots=True)
+class _SearchPipelineSpy:
+    calls: list[list[SearchQueryInput]] = field(default_factory=list)
+
+    async def __call__(
+        self,
+        *,
+        runtime: ChatRuntime,
+        queries: list[SearchQueryInput],
+    ) -> SearchBatchToolResult:
+        _ = runtime
+        self.calls.append(queries)
+        return SearchBatchToolResult(
+            queries=[
+                SearchQueryToolResult(
+                    query_id=query.query_id,
+                    semantic_query=query.semantic_query,
+                    results=[
+                        ShortRetrievalResult(
+                            product_id=f"{query.query_id}-1",
+                            product_name=f"Result for {query.query_id}",
+                            product_type="Chair",
+                            description_text="Picked by tool test",
+                            main_category="chairs",
+                            sub_category="desk",
+                            width_cm=50.0,
+                            depth_cm=50.0,
+                            height_cm=90.0,
+                            price_eur=99.0,
+                        )
+                    ],
+                    total_candidates=4,
+                    returned_count=1,
+                )
+                for query in queries
+            ]
+        )
+
+
 def _run_context(*, price_eur: float | None) -> RunContext[SearchAgentDeps]:
     deps = SearchAgentDeps(
         runtime=cast(
@@ -55,8 +120,42 @@ def _run_context(*, price_eur: float | None) -> RunContext[SearchAgentDeps]:
     return cast("RunContext[SearchAgentDeps]", SimpleNamespace(deps=deps))
 
 
-def test_propose_bundle_appends_bundle_and_reports_budget_failure() -> None:
+def test_run_search_graph_forwards_one_batched_query_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     ctx = _run_context(price_eur=20.0)
+    pipeline_spy = _SearchPipelineSpy()
+
+    monkeypatch.setattr(
+        "ikea_agent.chat.agents.search.toolset.run_search_pipeline_batch",
+        pipeline_spy,
+    )
+
+    result = asyncio.run(
+        run_search_graph(
+            ctx,
+            queries=[
+                SearchQueryInput(query_id="desk", semantic_query="small desk"),
+                SearchQueryInput(query_id="lamp", semantic_query="task lamp", limit=3),
+            ],
+        )
+    )
+
+    assert len(pipeline_spy.calls) == 1
+    assert [query.query_id for query in pipeline_spy.calls[0]] == ["desk", "lamp"]
+    assert [query.query_id for query in result.queries] == ["desk", "lamp"]
+
+
+def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = _run_context(price_eur=20.0)
+    repository_spy = _SearchRepositorySpy()
+
+    monkeypatch.setattr(
+        "ikea_agent.chat.agents.search.toolset.search_repository",
+        lambda _runtime: repository_spy,
+    )
 
     result = propose_bundle(
         ctx,
@@ -68,8 +167,35 @@ def test_propose_bundle_appends_bundle_and_reports_budget_failure() -> None:
     assert result.title == "Desk seating bundle"
     assert result.bundle_total_eur == 40.0
     assert result.items[0].line_total_eur == 40.0
-    assert result.validations[0].status == "fail"
-    assert ctx.deps.state.bundle_proposals[0]["bundle_id"] == result.bundle_id
+    assert [validation.kind for validation in result.validations] == [
+        "pricing_complete",
+        "duplicate_items",
+        "budget_max_eur",
+    ]
+    assert result.validations[-1].status == "fail"
+    assert ctx.deps.state.bundle_proposals[0].bundle_id == result.bundle_id
+    assert repository_spy.proposals[0] == result
+
+
+def test_propose_bundle_merges_duplicates_and_reports_warning() -> None:
+    ctx = _run_context(price_eur=15.0)
+
+    result = propose_bundle(
+        ctx,
+        title="Desk seating bundle",
+        items=[
+            BundleProposalItemInput(item_id="chair-1", quantity=1, reason="Seat at desk"),
+            BundleProposalItemInput(item_id="chair-1", quantity=2, reason="Guest seating"),
+        ],
+    )
+
+    assert len(result.items) == 1
+    assert result.items[0].quantity == 3
+    assert result.bundle_total_eur == 45.0
+    duplicate_validation = next(
+        validation for validation in result.validations if validation.kind == "duplicate_items"
+    )
+    assert duplicate_validation.status == "warn"
 
 
 def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None:
@@ -84,5 +210,12 @@ def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None
     )
 
     assert result.bundle_total_eur is None
-    assert result.validations[0].status == "unknown"
+    pricing_validation = next(
+        validation for validation in result.validations if validation.kind == "pricing_complete"
+    )
+    budget_validation = next(
+        validation for validation in result.validations if validation.kind == "budget_max_eur"
+    )
+    assert pricing_validation.status == "warn"
+    assert budget_validation.status == "unknown"
     assert result.notes == "Needs pricing follow-up."

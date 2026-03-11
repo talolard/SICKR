@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from collections import Counter
+from dataclasses import replace
 from datetime import UTC, datetime
 from logging import getLogger
 from uuid import uuid4
@@ -90,21 +91,19 @@ async def run_search_graph(
 def _hydrate_bundle_items(
     ctx: RunContext[SearchAgentDeps],
     items: list[BundleProposalItemInput],
-) -> tuple[list[BundleProposalLineItem], float | None]:
+) -> tuple[list[BundleProposalLineItem], float | None, int]:
     hydrated_items: list[BundleProposalLineItem] = []
     running_total = 0.0
-    has_missing_price = False
+    missing_price_count = 0
 
     for item in items:
-        if item.quantity < 1:
-            raise ValueError(f"Bundle quantity for `{item.item_id}` must be at least 1.")
         product = ctx.deps.runtime.catalog_repository.read_product_by_key(product_key=item.item_id)
         if product is None:
             raise ValueError(f"Unknown product id `{item.item_id}`.")
 
         line_total = product.price_eur * item.quantity if product.price_eur is not None else None
         if line_total is None:
-            has_missing_price = True
+            missing_price_count += 1
         else:
             running_total += line_total
 
@@ -120,7 +119,31 @@ def _hydrate_bundle_items(
             )
         )
 
-    return hydrated_items, None if has_missing_price else running_total
+    return hydrated_items, None if missing_price_count else running_total, missing_price_count
+
+
+def _normalize_bundle_items(
+    items: list[BundleProposalItemInput],
+) -> tuple[list[BundleProposalItemInput], int]:
+    deduped_order: list[str] = []
+    merged_items: dict[str, BundleProposalItemInput] = {}
+    duplicate_count = 0
+
+    for item in items:
+        existing = merged_items.get(item.item_id)
+        if existing is None:
+            deduped_order.append(item.item_id)
+            merged_items[item.item_id] = item
+            continue
+        duplicate_count += 1
+        merged_reason = f"{existing.reason.rstrip('.')}; {item.reason.strip()}"
+        merged_items[item.item_id] = BundleProposalItemInput(
+            item_id=item.item_id,
+            quantity=existing.quantity + item.quantity,
+            reason=merged_reason,
+        )
+
+    return [merged_items[item_id] for item_id in deduped_order], duplicate_count
 
 
 def _build_budget_validations(
@@ -159,6 +182,57 @@ def _build_budget_validations(
     ]
 
 
+def _build_pricing_validation(*, missing_price_count: int) -> BundleValidationResult:
+    if missing_price_count == 0:
+        return BundleValidationResult(
+            kind="pricing_complete",
+            status="pass",
+            message="All bundle items have prices, so the total is complete.",
+        )
+    noun = "item" if missing_price_count == 1 else "items"
+    verb = "is" if missing_price_count == 1 else "are"
+    return BundleValidationResult(
+        kind="pricing_complete",
+        status="warn",
+        message=(
+            f"{missing_price_count} {noun} {verb} missing prices, "
+            "so the bundle total is incomplete."
+        ),
+    )
+
+
+def _build_duplicate_item_validation(*, duplicate_count: int) -> BundleValidationResult:
+    if duplicate_count == 0:
+        return BundleValidationResult(
+            kind="duplicate_items",
+            status="pass",
+            message="Each bundle product appears once.",
+        )
+    label = "entry" if duplicate_count == 1 else "entries"
+    return BundleValidationResult(
+        kind="duplicate_items",
+        status="warn",
+        message=f"Merged {duplicate_count} repeated product {label} into combined quantities.",
+    )
+
+
+def _build_bundle_validations(
+    *,
+    bundle_total: float | None,
+    budget_cap_eur: float | None,
+    duplicate_count: int,
+    missing_price_count: int,
+) -> list[BundleValidationResult]:
+    validations = [
+        _build_pricing_validation(missing_price_count=missing_price_count),
+        _build_duplicate_item_validation(duplicate_count=duplicate_count),
+    ]
+    validations.extend(
+        _build_budget_validations(bundle_total=bundle_total, budget_cap_eur=budget_cap_eur)
+    )
+    return validations
+
+
 def propose_bundle(
     ctx: RunContext[SearchAgentDeps],
     title: str,
@@ -174,10 +248,13 @@ def propose_bundle(
     if not items:
         raise ValueError("Bundle proposal must include at least one item.")
 
-    hydrated_items, bundle_total = _hydrate_bundle_items(ctx, items)
-    validations = _build_budget_validations(
+    normalized_items, duplicate_count = _normalize_bundle_items(items)
+    hydrated_items, bundle_total, missing_price_count = _hydrate_bundle_items(ctx, normalized_items)
+    validations = _build_bundle_validations(
         bundle_total=bundle_total,
         budget_cap_eur=budget_cap_eur,
+        duplicate_count=duplicate_count,
+        missing_price_count=missing_price_count,
     )
     result = BundleProposalToolResult(
         bundle_id=f"bundle-{uuid4().hex[:12]}",
@@ -190,12 +267,25 @@ def propose_bundle(
         created_at=datetime.now(UTC).isoformat(),
         run_id=ctx.deps.state.run_id,
     )
-    ctx.deps.state.bundle_proposals.append(asdict(result))
+    ctx.deps.state.append_bundle_proposal(result)
+
+    repository = search_repository(ctx.deps.runtime)
+    if repository is not None:
+        repository.record_bundle_proposal(
+            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            run_id=ctx.deps.state.run_id,
+            proposal=result,
+        )
+
+    validation_counts = Counter(validation.status for validation in validations)
     logger.info(
         "bundle_proposed",
         extra={
             "bundle_id": result.bundle_id,
             "bundle_item_count": len(result.items),
+            "validation_fail_count": validation_counts.get("fail", 0),
+            "validation_warn_count": validation_counts.get("warn", 0),
+            "validation_unknown_count": validation_counts.get("unknown", 0),
             **telemetry_context(ctx.deps.state),
         },
     )

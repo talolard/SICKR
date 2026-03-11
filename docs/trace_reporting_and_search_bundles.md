@@ -49,20 +49,31 @@ If Beads creation fails, the trace bundle is still saved and the API returns `sa
 The UI keeps this as a partial-success state and surfaces the saved directory even when issue
 creation does not complete.
 
+### Additional trace follow-ups
+
+- The save-trace dialog now shows recent saved traces and includes the saved directory in success messaging.
+- The Next trace proxy translates missing backend trace routes into a clearer configuration-mismatch error.
+- Trace bundles redact sensitive values in archived event payloads and console logs before writing them to disk.
+- The UI proxies both `POST /api/traces` and `GET /api/traces/recent`, so frontend/backend flag drift fails clearly instead of as a generic 404.
+
 ## Batched search queries
 
-`run_search_graph` now accepts `queries: SearchQueryInput[]` instead of a single scalar query.
-Even single searches should be represented as a one-element array.
+`run_search_graph` accepts `queries: SearchQueryInput[]` instead of a single scalar query.
+Even single searches must be represented as a one-element array.
 
 ### Search behavior
 
 - query texts are embedded in batches through the runtime embedder
 - retrieval, rerank, and diversification still run per query
 - explicit `candidate_pool_limit` values override the default pool size
+- query-level logs now include `embedding_duration_ms`, `retrieval_duration_ms`,
+  `rerank_duration_ms`, and `diversify_duration_ms`
+- the pipeline skips similarity lookup/diversification when a query has fewer than two reranked
+  candidates or only one result can be returned, because diversification cannot improve that case
 
 ## Bundle proposals
 
-The search agent also has a separate `propose_bundle` tool for structured recommendations.
+The search agent has a separate `propose_bundle` tool for structured recommendations.
 
 ### Payload shape
 
@@ -71,20 +82,28 @@ A bundle proposal contains:
 - `title`
 - optional `notes`
 - optional `budget_cap_eur`
-- `items[]` with `item_id`, `quantity`, and `reason`
+- `items[]` with hydrated product metadata, quantities, and reasons
+- `validations[]` with stable kinds: `budget_max_eur`, `pricing_complete`, and `duplicate_items`
 
-The backend hydrates product metadata, computes totals, runs validations, and appends the proposal to
-search-agent state.
+Search-agent shared state now stores typed bundle proposal models instead of raw dictionaries.
+
+### Persistence
+
+Bundle proposals are persisted server-side per thread and run in `bundle_proposals`.
+The search page reads saved proposals from `/api/threads/{thread_id}/bundle-proposals` and merges
+that history with the local append-only browser cache so proposals survive reloads and device swaps.
+
+### Validation behavior
+
+The backend hydrates product metadata, computes totals, and runs richer bundle validation:
+
+- `pricing_complete` reports when totals are incomplete because one or more items have no price
+- `duplicate_items` reports when repeated product entries were merged into one combined quantity
+- `budget_max_eur` still reports pass/fail/unknown based on the user budget ceiling
 
 ### UI rendering
 
 Bundle proposals are rendered in a side panel on the search agent page, outside the chat transcript.
-The tool renderer in chat remains minimal and simply acknowledges that the bundle was added.
-
-
-## Additional trace follow-ups
-
-- The save-trace dialog now shows recent saved traces and includes the saved directory in success messaging.
-- The Next trace proxy translates missing backend trace routes into a clearer configuration-mismatch error.
-- Trace bundles redact sensitive values in archived event payloads and console logs before writing them to disk.
-- The UI proxies both `POST /api/traces` and `GET /api/traces/recent`, so frontend/backend flag drift fails clearly instead of as a generic 404.
+The panel shows validator badges, budget cap context, and explicit pending-price markers for line
+items whose totals are not fully known. The in-chat renderer remains minimal and simply confirms
+that the bundle was added to the side panel.

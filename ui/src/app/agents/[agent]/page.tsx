@@ -17,9 +17,15 @@ import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
 import type { AttachmentRef } from "@/lib/attachments";
 import {
+  listThreadBundleProposals,
+  ThreadDataRequestError,
+} from "@/lib/api/threadDataClient";
+import {
   appendBundleProposal,
-  type BundleProposal,
   loadBundleProposals,
+  mergeBundleProposals,
+  replaceBundleProposals,
+  type BundleProposal,
 } from "@/lib/bundleProposalsStore";
 import { startFeedbackCapture } from "@/lib/feedbackCapture";
 import {
@@ -59,6 +65,8 @@ export default function AgentChatPage(): ReactElement {
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
   const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
+  const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
+  const [isLoadingBundleProposals, setIsLoadingBundleProposals] = useState<boolean>(false);
   const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -87,13 +95,63 @@ export default function AgentChatPage(): ReactElement {
   }, [currentAgent]);
 
   useEffect(() => {
+    let active = true;
     if (!threadId) {
       setFloorPlanPreview(null);
       setBundleProposals([]);
-      return;
+      setBundleProposalError(null);
+      setIsLoadingBundleProposals(false);
+      return () => {
+        active = false;
+      };
     }
+
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
-    setBundleProposals(currentAgent === "search" ? loadBundleProposals(threadId) : []);
+    if (currentAgent !== "search") {
+      setBundleProposals([]);
+      setBundleProposalError(null);
+      setIsLoadingBundleProposals(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const localProposals = loadBundleProposals(threadId);
+    setBundleProposals(localProposals);
+    setBundleProposalError(null);
+    setIsLoadingBundleProposals(true);
+    void listThreadBundleProposals(threadId)
+      .then((persistedProposals) => {
+        if (!active) {
+          return;
+        }
+        setBundleProposals(
+          replaceBundleProposals(threadId, mergeBundleProposals(persistedProposals, localProposals)),
+        );
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) {
+          return;
+        }
+        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
+          return;
+        }
+        setBundleProposalError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Failed to load saved bundle proposals.",
+        );
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setIsLoadingBundleProposals(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [currentAgent, threadId]);
 
   useEffect(() => {
@@ -210,13 +268,10 @@ export default function AgentChatPage(): ReactElement {
                 threadId={threadId}
                 onBundleProposed={(proposal) => {
                   if (!threadId) {
-                    setBundleProposals((current) =>
-                      current.some((item) => item.bundle_id === proposal.bundle_id)
-                        ? current
-                        : [proposal, ...current],
-                    );
+                    setBundleProposals((current) => mergeBundleProposals([proposal], current));
                     return;
                   }
+                  setBundleProposalError(null);
                   setBundleProposals(appendBundleProposal(threadId, proposal));
                 }}
                 onFloorPlanRendered={(snapshot) => {
@@ -237,7 +292,13 @@ export default function AgentChatPage(): ReactElement {
               />
               <CopilotSidebar />
             </section>
-            {currentAgent === "search" ? <SearchBundlePanel proposals={bundleProposals} /> : null}
+            {currentAgent === "search" ? (
+              <SearchBundlePanel
+                error={bundleProposalError}
+                isLoading={isLoadingBundleProposals}
+                proposals={bundleProposals}
+              />
+            ) : null}
           </div>
           {traceCaptureEnabled && threadId ? (
             <SaveTraceDialog

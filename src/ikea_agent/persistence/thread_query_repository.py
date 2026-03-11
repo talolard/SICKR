@@ -27,9 +27,15 @@ from ikea_agent.persistence.models import (
     AnalysisFeedbackRecord,
     AnalysisRunRecord,
     AssetRecord,
+    BundleProposalRecord,
     FloorPlanRevisionRecord,
     SearchRunRecord,
     ThreadRecord,
+)
+from ikea_agent.shared.types import (
+    BundleProposalLineItem,
+    BundleProposalToolResult,
+    BundleValidationResult,
 )
 
 AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
@@ -168,6 +174,44 @@ class ThreadQueryRepository:
                 storage_path=str(item.storage_path),
                 size_bytes=int(item.size_bytes),
                 created_at=str(item.created_at) if item.created_at is not None else None,
+            )
+            for item in rows
+        ]
+
+    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
+        """Return persisted bundle proposals for one thread."""
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    BundleProposalRecord.bundle_id,
+                    BundleProposalRecord.run_id,
+                    BundleProposalRecord.title,
+                    BundleProposalRecord.notes,
+                    BundleProposalRecord.budget_cap_eur,
+                    BundleProposalRecord.bundle_total_eur,
+                    BundleProposalRecord.items_json,
+                    BundleProposalRecord.validations_json,
+                    cast(BundleProposalRecord.created_at, String),
+                )
+                .where(BundleProposalRecord.thread_id == thread_id)
+                .order_by(BundleProposalRecord.created_at.desc())
+            ).all()
+        return [
+            BundleProposalToolResult(
+                bundle_id=str(item.bundle_id),
+                title=str(item.title),
+                notes=str(item.notes) if item.notes is not None else None,
+                budget_cap_eur=(
+                    float(item.budget_cap_eur) if item.budget_cap_eur is not None else None
+                ),
+                items=_as_bundle_items(item.items_json),
+                bundle_total_eur=(
+                    float(item.bundle_total_eur) if item.bundle_total_eur is not None else None
+                ),
+                validations=_as_bundle_validations(item.validations_json),
+                created_at=str(item.created_at) if item.created_at is not None else "",
+                run_id=str(item.run_id) if item.run_id is not None else None,
             )
             for item in rows
         ]
@@ -426,6 +470,24 @@ def _as_summary_dict(value: object) -> dict[str, object]:
     if not isinstance(loaded, dict):
         return {}
     return {str(key): item for key, item in loaded.items()}
+
+
+def _as_bundle_items(value: object) -> list[BundleProposalLineItem]:
+    if not isinstance(value, str):
+        return []
+    loaded = json.loads(value)
+    if not isinstance(loaded, list):
+        return []
+    return [BundleProposalLineItem.model_validate(item) for item in loaded]
+
+
+def _as_bundle_validations(value: object) -> list[BundleValidationResult]:
+    if not isinstance(value, str):
+        return []
+    loaded = json.loads(value)
+    if not isinstance(loaded, list):
+        return []
+    return [BundleValidationResult.model_validate(item) for item in loaded]
 
 
 def _normalize_feedback_kind(value: object) -> AnalysisFeedbackKind:
