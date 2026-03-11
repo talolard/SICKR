@@ -5,11 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
 
 import { useThreadSession } from "@/app/CopilotKitProviders";
+import { AgentImageAttachmentPanel } from "@/components/attachments/AgentImageAttachmentPanel";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
 import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
+import type { AttachmentRef } from "@/lib/attachments";
 import {
   type FloorPlanPreviewState,
   loadFloorPlanPreview,
@@ -43,6 +45,7 @@ export default function AgentChatPage(): React.ReactElement {
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const [error, setError] = useState<string>("");
   const [floorPlanPreview, setFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
+  const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
 
   useEffect(() => {
     void fetchAgents()
@@ -70,6 +73,7 @@ export default function AgentChatPage(): React.ReactElement {
       return;
     }
     setFloorPlanPreview(loadFloorPlanPreview(threadId));
+    const attachmentsForAgent = currentAgent === "image_analysis" ? imageAttachments : [];
     const previousState =
       typeof agent.state === "object" && agent.state !== null
         ? (agent.state as Record<string, unknown>)
@@ -78,8 +82,9 @@ export default function AgentChatPage(): React.ReactElement {
       ...previousState,
       session_id: threadId,
       thread_id: threadId,
+      attachments: attachmentsForAgent,
     });
-  }, [agent, threadId]);
+  }, [agent, currentAgent, imageAttachments, threadId]);
 
   const selected = useMemo(() => {
     return agents.find((item) => item.name === currentAgent) ?? null;
@@ -151,6 +156,12 @@ export default function AgentChatPage(): React.ReactElement {
             ) : null}
             {threadId ? <ThreadDataPanel threadId={threadId} /> : null}
             <FloorPlanPreviewPanel preview={floorPlanPreview} />
+            {currentAgent === "image_analysis" ? (
+              <AgentImageAttachmentPanel
+                onReadyAttachmentsChange={setImageAttachments}
+                threadId={threadId}
+              />
+            ) : null}
           </header>
           <CopilotToolRenderers
             threadId={threadId}
