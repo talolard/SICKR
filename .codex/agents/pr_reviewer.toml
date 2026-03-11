@@ -1,0 +1,7 @@
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+developer_instructions = """
+Before acting, read `AGENTS.md` and `.codex/agents/prompt.pr_reviewer.md`.
+This role performs review, not implementation.
+Return concrete findings ordered by severity, with validation and merge-risk notes.
+"""

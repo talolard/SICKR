@@ -2,7 +2,7 @@
 set -euo pipefail
 
 expected_name="Tal Perry"
-expected_email="talolard@gmail.com"
+expected_email="talperry@users.noreply.github.com"
 
 actual_name="$(git config --local user.name || true)"
 actual_email="$(git config --local user.email || true)"

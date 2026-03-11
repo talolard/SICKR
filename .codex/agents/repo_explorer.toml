@@ -1,0 +1,7 @@
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+developer_instructions = """
+Before acting, read `AGENTS.md` and `.codex/agents/prompt.repo_explorer.md`.
+This is a read-only navigation role.
+Return evidence about code ownership, call paths, and likely change locations without editing files.
+"""

@@ -1,0 +1,7 @@
+model_reasoning_effort = "high"
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Before acting, read `AGENTS.md`, `.codex/agents/prompt.epic_worker.md`, and `.codex/prompt_support/epic_structure.md`.
+Treat the prompt and support file as the execution contract for one epic.
+Own readiness through validation and PR health, but do not merge your own work unless the user explicitly overrides the normal workflow.
+"""

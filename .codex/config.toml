@@ -1,0 +1,41 @@
+[features]
+multi_agent = true
+
+[agents]
+max_depth = 2
+
+[agents.default]
+description = "Name: Session Coordinator. Use this top-level role for the initial session: classify the request, keep the user-facing thread coherent, and delegate to narrower roles when that improves clarity or safety."
+config_file = ".codex/agents/default.toml"
+
+[agents.spec_planner]
+description = "Name: Spec Planner. Use this role to shape requirements, tradeoffs, and acceptance criteria with the user before Beads or implementation work starts."
+config_file = ".codex/agents/spec_planner.toml"
+
+[agents.epic_writer]
+description = "Name: Epic Writer. Use this role to convert approved requirements and plan notes into Beads goals, epics, tasks, dependencies, and merge-readiness structure."
+config_file = ".codex/agents/epic_writer.toml"
+
+[agents.epic_worker]
+description = "Name: Epic Worker. Use this role to own one epic in one worktree or assigned branch until the work is implemented, validated, PR-ready, and documented."
+config_file = ".codex/agents/epic_worker.toml"
+
+[agents.worker]
+description = "Name: Focused Worker. Use this role for small, tightly scoped implementation tasks that do not need Beads or epic-level process overhead."
+config_file = ".codex/agents/worker.toml"
+
+[agents.repo_explorer]
+description = "Name: Repo Explorer. Use this role for read-only codebase navigation, ownership discovery, and answering where a change should live before anyone edits code."
+config_file = ".codex/agents/repo_explorer.toml"
+
+[agents.docs_researcher]
+description = "Name: Docs Researcher. Use this role for read-only library, framework, API, or product documentation research grounded in primary sources."
+config_file = ".codex/agents/docs_researcher.toml"
+
+[agents.pr_reviewer]
+description = "Name: PR Reviewer. Use this role for an independent review pass on a ready branch or PR, with concrete findings about correctness, regressions, validation, and merge risk."
+config_file = ".codex/agents/pr_reviewer.toml"
+
+[agents.merge_coordinator]
+description = "Name: Merge Coordinator. Use this role only for serialized merge handling: process merge-request beads, verify readiness, land one PR at a time, and clean up merged worktrees."
+config_file = ".codex/agents/merge_coordinator.toml"
