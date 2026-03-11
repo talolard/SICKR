@@ -57,13 +57,16 @@ if ! bd sync --flush-only >/dev/null 2>&1; then
     exit 1
 fi
 
-# If the JSONL file was modified, stage it
+# If the JSONL file was modified, stage it only on the dedicated beads branch.
 # For worktrees, the JSONL is in the main repo's working tree, not the worktree,
 # so we can't use git add. Skip this step for worktrees.
 if [ -f "$BEADS_DIR/issues.jsonl" ]; then
     if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
-        # Regular repo: file is in the working tree, safe to add
-        git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
+        CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        if [ "$CURRENT_BRANCH" = "beads" ]; then
+            # Regular repo on beads branch: file is in the working tree, safe to add.
+            git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
+        fi
     fi
     # For worktrees: .beads is in the main repo's working tree, not this worktree
     # Git rejects adding files outside the worktree, so we skip it.

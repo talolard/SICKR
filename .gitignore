@@ -57,3 +57,7 @@ tal_maria_ikea-ndq/
 tal_maria_ikea-427/
 # bd worktree
 tal_maria_ikea-gim/
+
+# Beads state is versioned on the orphan `beads` sync branch only.
+.beads/issues.jsonl
+.beads/interactions.jsonl
