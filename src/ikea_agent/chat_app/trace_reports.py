@@ -7,10 +7,20 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from ikea_agent.persistence.run_history_repository import ThreadRunHistoryEntry
 
+REDACTED_VALUE = "[REDACTED]"
 _MAX_SLUG_LENGTH = 80
+
+_SENSITIVE_KEY_PATTERN = re.compile(
+    r"(?:password|passwd|secret|token|api[-_]?key|authorization|cookie|session|bearer)",
+    re.IGNORECASE,
+)
+
+type JsonPrimitive = str | int | float | bool | None
+type JsonValue = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +44,19 @@ class TraceReportResult:
     trace_id: str
     directory: str
     trace_json_path: str
+    markdown_path: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecentTraceReport:
+    """Small summary item used by the recent-trace diagnostics surface."""
+
+    trace_id: str
+    title: str
+    created_at: str
+    thread_id: str | None
+    agent_name: str | None
+    directory: str
     markdown_path: str
 
 
@@ -76,8 +99,9 @@ class TraceReportWriter:
         )
 
         if payload.console_log_json:
+            redacted_console = _redact_json_text(payload.console_log_json)
             (bundle_dir / "console_log.json").write_text(
-                payload.console_log_json,
+                json.dumps(redacted_console, indent=2, ensure_ascii=True),
                 encoding="utf-8",
             )
 
@@ -90,12 +114,41 @@ class TraceReportWriter:
             markdown_path=str(markdown_path),
         )
 
+    def list_recent(self, *, limit: int = 5) -> list[RecentTraceReport]:
+        """Return recent saved trace bundles for lightweight diagnostics surfaces."""
+
+        bundle_dirs = sorted(
+            [path for path in self._root_dir.iterdir() if path.is_dir()],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        recent: list[RecentTraceReport] = []
+        for bundle_dir in bundle_dirs[: max(limit, 0)]:
+            metadata_path = bundle_dir / "metadata.json"
+            if not metadata_path.exists():
+                continue
+            metadata = cast(
+                "dict[str, object]", json.loads(metadata_path.read_text(encoding="utf-8"))
+            )
+            recent.append(
+                RecentTraceReport(
+                    trace_id=str(metadata.get("trace_id") or bundle_dir.name),
+                    title=str(metadata.get("title") or bundle_dir.name),
+                    created_at=str(metadata.get("created_at") or ""),
+                    thread_id=_optional_string(metadata.get("thread_id")),
+                    agent_name=_optional_string(metadata.get("agent_name")),
+                    directory=str(bundle_dir),
+                    markdown_path=str(bundle_dir / "report.md"),
+                )
+            )
+        return recent
+
 
 def _build_trace_payload(payload: TraceReportInput) -> dict[str, object]:
     runs: list[dict[str, object]] = []
     flattened_events: list[object] = []
     for entry in payload.run_history:
-        events = _json_or_fallback(entry.agui_event_trace_json)
+        events = _redact_value(_json_or_fallback(entry.agui_event_trace_json))
         if isinstance(events, list):
             flattened_events.extend(events)
         runs.append(
@@ -104,13 +157,19 @@ def _build_trace_payload(payload: TraceReportInput) -> dict[str, object]:
                 "parent_run_id": entry.parent_run_id,
                 "agent_name": entry.agent_name,
                 "status": entry.status,
-                "user_prompt_text": entry.user_prompt_text,
+                "user_prompt_text": _redact_value(entry.user_prompt_text),
                 "started_at": entry.started_at,
                 "ended_at": entry.ended_at,
-                "agui_input_messages": _json_or_fallback(entry.agui_input_messages_json),
+                "agui_input_messages": _redact_value(
+                    _json_or_fallback(entry.agui_input_messages_json)
+                ),
                 "agui_events": events,
-                "pydantic_all_messages": _json_or_fallback(entry.pydantic_all_messages_json),
-                "pydantic_new_messages": _json_or_fallback(entry.pydantic_new_messages_json),
+                "pydantic_all_messages": _redact_value(
+                    _json_or_fallback(entry.pydantic_all_messages_json)
+                ),
+                "pydantic_new_messages": _redact_value(
+                    _json_or_fallback(entry.pydantic_new_messages_json)
+                ),
             }
         )
     return {
@@ -142,18 +201,20 @@ def _build_markdown(payload: TraceReportInput, trace_id: str) -> str:
         [
             "",
             "## Files",
-            "- `trace.json`: Canonical current-agent thread trace payload.",
+            "- `trace.json`: Canonical redacted current-agent thread trace payload.",
             "- `metadata.json`: Save metadata for the trace report.",
             "- `report.md`: Human-readable summary and run inventory.",
         ]
     )
     if payload.console_log_json:
-        lines.append("- `console_log.json`: Browser console snapshot captured at save time.")
+        lines.append(
+            "- `console_log.json`: Redacted browser console snapshot captured at save time."
+        )
     lines.extend(["", "## Runs"])
     for entry in payload.run_history:
         lines.append(f"- `{entry.run_id}` · status={entry.status} · started_at={entry.started_at}")
         if entry.user_prompt_text:
-            lines.append(f"  - prompt: {entry.user_prompt_text}")
+            lines.append(f"  - prompt: {_redact_string(entry.user_prompt_text)}")
     lines.append("")
     return "\n".join(lines)
 
@@ -170,3 +231,37 @@ def _json_or_fallback(raw: str | None) -> object:
         return json.loads(raw)
     except json.JSONDecodeError:
         return raw
+
+
+def _redact_json_text(raw_json: str) -> JsonValue:
+    try:
+        parsed = cast("JsonValue", json.loads(raw_json))
+    except json.JSONDecodeError:
+        return _redact_string(raw_json)
+    return cast("JsonValue", _redact_value(parsed))
+
+
+def _redact_value(value: object) -> object:
+    if isinstance(value, dict):
+        redacted: dict[str, object] = {}
+        for key, nested in value.items():
+            if _SENSITIVE_KEY_PATTERN.search(key):
+                redacted[key] = REDACTED_VALUE
+            else:
+                redacted[key] = _redact_value(nested)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_string(value)
+    return value
+
+
+def _redact_string(value: str) -> str:
+    if _SENSITIVE_KEY_PATTERN.search(value):
+        return REDACTED_VALUE
+    return value
+
+
+def _optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) else None

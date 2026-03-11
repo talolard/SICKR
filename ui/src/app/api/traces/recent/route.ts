@@ -10,18 +10,13 @@ function buildUpstreamUrl(pathname: string, search: string): URL {
   return upstream;
 }
 
-async function proxyTraceRequest(
-  request: NextRequest,
-  pathname: string,
-  method: "POST",
-): Promise<Response> {
-  const upstream = buildUpstreamUrl(pathname, request.nextUrl.search);
+export async function GET(request: NextRequest): Promise<Response> {
+  const upstream = buildUpstreamUrl("../../api/traces/recent", request.nextUrl.search);
   const upstreamResponse = await fetch(upstream, {
-    method,
+    method: "GET",
     headers: {
       "content-type": request.headers.get("content-type") ?? "application/json",
     },
-    ...(method === "POST" ? { body: await request.text() } : {}),
   });
   const body = await upstreamResponse.text();
   if (upstreamResponse.status === 404) {
@@ -36,8 +31,4 @@ async function proxyTraceRequest(
       "content-type": upstreamResponse.headers.get("content-type") ?? "application/json",
     },
   });
-}
-
-export async function POST(request: NextRequest): Promise<Response> {
-  return proxyTraceRequest(request, "../api/traces", "POST");
 }

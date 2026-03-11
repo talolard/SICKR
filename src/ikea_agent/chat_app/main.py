@@ -52,6 +52,8 @@ from ikea_agent.chat_app.thread_api_models import (
     CommentBundleCreateResponse,
     DetectionListItem,
     FloorPlanRevisionListItem,
+    RecentTraceReportItem,
+    RecentTraceReportListResponse,
     Room3DAssetCreateRequest,
     Room3DAssetListItem,
     Room3DSnapshotCreateRequest,
@@ -302,6 +304,26 @@ def _register_trace_routes(
     beads_creator: BeadsTraceIssueCreator,
     run_history_repository: RunHistoryRepository,
 ) -> None:
+    @app.get("/api/traces/recent", response_model=RecentTraceReportListResponse)
+    async def list_recent_trace_reports(limit: int = 5) -> RecentTraceReportListResponse:
+        """Return recent saved trace bundles for diagnostics surfaces."""
+
+        recent = trace_writer.list_recent(limit=min(max(limit, 1), 20))
+        return RecentTraceReportListResponse(
+            traces=[
+                RecentTraceReportItem(
+                    trace_id=item.trace_id,
+                    title=item.title,
+                    created_at=item.created_at,
+                    thread_id=item.thread_id,
+                    agent_name=item.agent_name,
+                    directory=item.directory,
+                    markdown_path=item.markdown_path,
+                )
+                for item in recent
+            ]
+        )
+
     @app.post("/api/traces", response_model=TraceReportCreateResponse)
     async def create_trace_report(payload: TraceReportCreateRequest) -> TraceReportCreateResponse:
         """Persist one current-thread trace report and create Beads triage work."""

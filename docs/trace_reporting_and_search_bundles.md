@@ -23,6 +23,9 @@ On an agent page with an active thread, the header shows a save-trace icon when 
 The dialog requires a title and accepts an optional description. Submitting sends the current thread
 and agent identifiers to `POST /api/traces`.
 
+The dialog also loads `GET /api/traces/recent?limit=5` so developers can quickly find the latest
+saved bundles and their on-disk directories without leaving the chat page.
+
 ### Saved bundle layout
 
 Each saved report is written under `traces/<trace-id>/` with:
@@ -43,6 +46,8 @@ On success, the server creates:
 - one child triage task
 
 If Beads creation fails, the trace bundle is still saved and the API returns `saved_without_beads`.
+The UI keeps this as a partial-success state and surfaces the saved directory even when issue
+creation does not complete.
 
 ## Batched search queries
 
@@ -75,3 +80,11 @@ search-agent state.
 
 Bundle proposals are rendered in a side panel on the search agent page, outside the chat transcript.
 The tool renderer in chat remains minimal and simply acknowledges that the bundle was added.
+
+
+## Additional trace follow-ups
+
+- The save-trace dialog now shows recent saved traces and includes the saved directory in success messaging.
+- The Next trace proxy translates missing backend trace routes into a clearer configuration-mismatch error.
+- Trace bundles redact sensitive values in archived event payloads and console logs before writing them to disk.
+- The UI proxies both `POST /api/traces` and `GET /api/traces/recent`, so frontend/backend flag drift fails clearly instead of as a generic 404.

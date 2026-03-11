@@ -19,6 +19,16 @@ export type TraceReportCreateResponse = {
   status: "saved_and_linked" | "saved_without_beads";
 };
 
+export type RecentTraceReport = {
+  trace_id: string;
+  title: string;
+  created_at: string;
+  thread_id?: string | null;
+  agent_name?: string | null;
+  directory: string;
+  markdown_path: string;
+};
+
 export async function createTraceReport(
   payload: TraceReportCreateRequest,
 ): Promise<TraceReportCreateResponse> {
@@ -32,4 +42,17 @@ export async function createTraceReport(
     throw new Error(text || `Failed to save trace with status ${response.status}`);
   }
   return (await response.json()) as TraceReportCreateResponse;
+}
+
+export async function fetchRecentTraceReports(limit = 5): Promise<RecentTraceReport[]> {
+  const response = await fetch(`/api/traces/recent?limit=${limit}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Failed to load recent traces with status ${response.status}`);
+  }
+  const payload = (await response.json()) as { traces?: RecentTraceReport[] };
+  return Array.isArray(payload.traces) ? payload.traces : [];
 }

@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
-import { createTraceReport } from "@/lib/api/traceReportsClient";
+import {
+  createTraceReport,
+  fetchRecentTraceReports,
+  type RecentTraceReport,
+} from "@/lib/api/traceReportsClient";
 import { getConsoleRecordsSnapshot } from "@/lib/feedbackCapture";
 
 type SaveTraceDialogProps = {
@@ -12,6 +16,20 @@ type SaveTraceDialogProps = {
   agentName: string;
   onClose: () => void;
 };
+
+function formatRecentTraceTitle(trace: RecentTraceReport): string {
+  const createdAt = new Date(trace.created_at);
+  return Number.isNaN(createdAt.valueOf())
+    ? trace.title
+    : `${trace.title} · ${createdAt.toLocaleString()}`;
+}
+
+function normalizeTraceError(error: Error): string {
+  if (/Trace capture is unavailable/i.test(error.message)) {
+    return `${error.message} The frontend trace button is enabled, but the backend trace route is missing.`;
+  }
+  return error.message;
+}
 
 export function SaveTraceDialog({
   open,
@@ -23,7 +41,9 @@ export function SaveTraceDialog({
   const [description, setDescription] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [recentTraces, setRecentTraces] = useState<RecentTraceReport[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isLoadingRecent, setIsLoadingRecent] = useState<boolean>(false);
 
   useEffect(() => {
     if (!open) {
@@ -31,8 +51,34 @@ export function SaveTraceDialog({
       setDescription("");
       setError(null);
       setSuccess(null);
+      setRecentTraces([]);
       setIsSaving(false);
+      setIsLoadingRecent(false);
+      return;
     }
+
+    let isCancelled = false;
+    setIsLoadingRecent(true);
+    void fetchRecentTraceReports(5)
+      .then((traces) => {
+        if (!isCancelled) {
+          setRecentTraces(traces);
+        }
+      })
+      .catch((loadError: unknown) => {
+        if (!isCancelled) {
+          const message = loadError instanceof Error ? normalizeTraceError(loadError) : "Failed to load recent traces.";
+          setError(message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingRecent(false);
+        }
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, [open]);
 
   if (!open) {
@@ -60,11 +106,16 @@ export function SaveTraceDialog({
       });
       setSuccess(
         response.status === "saved_and_linked"
-          ? `Saved trace ${response.trace_id} and created ${response.beads_epic_id} / ${response.beads_task_id}.`
-          : `Saved trace ${response.trace_id}, but Beads creation did not complete.`,
+          ? `Saved trace ${response.trace_id} and created ${response.beads_epic_id} / ${response.beads_task_id}. Saved at ${response.directory}.`
+          : `Saved trace ${response.trace_id} at ${response.directory}, but Beads creation did not complete.`,
       );
+      setRecentTraces(await fetchRecentTraceReports(5));
     } catch (submitError: unknown) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to save trace.");
+      setError(
+        submitError instanceof Error
+          ? normalizeTraceError(submitError)
+          : "Failed to save trace.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -97,6 +148,21 @@ export function SaveTraceDialog({
         />
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
         {success ? <p className="mt-3 text-sm text-green-700">{success}</p> : null}
+        <section className="mt-4 rounded border border-gray-200 bg-gray-50 p-3">
+          <h3 className="text-sm font-semibold text-gray-900">Recent traces</h3>
+          {isLoadingRecent ? <p className="mt-2 text-xs text-gray-500">Loading recent traces...</p> : null}
+          {!isLoadingRecent && recentTraces.length === 0 ? (
+            <p className="mt-2 text-xs text-gray-500">No saved traces yet.</p>
+          ) : null}
+          <ul className="mt-2 space-y-2 text-xs text-gray-700">
+            {recentTraces.map((trace) => (
+              <li key={trace.trace_id}>
+                <p className="font-medium text-gray-900">{formatRecentTraceTitle(trace)}</p>
+                <p className="text-gray-500">{trace.directory}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
         <div className="mt-4 flex justify-end gap-2">
           <button
             className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50"
