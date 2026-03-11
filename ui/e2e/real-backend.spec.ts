@@ -51,9 +51,13 @@ test.describe("real backend smoke", () => {
     await page.getByTestId("copilot-send-button").click();
 
     await expect(page.getByTestId("copilot-user-message").last()).toContainText(prompt);
-    await expect(page.getByTestId("copilot-assistant-message").last()).toBeVisible();
+    await expect(page.getByTestId("copilot-assistant-message").last()).toBeVisible({
+      timeout: 60_000,
+    });
 
     // Keep assertion broad since tool-first replies can vary by model/runtime.
-    await expect(page.getByTestId("copilot-assistant-message").last()).not.toBeEmpty();
+    await expect(page.getByTestId("copilot-assistant-message").last()).not.toBeEmpty({
+      timeout: 60_000,
+    });
   });
 });

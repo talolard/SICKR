@@ -203,6 +203,24 @@ class TraceReportCreateRequest(BaseModel):
     console_log: str | None = None
 
 
+class RecentTraceReportItem(BaseModel):
+    """Small summary payload for recent saved trace bundles."""
+
+    trace_id: str
+    title: str
+    created_at: str
+    thread_id: str | None = None
+    agent_name: str | None = None
+    directory: str
+    markdown_path: str
+
+
+class RecentTraceReportListResponse(BaseModel):
+    """Response payload for recent saved trace bundles."""
+
+    traces: list[RecentTraceReportItem] = Field(default_factory=list)
+
+
 class TraceReportCreateResponse(BaseModel):
     """Response payload for one saved trace report bundle."""
 

@@ -7,8 +7,8 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm dev:mock --port 3000",
+    command: "NEXT_PUBLIC_TRACE_CAPTURE_ENABLED=1 pnpm dev:mock --port 3000",
     port: 3000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
 });
