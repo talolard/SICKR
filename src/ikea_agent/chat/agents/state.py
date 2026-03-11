@@ -51,6 +51,7 @@ class SearchAgentState(CommonAgentState):
     """State for search agent runs."""
 
     room_3d_snapshots: list[Room3DSnapshotContext] = Field(default_factory=list)
+    bundle_proposals: list[dict[str, object]] = Field(default_factory=list)
 
 
 class ImageAnalysisAgentState(CommonAgentState):

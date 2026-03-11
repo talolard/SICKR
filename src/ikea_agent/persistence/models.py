@@ -55,6 +55,7 @@ class AgentRunRecord(Base):
         nullable=False,
     )
     parent_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     user_prompt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -75,6 +76,7 @@ class MessageArchiveRecord(Base):
     )
     archive_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     agui_input_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agui_event_trace_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     pydantic_all_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     pydantic_new_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -375,3 +377,52 @@ def ensure_persistence_schema(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
     Base.metadata.create_all(engine, checkfirst=True)
+    _ensure_optional_columns(engine)
+
+
+def _ensure_optional_columns(engine: Engine) -> None:
+    """Backfill additive columns for local runtimes without migrations."""
+
+    _ensure_column(
+        engine,
+        table_name="agent_runs",
+        column_name="agent_name",
+        column_sql="VARCHAR",
+    )
+    _ensure_column(
+        engine,
+        table_name="message_archives",
+        column_name="agui_event_trace_json",
+        column_sql="TEXT",
+    )
+
+
+def _ensure_column(
+    engine: Engine,
+    *,
+    table_name: str,
+    column_name: str,
+    column_sql: str,
+) -> None:
+    with engine.begin() as connection:
+        column_exists = connection.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = :table_schema
+                  AND table_name = :table_name
+                  AND column_name = :column_name
+                """
+            ),
+            {
+                "table_schema": APP_SCHEMA,
+                "table_name": table_name,
+                "column_name": column_name,
+            },
+        ).scalar_one_or_none()
+        if column_exists is not None:
+            return
+        connection.execute(
+            text(f"ALTER TABLE {APP_SCHEMA}.{table_name} ADD COLUMN {column_name} {column_sql}")
+        )

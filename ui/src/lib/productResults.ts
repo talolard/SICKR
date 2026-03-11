@@ -69,6 +69,19 @@ export function parseProductResults(result: unknown): Product[] | null {
       }
       return parseFromArray(products);
     }
+    if ("queries" in result) {
+      const queries = (result as { queries: unknown }).queries;
+      if (!Array.isArray(queries)) {
+        return null;
+      }
+      return queries.flatMap((query) => {
+        if (typeof query !== "object" || query === null || !("results" in query)) {
+          return [];
+        }
+        const products = (query as { results: unknown }).results;
+        return Array.isArray(products) ? parseFromArray(products) : [];
+      });
+    }
   }
   return null;
 }

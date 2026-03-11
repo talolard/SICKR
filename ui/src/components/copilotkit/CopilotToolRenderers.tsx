@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { useDefaultRenderTool, useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 
+import { BundleProposalToolRenderer } from "@/components/tooling/BundleProposalToolRenderer";
 import {
   DepthEstimationToolRenderer,
   type DepthEstimationToolResult,
@@ -25,6 +26,7 @@ import {
 } from "@/components/tooling/SegmentationToolRenderer";
 import { createAnalysisFeedback } from "@/lib/api/threadDataClient";
 import type { AttachmentRef } from "@/lib/attachments";
+import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import { publishFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
 import {
   buildFloorPlanSnapshot,
@@ -121,6 +123,33 @@ const floorPlanResultSchema = z.object({
     )
     .optional(),
   legend_items: z.array(z.string()).optional(),
+});
+const bundleProposalSchema = z.object({
+  bundle_id: z.string(),
+  title: z.string(),
+  notes: z.string().nullable(),
+  budget_cap_eur: z.number().nullable(),
+  items: z.array(
+    z.object({
+      item_id: z.string(),
+      product_name: z.string(),
+      description_text: z.string().nullable(),
+      price_eur: z.number().nullable(),
+      quantity: z.number(),
+      line_total_eur: z.number().nullable(),
+      reason: z.string(),
+    }),
+  ),
+  bundle_total_eur: z.number().nullable(),
+  validations: z.array(
+    z.object({
+      kind: z.enum(["budget_max_eur"]),
+      status: z.enum(["pass", "fail", "unknown"]),
+      message: z.string(),
+    }),
+  ),
+  created_at: z.string(),
+  run_id: z.string().nullable(),
 });
 
 type ParsedAttachmentRef = z.infer<typeof attachmentRefSchema>;
@@ -294,6 +323,7 @@ function parseFloorPlanResult(result: unknown): z.infer<typeof floorPlanResultSc
 type CopilotToolRenderersProps = {
   threadId?: string | null;
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
+  onBundleProposed?: (proposal: BundleProposal) => void;
 };
 
 type FloorPlanSnapshot = Omit<FloorPlanPreviewState, "threadId">;
@@ -378,9 +408,53 @@ function FloorPlanRenderBridge({
   );
 }
 
+type BundleProposalBridgeProps = {
+  status: "queued" | "executing" | "complete";
+  result: unknown;
+  onBundleProposed?: (proposal: BundleProposal) => void;
+};
+
+function BundleProposalBridge({
+  status,
+  result,
+  onBundleProposed,
+}: BundleProposalBridgeProps): ReactElement {
+  const parsed = bundleProposalSchema.safeParse(parseResult(result));
+
+  useEffect(() => {
+    if (status !== "complete" || !parsed.success) {
+      return;
+    }
+    onBundleProposed?.(parsed.data);
+  }, [onBundleProposed, parsed, status]);
+
+  if (status !== "complete") {
+    return (
+      <div className="rounded border bg-white p-2">
+        <p className="text-sm text-gray-700">Building bundle proposal...</p>
+      </div>
+    );
+  }
+  if (!parsed.success) {
+    return (
+      <div className="rounded border bg-white p-2">
+        <DefaultToolCallRenderer
+          name="propose_bundle"
+          status="failed"
+          result={undefined}
+          args={undefined}
+          errorMessage="Tool returned an invalid bundle payload."
+        />
+      </div>
+    );
+  }
+  return <BundleProposalToolRenderer />;
+}
+
 export function CopilotToolRenderers({
   threadId,
   onFloorPlanRendered,
+  onBundleProposed,
 }: CopilotToolRenderersProps): ReactElement | null {
   useDefaultRenderTool({
     render: ({ name, status, result, parameters }) => {
@@ -409,9 +483,17 @@ export function CopilotToolRenderers({
   useRenderTool({
     name: "run_search_graph",
     parameters: z.object({
-      semantic_query: z.string(),
-      limit: z.number().optional(),
-      filters: z.unknown().optional(),
+      queries: z.array(
+        z.object({
+          query_id: z.string(),
+          semantic_query: z.string(),
+          limit: z.number().optional(),
+          candidate_pool_limit: z.number().nullable().optional(),
+          filters: z.unknown().optional(),
+          enable_diversification: z.boolean().optional(),
+          purpose: z.string().nullable().optional(),
+        }),
+      ),
     }),
     render: ({ status, result, parameters }) => {
       if (status !== "complete") {
@@ -445,6 +527,22 @@ export function CopilotToolRenderers({
             errorMessage={undefined}
           />
         </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "propose_bundle",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      const mappedStatus =
+        status === "inProgress" ? "queued" : status === "executing" ? "executing" : "complete";
+      return (
+        <BundleProposalBridge
+          status={mappedStatus}
+          result={result}
+          {...(onBundleProposed ? { onBundleProposed } : {})}
+        />
       );
     },
   });

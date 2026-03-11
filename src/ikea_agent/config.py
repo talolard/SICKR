@@ -59,6 +59,8 @@ class AppSettings(BaseSettings):
     artifact_root_dir: str = Field(default="data/artifacts")
     feedback_capture_enabled: bool = Field(default=False)
     feedback_root_dir: str = Field(default="comments")
+    trace_capture_enabled: bool = Field(default=False)
+    trace_root_dir: str = Field(default="traces")
     default_query_limit: int = Field(default=25, ge=1, le=200)
     default_market: str = Field(default="Germany")
 
@@ -74,6 +76,7 @@ class AppSettings(BaseSettings):
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     mmr_preselect_limit: int = Field(default=30, ge=5, le=200)
+    embedding_query_batch_size: int = Field(default=16, ge=1, le=256)
     embedding_neighbor_limit: int = Field(default=0, ge=0, le=10000)
     agents: dict[str, AgentModelConfig] = Field(
         default_factory=dict,

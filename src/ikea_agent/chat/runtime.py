@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from logging import getLogger
 from typing import Literal, Protocol
@@ -111,6 +112,29 @@ async def embed_query(runtime: ChatRuntime, query_text: str) -> tuple[float, ...
     if not response.embeddings:
         return ()
     return tuple(float(value) for value in response.embeddings[0])
+
+
+async def embed_queries(
+    runtime: ChatRuntime, query_texts: Sequence[str]
+) -> list[tuple[float, ...]]:
+    """Embed one or more query strings in batches using the configured provider."""
+
+    normalized_queries = [query.strip() for query in query_texts]
+    if not normalized_queries:
+        return []
+
+    vectors: list[tuple[float, ...]] = []
+    batch_size = runtime.settings.embedding_query_batch_size
+    for start_index in range(0, len(normalized_queries), batch_size):
+        batch = normalized_queries[start_index : start_index + batch_size]
+        response = await runtime.embedder.embed_query(batch)
+        embeddings = response.embeddings or []
+        for index, _query_text in enumerate(batch):
+            if index >= len(embeddings):
+                vectors.append(())
+                continue
+            vectors.append(tuple(float(value) for value in embeddings[index]))
+    return vectors
 
 
 def search_candidates(

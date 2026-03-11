@@ -188,3 +188,28 @@ class CommentBundleCreateRequest(BaseModel):
     dom_snapshot: str | None = None
     ui_state: str | None = None
     attachment_ids: list[str] = Field(default_factory=list)
+
+
+class TraceReportCreateRequest(BaseModel):
+    """Request payload for persisting one current-thread trace report."""
+
+    title: str = Field(min_length=1)
+    description: str | None = None
+    thread_id: str = Field(min_length=1)
+    agent_name: str = Field(min_length=1)
+    page_url: str | None = None
+    user_agent: str | None = None
+    include_console_log: bool = True
+    console_log: str | None = None
+
+
+class TraceReportCreateResponse(BaseModel):
+    """Response payload for one saved trace report bundle."""
+
+    trace_id: str
+    directory: str
+    trace_json_path: str
+    markdown_path: str
+    beads_epic_id: str | None = None
+    beads_task_id: str | None = None
+    status: Literal["saved_and_linked", "saved_without_beads"]

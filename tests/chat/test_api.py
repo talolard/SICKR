@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -10,6 +11,8 @@ from fastapi.testclient import TestClient
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
@@ -17,6 +20,16 @@ from ikea_agent.chat_app.main import (
     create_app,
 )
 from ikea_agent.config import get_settings
+from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator, BeadsTraceIssueResult
+from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
+from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine, create_session_factory
+
+
+@dataclass(frozen=True, slots=True)
+class _PersistenceRuntime:
+    sqlalchemy_engine: Engine
+    session_factory: sessionmaker[Session]
 
 
 @pytest.fixture(autouse=True)
@@ -452,3 +465,85 @@ def test_comment_bundle_route_rejects_empty_default_submission(
     )
 
     assert response.status_code == 422
+
+
+def _persistence_runtime(tmp_path: Path) -> _PersistenceRuntime:
+    engine = create_duckdb_engine(str(tmp_path / "trace_route_test.duckdb"))
+    ensure_persistence_schema(engine)
+    session_factory = create_session_factory(engine)
+    return _PersistenceRuntime(sqlalchemy_engine=engine, session_factory=session_factory)
+
+
+def test_trace_report_route_is_not_registered_when_disabled(tmp_path: Path) -> None:
+    runtime = _persistence_runtime(tmp_path)
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.post("/api/traces", json={})
+
+    assert response.status_code == 404
+
+
+def test_trace_report_route_persists_bundle_and_returns_beads_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _persistence_runtime(tmp_path)
+    repository = RunHistoryRepository(runtime.session_factory)
+    repository.record_run_start(
+        thread_id="thread-trace",
+        run_id="run-trace-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="Find a desk setup.",
+        agui_input_messages_json='[{"role":"user","content":"Find a desk setup."}]',
+    )
+    repository.record_run_complete(
+        run_id="run-trace-1",
+        pydantic_all_messages_json=b'[{"kind":"request","text":"Find a desk setup."}]',
+        pydantic_new_messages_json=b'[{"kind":"response","text":"Here are options."}]',
+    )
+    repository.record_run_event_trace(
+        run_id="run-trace-1",
+        agui_event_trace_json='[{"type":"RUN_STARTED"},{"type":"RUN_FINISHED"}]',
+    )
+
+    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
+    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
+    monkeypatch.setattr(
+        BeadsTraceIssueCreator,
+        "create_trace_epic_and_task",
+        lambda *_args, **_kwargs: BeadsTraceIssueResult(
+            epic_id="trace-epic-1", task_id="trace-epic-1.1"
+        ),
+    )
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.post(
+        "/api/traces",
+        json={
+            "title": "Investigate search latency",
+            "description": "The search agent took too long to answer.",
+            "thread_id": "thread-trace",
+            "agent_name": "search",
+            "page_url": "http://localhost:3000/agents/search",
+            "user_agent": "pytest",
+            "include_console_log": True,
+            "console_log": '[{"level":"info","args":["hello"]}]',
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trace_id"].startswith("investigate_search_latency--")
+    assert payload["status"] == "saved_and_linked"
+    assert payload["beads_epic_id"] == "trace-epic-1"
+    assert payload["beads_task_id"] == "trace-epic-1.1"
+
+    trace_dir = Path(payload["directory"])
+    assert (trace_dir / "metadata.json").exists()
+    assert (trace_dir / "trace.json").exists()
+    assert (trace_dir / "report.md").exists()
+
+    markdown = (trace_dir / "report.md").read_text(encoding="utf-8")
+    assert "Investigate search latency" in markdown
+    assert "trace.json" in markdown
