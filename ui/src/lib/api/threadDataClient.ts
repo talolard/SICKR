@@ -2,6 +2,29 @@ import type { components } from "@/lib/api/generated";
 
 export type ThreadDetailItem = components["schemas"]["ThreadDetailItem"];
 export type AssetListItem = components["schemas"]["AssetListItem"];
+export type AnalysisFeedbackKind = "confirm" | "reject" | "uncertain";
+
+export type AnalysisFeedbackCreateRequest = {
+  feedback_kind: AnalysisFeedbackKind;
+  mask_ordinal?: number;
+  mask_label?: string;
+  query_text?: string;
+  note?: string;
+  run_id?: string;
+};
+
+export type AnalysisFeedbackItem = {
+  analysis_feedback_id: string;
+  analysis_id: string;
+  thread_id: string;
+  run_id: string | null;
+  feedback_kind: AnalysisFeedbackKind;
+  mask_ordinal: number | null;
+  mask_label: string | null;
+  query_text: string | null;
+  note: string | null;
+  created_at: string;
+};
 
 export class ThreadDataRequestError extends Error {
   status: number;
@@ -27,4 +50,23 @@ export async function getThreadDetail(threadId: string): Promise<ThreadDetailIte
 
 export async function listThreadAssets(threadId: string): Promise<AssetListItem[]> {
   return await readJson<AssetListItem[]>(`/api/thread-data/threads/${threadId}/assets`);
+}
+
+export async function createAnalysisFeedback({
+  threadId,
+  analysisId,
+  payload,
+}: {
+  threadId: string;
+  analysisId: string;
+  payload: AnalysisFeedbackCreateRequest;
+}): Promise<AnalysisFeedbackItem> {
+  return await readJson<AnalysisFeedbackItem>(
+    `/api/thread-data/threads/${threadId}/analyses/${analysisId}/feedback`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }

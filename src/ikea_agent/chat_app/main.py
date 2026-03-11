@@ -44,6 +44,8 @@ from ikea_agent.chat_app.openusd_ingest import (
     inspect_openusd_bytes,
 )
 from ikea_agent.chat_app.thread_api_models import (
+    AnalysisFeedbackCreateRequest,
+    AnalysisFeedbackItem,
     AnalysisListItem,
     AssetListItem,
     CommentBundleCreateRequest,
@@ -427,6 +429,42 @@ def _register_thread_data_routes(  # noqa: C901
     @app.get("/api/threads/{thread_id}/analyses", response_model=list[AnalysisListItem])
     async def list_thread_analyses(thread_id: str) -> list[AnalysisListItem]:
         return thread_query_repository.list_analyses(thread_id=thread_id)
+
+    @app.get(
+        "/api/threads/{thread_id}/analyses/{analysis_id}/feedback",
+        response_model=list[AnalysisFeedbackItem],
+    )
+    async def list_analysis_feedback(
+        thread_id: str,
+        analysis_id: str,
+    ) -> list[AnalysisFeedbackItem]:
+        return thread_query_repository.list_analysis_feedback(
+            thread_id=thread_id,
+            analysis_id=analysis_id,
+        )
+
+    @app.post(
+        "/api/threads/{thread_id}/analyses/{analysis_id}/feedback",
+        response_model=AnalysisFeedbackItem,
+    )
+    async def create_analysis_feedback(
+        thread_id: str,
+        analysis_id: str,
+        payload: AnalysisFeedbackCreateRequest,
+    ) -> AnalysisFeedbackItem:
+        created = thread_query_repository.create_analysis_feedback(
+            thread_id=thread_id,
+            analysis_id=analysis_id,
+            feedback_kind=payload.feedback_kind,
+            mask_ordinal=payload.mask_ordinal,
+            mask_label=payload.mask_label,
+            query_text=payload.query_text,
+            note=payload.note,
+            run_id=payload.run_id,
+        )
+        if created is None:
+            raise HTTPException(status_code=404, detail="Analysis not found.")
+        return created
 
     @app.get(
         "/api/threads/{thread_id}/images/{asset_id}/detections",

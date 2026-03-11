@@ -259,3 +259,48 @@ def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None
     assert room_snapshots_response.json()[0]["room_3d_snapshot_id"] == "room3d-snapshot-api"
     assert room_asset_create_response.json()["usd_format"] == "usdz"
     assert room_snapshot_create_response.json()["comment"] == "Check lighting around the bed."
+
+
+def test_analysis_feedback_routes_persist_thread_scoped_records(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    _seed(runtime, tmp_path=tmp_path)
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    feedback_list_before_response = client.get(
+        "/api/threads/thread-api/analyses/analysis-api/feedback"
+    )
+    feedback_create_response = client.post(
+        "/api/threads/thread-api/analyses/analysis-api/feedback",
+        json={
+            "feedback_kind": "confirm",
+            "mask_ordinal": 1,
+            "mask_label": "bed",
+            "query_text": "bed",
+            "note": "Looks correct.",
+            "run_id": "run-api",
+        },
+    )
+    feedback_list_after_response = client.get(
+        "/api/threads/thread-api/analyses/analysis-api/feedback"
+    )
+    feedback_missing_analysis_response = client.post(
+        "/api/threads/thread-api/analyses/analysis-missing/feedback",
+        json={"feedback_kind": "reject"},
+    )
+
+    assert feedback_list_before_response.status_code == 200
+    assert feedback_create_response.status_code == 200
+    assert feedback_list_after_response.status_code == 200
+    assert feedback_missing_analysis_response.status_code == 404
+
+    assert feedback_list_before_response.json() == []
+    assert feedback_create_response.json()["feedback_kind"] == "confirm"
+    assert feedback_create_response.json()["mask_label"] == "bed"
+    assert len(feedback_list_after_response.json()) == 1
+    assert feedback_list_after_response.json()[0]["query_text"] == "bed"

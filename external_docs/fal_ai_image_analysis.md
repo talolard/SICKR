@@ -16,6 +16,30 @@
 - Depth estimation: `fal-ai/imageutils/marigold-depth`
 - Segmentation: `fal-ai/sam-3/image`
 
+## SAM-3 request/response notes (fal-ai/sam-3/image)
+
+Verified provider features to align our integration:
+
+- Prompting:
+  - `prompt` must be a string (array/list prompts are rejected).
+  - Multi-target behavior is achieved by composing one aggregate prompt.
+- Multi-mask behavior:
+  - `return_multiple_masks=true` enables multiple results.
+  - `max_masks` supports up to `32`.
+- Optional result metadata:
+  - `include_scores` returns confidence scores.
+  - `include_boxes` returns bounding boxes.
+  - `include_mask_file` returns downloadable mask artifacts.
+- Output control:
+  - `apply_mask` can produce composited visual output.
+  - `output_format` supports `jpeg`, `png`, `webp`.
+  - `sync_mode` supports real-time/data-URI style flows.
+
+Observed in live probes:
+
+- Response keys commonly include `masks`, optional `scores`, optional `boxes`, and may include `image`/`metadata`.
+- Unknown input fields can be ignored server-side without hard errors, so request argument names should match provider fields exactly.
+
 ## Notes
 - Tool wrappers are intentionally tolerant of slight response-shape differences and normalize to stable typed outputs.
 - Depth outputs are treated as relative depth only unless a known real-world scale reference is provided.

@@ -153,6 +153,7 @@ export default function AgentChatPage(): React.ReactElement {
             <FloorPlanPreviewPanel preview={floorPlanPreview} />
           </header>
           <CopilotToolRenderers
+            threadId={threadId}
             onFloorPlanRendered={(snapshot) => {
               const resolvedImages = snapshot.images.map((image) => ({
                 ...image,

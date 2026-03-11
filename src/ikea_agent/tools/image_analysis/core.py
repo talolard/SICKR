@@ -101,7 +101,9 @@ class FalImageAnalysisCore:
             extra={"model_id": model_id, "argument_keys": sorted(arguments)},
         )
         try:
-            # TODO - document why we use subscribe_async instead of a more tradional pattern
+            # `subscribe_async` is the canonical queue-based fal invocation path:
+            # one call manages submit + queue wait + result retrieval with explicit
+            # server/client timeout controls and consistent error semantics.
             result = await fal_client.subscribe_async(
                 model_id,
                 arguments=arguments,

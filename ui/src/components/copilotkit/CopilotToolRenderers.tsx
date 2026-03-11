@@ -5,12 +5,25 @@ import type { ReactElement } from "react";
 import { useDefaultRenderTool, useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 
+import {
+  DepthEstimationToolRenderer,
+  type DepthEstimationToolResult,
+} from "@/components/tooling/DepthEstimationToolRenderer";
 import { DefaultToolCallRenderer } from "@/components/tooling/DefaultToolCallRenderer";
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
+import {
+  ObjectDetectionToolRenderer,
+  type ObjectDetectionToolResult,
+} from "@/components/tooling/ObjectDetectionToolRenderer";
 import {
   RoomPhotoAnalysisToolRenderer,
   type RoomPhotoAnalysisToolResult,
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
+import {
+  SegmentationToolRenderer,
+  type SegmentationToolResult,
+} from "@/components/tooling/SegmentationToolRenderer";
+import { createAnalysisFeedback } from "@/lib/api/threadDataClient";
 import type { AttachmentRef } from "@/lib/attachments";
 import { publishFloorPlanRendered } from "@/lib/floorPlanPreviewEvents";
 import {
@@ -41,6 +54,56 @@ const roomPhotoAnalysisSchema = z.object({
   caption: z.string(),
   images: z.array(attachmentRefSchema),
   room_hints: z.array(z.string()),
+});
+const objectDetectionSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  detections: z.array(
+    z.object({
+      label: z.string(),
+      bbox_xyxy_px: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      bbox_xyxy_norm: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    }),
+  ),
+});
+const depthEstimationSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  parameters_used: z.object({
+    ensemble_size: z.number(),
+    processing_res: z.number(),
+    resample_method: z.enum(["bilinear", "nearest", "bicubic"]),
+    seed: z.number(),
+    output_format: z.enum(["png", "jpg", "webp"]),
+  }),
+});
+const segmentationSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  prompt: z.string(),
+  queries: z.array(z.string()).default([]),
+  query_results: z
+    .array(
+      z.object({
+        query: z.string(),
+        status: z.enum(["matched", "unattributed", "no_match"]),
+        matched_mask_count: z.number(),
+      }),
+    )
+    .default([]),
+  analysis_id: z.string().nullable().optional(),
+  masks: z.array(
+    z.object({
+      label: z.string(),
+      query: z.string().nullable().optional(),
+      score: z.number().nullable().optional(),
+      bbox_xyxy_px: z
+        .tuple([z.number(), z.number(), z.number(), z.number()])
+        .nullable()
+        .optional(),
+      mask_image: attachmentRefSchema,
+    }),
+  ),
 });
 const floorPlanResultSchema = z.object({
   caption: z.string(),
@@ -177,12 +240,59 @@ function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysisToolRes
   };
 }
 
+function parseObjectDetectionResult(result: unknown): ObjectDetectionToolResult | null {
+  const validated = objectDetectionSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    caption: validated.data.caption,
+    images: validated.data.images.map(normalizeAttachmentRef),
+    detections: validated.data.detections,
+  };
+}
+
+function parseDepthEstimationResult(result: unknown): DepthEstimationToolResult | null {
+  const validated = depthEstimationSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    caption: validated.data.caption,
+    images: validated.data.images.map(normalizeAttachmentRef),
+    parameters_used: validated.data.parameters_used,
+  };
+}
+
+function parseSegmentationResult(result: unknown): SegmentationToolResult | null {
+  const validated = segmentationSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    caption: validated.data.caption,
+    images: validated.data.images.map(normalizeAttachmentRef),
+    prompt: validated.data.prompt,
+    queries: validated.data.queries,
+    query_results: validated.data.query_results,
+    analysis_id: validated.data.analysis_id ?? null,
+    masks: validated.data.masks.map((mask) => ({
+      label: mask.label,
+      query: mask.query ?? null,
+      score: mask.score ?? null,
+      bbox_xyxy_px: mask.bbox_xyxy_px ?? null,
+      mask_image: normalizeAttachmentRef(mask.mask_image),
+    })),
+  };
+}
+
 function parseFloorPlanResult(result: unknown): z.infer<typeof floorPlanResultSchema> | null {
   const validated = floorPlanResultSchema.safeParse(parseResult(result));
   return validated.success ? validated.data : null;
 }
 
 type CopilotToolRenderersProps = {
+  threadId?: string | null;
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
 };
 
@@ -269,6 +379,7 @@ function FloorPlanRenderBridge({
 }
 
 export function CopilotToolRenderers({
+  threadId,
   onFloorPlanRendered,
 }: CopilotToolRenderersProps): ReactElement | null {
   useDefaultRenderTool({
@@ -415,6 +526,114 @@ export function CopilotToolRenderers({
       return (
         <div className="rounded border bg-white p-2">
           <ImageToolOutputRenderer caption={imageOutput.caption} images={imageOutput.images} />
+        </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "detect_objects_in_image",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return (
+          <div className="rounded border bg-white p-2">
+            <p className="text-sm text-gray-700">Detecting room objects...</p>
+          </div>
+        );
+      }
+      const parsed = parseObjectDetectionResult(result);
+      if (parsed) {
+        return <ObjectDetectionToolRenderer result={parsed} />;
+      }
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="detect_objects_in_image"
+            status="failed"
+            result={undefined}
+            args={undefined}
+            errorMessage="Tool returned an invalid object-detection payload."
+          />
+        </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "estimate_depth_map",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return (
+          <div className="rounded border bg-white p-2">
+            <p className="text-sm text-gray-700">Estimating depth map...</p>
+          </div>
+        );
+      }
+      const parsed = parseDepthEstimationResult(result);
+      if (parsed) {
+        return <DepthEstimationToolRenderer result={parsed} />;
+      }
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="estimate_depth_map"
+            status="failed"
+            result={undefined}
+            args={undefined}
+            errorMessage="Tool returned an invalid depth payload."
+          />
+        </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "segment_image_with_prompt",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return (
+          <div className="rounded border bg-white p-2">
+            <p className="text-sm text-gray-700">Segmenting image...</p>
+          </div>
+        );
+      }
+      const parsed = parseSegmentationResult(result);
+      if (parsed) {
+        const canPersistFeedback = Boolean(threadId) && Boolean(parsed.analysis_id);
+        return (
+          <SegmentationToolRenderer
+            result={parsed}
+            {...(canPersistFeedback
+              ? {
+                  onSubmitFeedback: async (payload) => {
+                    await createAnalysisFeedback({
+                      threadId: threadId as string,
+                      analysisId: parsed.analysis_id as string,
+                      payload: {
+                        feedback_kind: payload.feedbackKind,
+                        mask_ordinal: payload.maskOrdinal,
+                        mask_label: payload.maskLabel,
+                        ...(payload.queryText ? { query_text: payload.queryText } : {}),
+                      },
+                    });
+                  },
+                }
+              : {})}
+          />
+        );
+      }
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="segment_image_with_prompt"
+            status="failed"
+            result={undefined}
+            args={undefined}
+            errorMessage="Tool returned an invalid segmentation payload."
+          />
         </div>
       );
     },

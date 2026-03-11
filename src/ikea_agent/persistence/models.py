@@ -280,6 +280,40 @@ class AnalysisDetectionRecord(Base):
     bbox_y2_norm: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class AnalysisFeedbackRecord(Base):
+    """User feedback rows for analysis outcomes (confirm/reject/uncertain)."""
+
+    __tablename__ = "analysis_feedback"
+    __table_args__ = (
+        Index("ix_analysis_feedback_analysis_id", "analysis_id"),
+        Index("ix_analysis_feedback_thread_id", "thread_id"),
+        {"schema": APP_SCHEMA},
+    )
+
+    analysis_feedback_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    analysis_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.analysis_runs.analysis_id"),
+        nullable=False,
+    )
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    feedback_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    mask_ordinal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mask_label: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    query_text: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class SearchRunRecord(Base):
     """One persisted search invocation and aggregate metadata."""
 

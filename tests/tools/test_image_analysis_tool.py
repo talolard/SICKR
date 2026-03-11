@@ -86,9 +86,16 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
             "visualization": {"url": remote_visual},
         }
 
+    segmentation_arguments: dict[str, object] = {}
+
     async def _fake_call_segmentation(*args: object, **kwargs: object) -> dict[str, object]:
-        _ = (args, kwargs)
-        return {"masks": [{"label": "clutter", "url": remote_mask}]}
+        _ = args
+        segmentation_arguments.update(cast("dict[str, object]", kwargs.get("arguments", {})))
+        return {
+            "masks": [{"label": "clutter", "url": remote_mask}],
+            "scores": [0.93],
+            "boxes": [[12, 24, 120, 180]],
+        }
 
     async def _fake_download(*args: object, **kwargs: object) -> AttachmentRefPayload:
         _ = args
@@ -127,13 +134,23 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
     segmentation_result = asyncio.run(
         segment_image_with_prompt(
             request=SegmentationRequest(
-                image=payload, prompt="clutter", return_multiple_masks=True
+                image=payload,
+                queries=["clutter", "laundry"],
+                return_multiple_masks=True,
+                max_masks=32,
             ),
             attachment_store=store,
         )
     )
     assert segmentation_result.masks
     assert segmentation_result.overlay_image is not None
+    assert segmentation_result.prompt == "clutter, laundry"
+    assert segmentation_result.queries == ["clutter", "laundry"]
+    assert segmentation_result.query_results[0].status == "unattributed"
+    assert segmentation_result.masks[0].score == pytest.approx(0.93)
+    assert segmentation_result.masks[0].bbox_xyxy_px == (12, 24, 120, 180)
+    assert segmentation_result.masks[0].query is None
+    assert segmentation_arguments["max_masks"] == 32
 
 
 def test_analyze_room_photo_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ikea_agent.shared.types import AttachmentRef
 
@@ -59,13 +59,30 @@ class DepthEstimationRequest(BaseModel):
 
 
 class SegmentationRequest(BaseModel):
-    """Request payload for prompt-driven SAM segmentation."""
+    """Request payload for SAM-3 segmentation on one uploaded image."""
 
     image: AttachmentRefPayload
-    prompt: str = Field(min_length=1, max_length=300)
-    return_multiple_masks: bool = False
-    mask_limit: int = Field(default=5, ge=1, le=10)
-    keep_model_loaded: bool = False
+    prompt: str | None = Field(default=None, min_length=1, max_length=500)
+    queries: list[str] = Field(default_factory=list, max_length=32)
+    return_multiple_masks: bool = True
+    max_masks: int = Field(default=32, ge=1, le=32)
+    include_scores: bool = True
+    include_boxes: bool = True
+    include_mask_file: bool = True
+    apply_mask: bool = False
+    output_format: Literal["jpeg", "png", "webp"] = "png"
+    sync_mode: bool = False
+
+    @model_validator(mode="after")
+    def _require_prompt_or_queries(self) -> SegmentationRequest:
+        normalized_queries = [query.strip() for query in self.queries if query.strip()]
+        prompt = self.prompt.strip() if self.prompt is not None else ""
+        if not normalized_queries and not prompt:
+            msg = "SegmentationRequest requires `prompt` or at least one non-empty query."
+            raise ValueError(msg)
+        self.queries = normalized_queries
+        self.prompt = prompt or None
+        return self
 
 
 class ObjectDetectionOptions(BaseModel):
@@ -131,10 +148,21 @@ class DepthEstimationToolResult(ImageToolEnvelope):
 
 
 class SegmentationMask(BaseModel):
-    """One prompt-associated segmentation mask artifact."""
+    """One segmentation mask artifact with optional SAM confidence/box metadata."""
 
     label: str
+    query: str | None = None
+    score: float | None = None
+    bbox_xyxy_px: tuple[int, int, int, int] | None = None
     mask_image: AttachmentRefPayload
+
+
+class SegmentationQueryResult(BaseModel):
+    """Per-query summary for aggregate segmentation prompts."""
+
+    query: str
+    status: Literal["matched", "unattributed", "no_match"]
+    matched_mask_count: int
 
 
 class SegmentationToolResult(ImageToolEnvelope):
@@ -142,6 +170,9 @@ class SegmentationToolResult(ImageToolEnvelope):
 
     model_id: Literal["fal-ai/sam-3/image"]
     prompt: str
+    queries: list[str] = Field(default_factory=list)
+    query_results: list[SegmentationQueryResult] = Field(default_factory=list)
+    analysis_id: str | None = None
     masks: list[SegmentationMask] = Field(default_factory=list)
     overlay_image: AttachmentRefPayload | None = None
 
