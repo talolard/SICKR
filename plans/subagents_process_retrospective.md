@@ -10,7 +10,7 @@ Epic `tal_maria_ikea-ndq` requests an evidence-based retrospective for the subag
 - Capture prevention-oriented follow-up tasks in beads linked to the epic.
 
 ## Deliverables
-- `docs/subagents_process_retrospective.md`
+- `docs/archive/subagents_process_retrospective.md`
 - Beads follow-up tasks linked to `tal_maria_ikea-ndq`
 - Documentation index entry in `docs/index.md`
 

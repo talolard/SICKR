@@ -29,12 +29,9 @@
 - [Data Patterns](data/data_patterns.md)
 - [Runtime DB Migrations](data/migrations.md)
 
-## Historical Notes
+## Archive
 
-- [Conversation Persistence Handoff Log](conversation_persistence_handoff.md)
-- [Subagents Process Retrospective](subagents_process_retrospective.md)
-- [Floor Plan SVG Migration Progress Handoff](floorplan_svg_migration_progress.md)
-- [CopilotKit + AG-UI Milestone Status](ui_copilotkit_milestone_status.md)
+- [Documentation Archive](archive/index.md)
 
 ## Redirects
 
@@ -42,4 +39,4 @@
 
 ## Legacy
 
-Historical docs/specs/plans/SQL archived under `legacy/` are reference-only. Historical notes still in `docs/` are intentionally listed above so they remain discoverable until they are archived or removed.
+Historical docs/specs/plans/SQL archived under `legacy/` are reference-only.

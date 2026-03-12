@@ -9,6 +9,14 @@
 3. Run chat app:
    - `make chat`
 
+## UI Commands
+
+- Start UI against the real backend: `make ui-dev-real`
+- Start UI against the mock backend: `make ui-dev-mock`
+- Run UI unit tests: `make ui-test`
+- Run UI mock E2E: `make ui-test-e2e`
+- Run real-backend UI smoke: `make ui-test-e2e-real-ui-smoke`
+
 ## Runtime Shape
 
 - FastAPI app builds shared runtime dependencies, serves support APIs, mounts per-agent pydantic-ai web UIs, and exposes AG-UI POST handlers.
