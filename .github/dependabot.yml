@@ -13,10 +13,9 @@ updates:
       - "dependencies"
       - "python"
     groups:
-      python-runtime:
-        dependency-type: "production"
-      python-dev:
-        dependency-type: "development"
+      python:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/ui"
@@ -30,10 +29,9 @@ updates:
       - "dependencies"
       - "frontend"
     groups:
-      ui-runtime:
-        dependency-type: "production"
-      ui-dev:
-        dependency-type: "development"
+      ui:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -46,3 +44,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
