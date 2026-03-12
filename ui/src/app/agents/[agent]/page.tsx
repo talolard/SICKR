@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
@@ -14,7 +15,6 @@ import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
 import { SaveTraceButton } from "@/components/trace/SaveTraceButton";
 import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
-import { FloorPlanPreviewPanel } from "@/components/tooling/FloorPlanPreviewPanel";
 import type { AttachmentRef } from "@/lib/attachments";
 import {
   listThreadBundleProposals,
@@ -39,6 +39,22 @@ import {
   type AgentItem,
   type AgentMetadata,
 } from "@/lib/agents";
+
+const LazyFloorPlanPreviewPanel = dynamic(
+  () =>
+    import("@/components/tooling/FloorPlanPreviewPanel").then(
+      (module) => module.FloorPlanPreviewPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <section className="rounded-lg border bg-white p-4">
+        <h2 className="text-lg font-semibold text-gray-900">Floor Plan Preview</h2>
+        <p className="mt-2 text-sm text-gray-600">Loading preview panel...</p>
+      </section>
+    ),
+  },
+);
 
 const traceCaptureEnabled = process.env.NEXT_PUBLIC_TRACE_CAPTURE_ENABLED === "1";
 
@@ -305,7 +321,9 @@ export default function AgentChatPage(): ReactElement {
               </div>
             ) : null}
             {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
-            <FloorPlanPreviewPanel preview={floorPlanPreview} />
+            {currentAgent === "search" ? null : (
+              <LazyFloorPlanPreviewPanel preview={floorPlanPreview} />
+            )}
             {currentAgent === "image_analysis" ? (
               <AgentImageAttachmentPanel
                 onReadyAttachmentsChange={setImageAttachments}
