@@ -73,7 +73,7 @@ export function FloorPlanPreviewPanel({
     return () => {
       cancelled = true;
     };
-  }, [Scene3D, shouldLoad3d]);
+  }, [Scene3D, scene3dOverride, shouldLoad3d]);
 
   useEffect(() => {
     if (!shouldLoad3d || !Scene3D) {
