@@ -15,7 +15,7 @@ The active orchestration in `src/ikea_agent/chat/search_pipeline.py` runs:
 
 ## Retrieval Data Path
 
-`run_search_pipeline` uses runtime helpers in `chat/runtime.py`:
+`run_search_pipeline_batch` uses runtime helpers in `chat/runtime.py`:
 
 1. Embed query text through `pydantic_ai.Embedder`.
 2. Search Milvus Lite collection for nearest vectors.
