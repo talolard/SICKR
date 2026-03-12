@@ -1,7 +1,7 @@
 # init2 Implementation Plan
 
 ## Scope
-Complete repository scaffolding from `init2.md` without implementing product features.
+Complete repository scaffolding from `plans/archive/init2.md` without implementing product features.
 
 ## Checklist
 - [x] Project layout and baseline files

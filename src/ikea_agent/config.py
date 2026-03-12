@@ -74,8 +74,7 @@ class AppSettings(BaseSettings):
     milvus_collection: str = Field(default="ikea_product_embeddings")
 
     rerank_enabled: bool = Field(default=True)
-    rerank_backend: Literal["lexical", "transformer"] = Field(default="transformer")
-    rerank_candidate_limit: int = Field(default=100, ge=10, le=500)
+    rerank_backend: Literal["lexical", "transformer"] = Field(default="lexical")
     rerank_model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
     mmr_lambda: float = Field(default=0.8, ge=0.0, le=1.0)
     mmr_preselect_limit: int = Field(default=30, ge=5, le=200)
