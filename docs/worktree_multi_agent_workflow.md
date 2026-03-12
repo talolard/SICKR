@@ -17,6 +17,7 @@ This command creates an isolated worktree, claims the selected bead, bootstraps 
 - Mutating work runs in a dedicated worktree.
 - Worktree scope is per epic/major task branch.
 - Keep runtime writable files isolated per worktree.
+- `.beads/issues.jsonl` and `.beads/interactions.jsonl` belong to the dedicated `beads` sync branch, not normal feature branches.
 - Use explicit backend/UI ports from slot mapping:
   - backend: `8100 + slot`
   - UI: `3100 + slot`
@@ -41,3 +42,14 @@ Canonical dataset under `data/parquet` remains shared read-only.
 5. Commit task-scoped changes.
 6. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
 7. Retire worktree after merge verification.
+
+## Beads Sync Branch Recovery
+
+If a stale local branch stages `.beads/issues.jsonl` or `.beads/interactions.jsonl`, the pre-commit hook now blocks the commit outside the `beads` branch.
+
+Recovery flow:
+
+1. Unstage the Beads JSONL files with `git restore --staged .beads/issues.jsonl .beads/interactions.jsonl`.
+2. Rebase or merge the latest `origin/main` so the sync-branch policy and ignores are present locally.
+3. Recommit your feature work without the Beads JSONL files.
+4. Use the dedicated `beads` branch for explicit Beads sync work.
