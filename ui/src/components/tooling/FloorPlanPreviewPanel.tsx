@@ -1,19 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { ReactElement } from "react";
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  ForwardRefExoticComponent,
+  PropsWithoutRef,
+  ReactElement,
+  RefAttributes,
+} from "react";
 
-import {
-  FloorPlanScene3D,
-  type FloorPlanScene3DHandle,
-  type FloorPlanScene3DSnapshot,
-} from "@/components/tooling/FloorPlanScene3D";
+import type { FloorPlanScene } from "@/lib/floorPlanScene";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 import type { Room3DSnapshotContext } from "@/lib/threadStore";
+import type { FloorPlanScene3DHandle, FloorPlanScene3DSnapshot } from "./FloorPlanScene3D";
+
+type FloorPlanScene3DProps = {
+  scene: FloorPlanScene;
+};
+
+type FloorPlanScene3DComponent = ForwardRefExoticComponent<
+  PropsWithoutRef<FloorPlanScene3DProps> & RefAttributes<FloorPlanScene3DHandle>
+>;
 
 type FloorPlanPreviewPanelProps = {
   preview: FloorPlanPreviewState | null;
+  scene3dOverride?: FloorPlanScene3DComponent;
   onSnapshotCaptured?: (
     snapshot: Omit<Room3DSnapshotContext, "snapshot_id" | "attachment"> & {
       image_data_url: string;
@@ -24,12 +34,15 @@ type FloorPlanPreviewPanelProps = {
 export function FloorPlanPreviewPanel({
   preview,
   onSnapshotCaptured,
+  scene3dOverride,
 }: FloorPlanPreviewPanelProps): ReactElement {
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"2d" | "3d">("2d");
   const [snapshotComment, setSnapshotComment] = useState<string>("");
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [Scene3D, setScene3D] = useState<FloorPlanScene3DComponent | null>(null);
+  const [isScene3dReady, setIsScene3dReady] = useState<boolean>(false);
   const scene3dRef = useRef<FloorPlanScene3DHandle | null>(null);
 
   const primaryImage = useMemo(() => {
@@ -39,6 +52,36 @@ export function FloorPlanPreviewPanel({
     const svg = preview.images.find((image) => image.mime_type === "image/svg+xml");
     return svg ?? preview.images[0] ?? null;
   }, [preview]);
+
+  const shouldLoad3d = activeTab === "3d" && Boolean(preview?.scene);
+
+  useEffect(() => {
+    if (!shouldLoad3d || Scene3D) {
+      return;
+    }
+    if (scene3dOverride) {
+      setScene3D(() => scene3dOverride);
+      return;
+    }
+    let cancelled = false;
+    void import("./FloorPlanScene3D").then((module) => {
+      if (cancelled) {
+        return;
+      }
+      setScene3D(() => module.FloorPlanScene3D as unknown as FloorPlanScene3DComponent);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [Scene3D, shouldLoad3d]);
+
+  useEffect(() => {
+    if (!shouldLoad3d || !Scene3D) {
+      setIsScene3dReady(false);
+      return;
+    }
+    setIsScene3dReady(scene3dRef.current !== null);
+  }, [Scene3D, shouldLoad3d]);
 
   if (!preview || !primaryImage) {
     return (
@@ -135,10 +178,17 @@ export function FloorPlanPreviewPanel({
         </div>
       ) : preview.scene ? (
         <div className="mt-3 space-y-2">
-          <FloorPlanScene3D ref={scene3dRef} scene={preview.scene} />
+          {Scene3D ? (
+            <Scene3D ref={scene3dRef} scene={preview.scene} />
+          ) : (
+            <div className="flex h-[54vh] items-center justify-center rounded border bg-gray-50 text-sm text-gray-600">
+              Loading 3D scene...
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <button
               className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-800 hover:bg-gray-50"
+              disabled={!isScene3dReady}
               onClick={() => scene3dRef.current?.resetOverview()}
               type="button"
             >
@@ -146,6 +196,7 @@ export function FloorPlanPreviewPanel({
             </button>
             <button
               className="rounded border border-gray-300 px-2.5 py-1 text-xs text-gray-800 hover:bg-gray-50"
+              disabled={!isScene3dReady}
               onClick={() => scene3dRef.current?.setInteriorView()}
               type="button"
             >
@@ -173,7 +224,7 @@ export function FloorPlanPreviewPanel({
             <div className="flex items-center gap-2">
               <button
                 className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-                disabled={isCapturing || !onSnapshotCaptured}
+                disabled={isCapturing || !onSnapshotCaptured || !isScene3dReady}
                 onClick={() => {
                   void captureSnapshot();
                 }}

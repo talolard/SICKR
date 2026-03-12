@@ -5,44 +5,41 @@ import { vi } from "vitest";
 
 import { FloorPlanPreviewPanel } from "./FloorPlanPreviewPanel";
 
-vi.mock("./FloorPlanScene3D", () => {
-  const MockScene = forwardRef<
-    {
-      capturePng: () => {
-        captured_at: string;
-        image_data_url: string;
-        camera: {
-          position_m: [number, number, number];
-          target_m: [number, number, number];
-          fov_deg: number;
-        };
-        lighting: { light_fixture_ids: string[]; emphasized_light_count: number };
+const MockScene = forwardRef<
+  {
+    capturePng: () => {
+      captured_at: string;
+      image_data_url: string;
+      camera: {
+        position_m: [number, number, number];
+        target_m: [number, number, number];
+        fov_deg: number;
       };
-      setInteriorView: () => void;
-      resetOverview: () => void;
-    },
-    { scene: unknown }
-  >(function MockScene(_props, ref): ReactElement {
-    useImperativeHandle(ref, () => ({
-      capturePng: () => ({
-        captured_at: "2026-03-06T22:00:00Z",
-        image_data_url: "data:image/png;base64,aGVsbG8=",
-        camera: {
-          position_m: [1, 2, 3],
-          target_m: [0, 0, 0],
-          fov_deg: 55,
-        },
-        lighting: {
-          light_fixture_ids: ["light-1"],
-          emphasized_light_count: 1,
-        },
-      }),
-      setInteriorView: () => {},
-      resetOverview: () => {},
-    }));
-    return <div data-testid="floor-plan-3d-canvas">mock 3d</div>;
-  });
-  return { FloorPlanScene3D: MockScene };
+      lighting: { light_fixture_ids: string[]; emphasized_light_count: number };
+    };
+    setInteriorView: () => void;
+    resetOverview: () => void;
+  },
+  { scene: unknown }
+>(function MockScene(_props, ref): ReactElement {
+  useImperativeHandle(ref, () => ({
+    capturePng: () => ({
+      captured_at: "2026-03-06T22:00:00Z",
+      image_data_url: "data:image/png;base64,aGVsbG8=",
+      camera: {
+        position_m: [1, 2, 3],
+        target_m: [0, 0, 0],
+        fov_deg: 55,
+      },
+      lighting: {
+        light_fixture_ids: ["light-1"],
+        emphasized_light_count: 1,
+      },
+    }),
+    setInteriorView: () => {},
+    resetOverview: () => {},
+  }));
+  return <div data-testid="floor-plan-3d-canvas">mock 3d</div>;
 });
 
 describe("FloorPlanPreviewPanel", () => {
@@ -223,6 +220,7 @@ describe("FloorPlanPreviewPanel", () => {
     render(
       <FloorPlanPreviewPanel
         onSnapshotCaptured={onSnapshotCaptured}
+        scene3dOverride={MockScene}
         preview={{
           threadId: "thread-capture",
           caption: "3D layout",
@@ -268,6 +266,12 @@ describe("FloorPlanPreviewPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "3D" }));
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("floor-plan-3d-canvas")).toBeInTheDocument();
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "Capture PNG" })).toBeEnabled();
+    });
     fireEvent.change(screen.getByLabelText(/Snapshot comment/i), {
       target: { value: "focus on task lighting" },
     });
@@ -284,6 +288,7 @@ describe("FloorPlanPreviewPanel", () => {
     render(
       <FloorPlanPreviewPanel
         onSnapshotCaptured={onSnapshotCaptured}
+        scene3dOverride={MockScene}
         preview={{
           threadId: "thread-retry",
           caption: "3D layout",
@@ -329,6 +334,12 @@ describe("FloorPlanPreviewPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "3D" }));
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("floor-plan-3d-canvas")).toBeInTheDocument();
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByRole("button", { name: "Capture PNG" })).toBeEnabled();
+    });
     fireEvent.click(screen.getByText("Capture PNG"));
 
     await vi.waitFor(() => {
