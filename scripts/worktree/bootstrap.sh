@@ -119,6 +119,7 @@ WORKTREE_ENV="${WORKTREE_ROOT}/.tmp_untracked/worktree.env"
 cat > "${WORKTREE_ENV}" <<EOF
 export AGENT_SLOT=${SLOT}
 export BACKEND_PORT=${BACKEND_PORT}
+export PORT=${BACKEND_PORT}
 export UI_PORT=${UI_PORT}
 export DUCKDB_PATH=${LOCAL_DUCKDB}
 export MILVUS_LITE_URI=${LOCAL_MILVUS}
