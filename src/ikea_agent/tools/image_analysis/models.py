@@ -1,12 +1,12 @@
-"""Typed request/response contracts for fal.ai-backed image analysis tools."""
+"""Typed request/response contracts for image-analysis tools."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ikea_agent.shared.types import AttachmentRef
+from ikea_agent.shared.types import AttachmentRef, RoomType
 
 
 class AttachmentRefPayload(BaseModel):
@@ -183,3 +183,89 @@ class RoomPhotoAnalysisToolResult(ImageToolEnvelope):
     object_detection: ObjectDetectionToolResult | None = None
     depth: DepthEstimationToolResult | None = None
     room_hints: list[str] = Field(default_factory=list)
+
+
+RoomEvidenceConfidence = Literal["high", "medium", "low"]
+CrossImageRoomRelationship = Literal[
+    "same_room_likely",
+    "different_rooms_confirmed",
+    "uncertain",
+]
+
+
+class RoomDetailDetailsFromPhotoRequest(BaseModel):
+    """Request payload for multi-image room-detail extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    images: list[AttachmentRefPayload] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _validate_images(self) -> RoomDetailDetailsFromPhotoRequest:
+        seen_attachment_ids: set[str] = set()
+        for image in self.images:
+            if not image.mime_type.startswith("image/"):
+                msg = f"Only image attachments are supported: {image.attachment_id}"
+                raise ValueError(msg)
+            if image.attachment_id in seen_attachment_ids:
+                msg = f"Duplicate attachment id in request: {image.attachment_id}"
+                raise ValueError(msg)
+            seen_attachment_ids.add(image.attachment_id)
+        return self
+
+
+class RoomDetailObjectsOfInterest(BaseModel):
+    """Grouped object labels extracted from the image set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    major_furniture: list[str] = Field(default_factory=list)
+    fixtures: list[str] = Field(default_factory=list)
+    lifestyle_indicators: list[str] = Field(default_factory=list)
+    other_items: list[str] = Field(default_factory=list)
+
+
+class RoomPhotoImageAssessment(BaseModel):
+    """Per-image room assessment keyed by the request image order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_index: int = Field(ge=0)
+    appears_to_show_room: bool | None = None
+    room_type: RoomType = "unknown"
+    confidence: RoomEvidenceConfidence = "low"
+    notes: list[str] = Field(default_factory=list)
+
+
+class RoomDetailDetailsExtraction(BaseModel):
+    """Structured Gemini output for room-detail extraction before local enrichment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_type: RoomType = "unknown"
+    confidence: RoomEvidenceConfidence = "low"
+    all_images_appear_to_show_rooms: bool | None = None
+    non_room_image_indices: list[int] = Field(default_factory=list)
+    cross_image_room_relationship: CrossImageRoomRelationship = "uncertain"
+    objects_of_interest: RoomDetailObjectsOfInterest = Field(
+        default_factory=RoomDetailObjectsOfInterest
+    )
+    image_assessments: list[RoomPhotoImageAssessment] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class RoomDetailDetailsFromPhotoResult(ImageToolEnvelope):
+    """Attachment-backed room-detail extraction payload returned to the agent and UI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_type: RoomType = "unknown"
+    confidence: RoomEvidenceConfidence = "low"
+    all_images_appear_to_show_rooms: bool | None = None
+    non_room_image_indices: list[int] = Field(default_factory=list)
+    cross_image_room_relationship: CrossImageRoomRelationship = "uncertain"
+    objects_of_interest: RoomDetailObjectsOfInterest = Field(
+        default_factory=RoomDetailObjectsOfInterest
+    )
+    image_assessments: list[RoomPhotoImageAssessment] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)

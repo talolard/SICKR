@@ -8,7 +8,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Engine, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    Engine,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import text
 
@@ -280,6 +290,32 @@ class AnalysisDetectionRecord(Base):
     bbox_y1_norm: Mapped[float] = mapped_column(Float, nullable=False)
     bbox_x2_norm: Mapped[float] = mapped_column(Float, nullable=False)
     bbox_y2_norm: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class AnalysisInputAssetRecord(Base):
+    """Ordered source-asset links for one analysis run."""
+
+    __tablename__ = "analysis_input_assets"
+    __table_args__ = (
+        Index("ix_analysis_input_assets_analysis_id", "analysis_id"),
+        Index("ix_analysis_input_assets_asset_id", "asset_id"),
+        UniqueConstraint("analysis_id", "ordinal", name="uq_analysis_input_assets_ordinal"),
+        UniqueConstraint("analysis_id", "asset_id", name="uq_analysis_input_assets_asset_id"),
+        {"schema": APP_SCHEMA},
+    )
+
+    analysis_input_asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    analysis_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.analysis_runs.analysis_id"),
+        nullable=False,
+    )
+    asset_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.assets.asset_id"),
+        nullable=False,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class AnalysisFeedbackRecord(Base):

@@ -1,4 +1,4 @@
-"""fal.ai image analysis tools and typed contracts."""
+"""Image-analysis tools and typed contracts."""
 
 from ikea_agent.tools.image_analysis.models import (
     AttachmentRefPayload,
@@ -6,10 +6,16 @@ from ikea_agent.tools.image_analysis.models import (
     DepthEstimationToolResult,
     ObjectDetectionRequest,
     ObjectDetectionToolResult,
+    RoomDetailDetailsFromPhotoRequest,
+    RoomDetailDetailsFromPhotoResult,
+    RoomDetailObjectsOfInterest,
     RoomPhotoAnalysisRequest,
     RoomPhotoAnalysisToolResult,
     SegmentationRequest,
     SegmentationToolResult,
+)
+from ikea_agent.tools.image_analysis.room_detail_details import (
+    get_room_detail_details_from_photo,
 )
 from ikea_agent.tools.image_analysis.tool import (
     analyze_room_photo,
@@ -24,6 +30,9 @@ __all__ = [
     "DepthEstimationToolResult",
     "ObjectDetectionRequest",
     "ObjectDetectionToolResult",
+    "RoomDetailDetailsFromPhotoRequest",
+    "RoomDetailDetailsFromPhotoResult",
+    "RoomDetailObjectsOfInterest",
     "RoomPhotoAnalysisRequest",
     "RoomPhotoAnalysisToolResult",
     "SegmentationRequest",
@@ -31,5 +40,6 @@ __all__ = [
     "analyze_room_photo",
     "detect_objects_in_image",
     "estimate_depth_map",
+    "get_room_detail_details_from_photo",
     "segment_image_with_prompt",
 ]

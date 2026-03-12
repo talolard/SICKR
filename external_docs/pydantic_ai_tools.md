@@ -36,3 +36,18 @@ so the model can "see" the generated artifact without an additional fetch path.
 
 If Pydantic validation fails for tool arguments, PydanticAI automatically prompts the model to retry with corrected inputs.
 This is a key reason to keep tool inputs strongly typed and narrowly scoped.
+
+## Multimodal Structured Output
+
+For attachment-backed multimodal extraction:
+
+- Use `BinaryContent(data=..., media_type="image/png")` (or the correct image MIME type) for local image bytes.
+- Prefer `NativeOutput(MyPydanticModel)` when the provider supports native JSON-schema response formatting.
+- For Gemini-backed runs, avoid combining native structured output with tools in the same model call.
+- Keep a `PromptedOutput(MyPydanticModel)` fallback available when native structured output is unstable for a given task/model pair.
+
+Practical repo pattern:
+
+- Build the provider model through the same PydanticAI Google model path used elsewhere in the runtime.
+- Use a small internal agent with no tools for one structured extraction call.
+- Enrich impossible-to-model fields locally after the run (for example, attachment refs that the model cannot invent safely).

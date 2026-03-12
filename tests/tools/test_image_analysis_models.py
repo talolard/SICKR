@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from ikea_agent.tools.image_analysis.models import (
     AttachmentRefPayload,
     DepthEstimationRequest,
+    RoomDetailDetailsExtraction,
+    RoomDetailDetailsFromPhotoRequest,
+    RoomDetailObjectsOfInterest,
     RoomPhotoAnalysisRequest,
+    RoomPhotoImageAssessment,
     SegmentationRequest,
 )
 
@@ -71,3 +75,51 @@ def test_combined_room_analysis_defaults() -> None:
     assert request.run_object_detection is True
     assert request.run_depth is True
     assert request.object_detection.include_overlay_image is True
+
+
+def test_room_detail_request_rejects_duplicate_attachment_ids() -> None:
+    with pytest.raises(ValidationError):
+        RoomDetailDetailsFromPhotoRequest.model_validate(
+            {
+                "images": [
+                    _attachment().model_dump(),
+                    _attachment().model_dump(),
+                ]
+            }
+        )
+
+
+def test_room_detail_request_rejects_non_image_attachment() -> None:
+    with pytest.raises(ValidationError):
+        RoomDetailDetailsFromPhotoRequest.model_validate(
+            {
+                "images": [
+                    {
+                        **_attachment().model_dump(),
+                        "mime_type": "application/pdf",
+                    }
+                ]
+            }
+        )
+
+
+def test_room_detail_extraction_defaults_are_stable() -> None:
+    extraction = RoomDetailDetailsExtraction()
+
+    assert extraction.room_type == "unknown"
+    assert extraction.cross_image_room_relationship == "uncertain"
+    assert extraction.objects_of_interest == RoomDetailObjectsOfInterest()
+    assert extraction.image_assessments == []
+
+
+def test_room_photo_image_assessment_accepts_zero_based_indices() -> None:
+    assessment = RoomPhotoImageAssessment(
+        image_index=0,
+        appears_to_show_room=True,
+        room_type="living_room",
+        confidence="high",
+        notes=["Large sofa visible."],
+    )
+
+    assert assessment.image_index == 0
+    assert assessment.notes == ["Large sofa visible."]
