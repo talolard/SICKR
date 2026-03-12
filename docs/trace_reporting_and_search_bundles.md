@@ -103,7 +103,20 @@ The backend hydrates product metadata, computes totals, and runs richer bundle v
 
 ### UI rendering
 
-Bundle proposals are rendered in a side panel on the search agent page, outside the chat transcript.
-The panel shows validator badges, budget cap context, and explicit pending-price markers for line
-items whose totals are not fully known. The in-chat renderer remains minimal and simply confirms
-that the bundle was added to the side panel.
+On wide screens, the search agent page now uses three distinct surfaces:
+
+- agent inspector
+- main search workbench
+- chat sidebar
+
+Bundle proposals render in the main workbench, outside the chat transcript.
+Each bundle is collapsed by default and shows its title, total, item count, and summary metadata.
+Expanding a bundle reveals:
+
+- validator badges
+- budget cap context
+- a bounded scroll area for line items
+- the per-item rationale (`reason`) and description
+- explicit pending-price markers when totals are incomplete
+
+The in-chat renderer remains minimal and simply confirms that the bundle was added to the side panel.

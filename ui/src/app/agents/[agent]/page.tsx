@@ -196,6 +196,36 @@ export default function AgentChatPage(): ReactElement {
   const selected = useMemo(() => {
     return agents.find((item) => item.name === currentAgent) ?? null;
   }, [currentAgent, agents]);
+  const isSearchAgent = currentAgent === "search";
+
+  const toolRenderers = (
+    <CopilotToolRenderers
+      threadId={threadId}
+      onBundleProposed={(proposal) => {
+        if (!threadId) {
+          setBundleProposals((current) => mergeBundleProposals([proposal], current));
+          return;
+        }
+        setBundleProposalError(null);
+        setBundleProposals(appendBundleProposal(threadId, proposal));
+      }}
+      onFloorPlanRendered={(snapshot) => {
+        const resolvedImages = snapshot.images.map((image) => ({
+          ...image,
+          uri: resolveAttachmentUri(image.uri),
+        }));
+        const nextSnapshot: FloorPlanPreviewState = {
+          ...snapshot,
+          threadId: threadId ?? "pending",
+          images: resolvedImages,
+        };
+        setActiveFloorPlanPreview(nextSnapshot);
+        if (threadId) {
+          saveFloorPlanPreview(nextSnapshot);
+        }
+      }}
+    />
+  );
 
   if (agentName === null) {
     return (
@@ -221,9 +251,15 @@ export default function AgentChatPage(): ReactElement {
   return (
     <main className="min-h-screen bg-white">
       <AppNavBanner currentAgentName={currentAgent} agents={agents} />
-      <section className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 p-6 lg:grid-cols-[0.85fr_1.15fr]">
+      <section
+        className={
+          isSearchAgent
+            ? "mx-auto grid max-w-[1900px] grid-cols-1 gap-4 p-6 xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)_minmax(320px,360px)]"
+            : "mx-auto grid max-w-[1700px] grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]"
+        }
+      >
         <AgentInspectorPanel error={error} metadata={metadata} />
-        <section className="flex min-h-[70vh] flex-col gap-3 rounded border border-gray-200 bg-white p-3">
+        <section className="flex min-h-[70vh] min-w-0 flex-col gap-3 rounded border border-gray-200 bg-white p-3">
           <header className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-gray-900">{currentAgent}</h2>
             <p className="text-sm text-gray-600">{selected?.description ?? "Agent chat and tool-call stream."}</p>
@@ -277,50 +313,18 @@ export default function AgentChatPage(): ReactElement {
               />
             ) : null}
           </header>
-          <div
-            className={
-              currentAgent === "search"
-                ? "grid flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]"
-                : "flex flex-1 flex-col gap-3"
-            }
-          >
-            <section className="flex min-h-0 flex-col gap-3">
-              <CopilotToolRenderers
-                threadId={threadId}
-                onBundleProposed={(proposal) => {
-                  if (!threadId) {
-                    setBundleProposals((current) => mergeBundleProposals([proposal], current));
-                    return;
-                  }
-                  setBundleProposalError(null);
-                  setBundleProposals(appendBundleProposal(threadId, proposal));
-                }}
-                onFloorPlanRendered={(snapshot) => {
-                  const resolvedImages = snapshot.images.map((image) => ({
-                    ...image,
-                    uri: resolveAttachmentUri(image.uri),
-                  }));
-                  const nextSnapshot: FloorPlanPreviewState = {
-                    ...snapshot,
-                    threadId: threadId ?? "pending",
-                    images: resolvedImages,
-                  };
-                  setActiveFloorPlanPreview(nextSnapshot);
-                  if (threadId) {
-                    saveFloorPlanPreview(nextSnapshot);
-                  }
-                }}
-              />
+          {isSearchAgent ? (
+            <SearchBundlePanel
+              error={bundleProposalError}
+              isLoading={isLoadingBundleProposals}
+              proposals={bundleProposals}
+            />
+          ) : (
+            <div className="flex flex-1 flex-col gap-3">
+              {toolRenderers}
               <CopilotSidebar />
-            </section>
-            {currentAgent === "search" ? (
-              <SearchBundlePanel
-                error={bundleProposalError}
-                isLoading={isLoadingBundleProposals}
-                proposals={bundleProposals}
-              />
-            ) : null}
-          </div>
+            </div>
+          )}
           {traceCaptureEnabled && threadId ? (
             <SaveTraceDialog
               agentName={currentAgent}
@@ -332,6 +336,14 @@ export default function AgentChatPage(): ReactElement {
             />
           ) : null}
         </section>
+        {isSearchAgent ? (
+          <aside className="min-h-[70vh] min-w-0">
+            <div className="flex min-h-[70vh] min-w-0 flex-col rounded border border-gray-200 bg-white p-2">
+              {toolRenderers}
+              <CopilotSidebar />
+            </div>
+          </aside>
+        ) : null}
       </section>
     </main>
   );
