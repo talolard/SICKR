@@ -19,12 +19,16 @@ if ! command -v bd >/dev/null 2>&1; then
     exit 0
 fi
 
+IS_WORKTREE=0
+CURRENT_BRANCH=""
+
 # Check if we're in a bd workspace
 # For worktrees, .beads is in the main repository root, not the worktree
 BEADS_DIR=""
 if git rev-parse --git-dir >/dev/null 2>&1; then
     # Check if we're in a worktree
     if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+        IS_WORKTREE=1
         # Worktree: .beads is in main repo root
         MAIN_REPO_ROOT="$(git rev-parse --git-common-dir)"
         MAIN_REPO_ROOT="$(dirname "$MAIN_REPO_ROOT")"
@@ -38,6 +42,8 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
         fi
     fi
 fi
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [ -z "$BEADS_DIR" ]; then
     exit 0
@@ -57,20 +63,31 @@ if ! bd sync --flush-only >/dev/null 2>&1; then
     exit 1
 fi
 
-# If the JSONL file was modified, stage it only on the dedicated beads branch.
+# Prevent Beads JSONL churn from leaking into normal feature commits.
+# The dedicated orphan `beads` branch is the only branch that should commit these files.
+if [ "${IS_WORKTREE}" -eq 0 ] && [ "${CURRENT_BRANCH}" != "beads" ]; then
+    STAGED_BEADS_FILES="$(git diff --cached --name-only -- .beads/issues.jsonl .beads/interactions.jsonl)"
+    if [ -n "${STAGED_BEADS_FILES}" ]; then
+        echo "Error: Beads JSONL files are staged on non-'beads' branch '${CURRENT_BRANCH}'." >&2
+        printf '%s\n' "${STAGED_BEADS_FILES}" | sed 's/^/  - /' >&2
+        echo "Recovery:" >&2
+        echo "  1. git restore --staged .beads/issues.jsonl .beads/interactions.jsonl" >&2
+        echo "  2. Rebase or merge the latest origin/main before recommitting" >&2
+        echo "  3. Use the dedicated 'beads' branch for Beads sync commits" >&2
+        exit 1
+    fi
+fi
+
+# If the JSONL files were modified, stage them only on the dedicated beads branch.
 # For worktrees, the JSONL is in the main repo's working tree, not the worktree,
 # so we can't use git add. Skip this step for worktrees.
-if [ -f "$BEADS_DIR/issues.jsonl" ]; then
-    if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
-        CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-        if [ "$CURRENT_BRANCH" = "beads" ]; then
-            # Regular repo on beads branch: file is in the working tree, safe to add.
-            git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
-        fi
-    fi
-    # For worktrees: .beads is in the main repo's working tree, not this worktree
-    # Git rejects adding files outside the worktree, so we skip it.
-    # The main repo will see the changes on the next pull/sync.
+if [ "${IS_WORKTREE}" -eq 0 ] && [ "$CURRENT_BRANCH" = "beads" ]; then
+    # Regular repo on beads branch: files are in the working tree, safe to add.
+    git add "$BEADS_DIR/issues.jsonl" "$BEADS_DIR/interactions.jsonl" 2>/dev/null || true
 fi
+
+# For worktrees: .beads is in the main repo's working tree, not this worktree.
+# Git rejects adding files outside the worktree, so we skip it.
+# The main repo will see the changes on the next pull/sync.
 
 exit 0
