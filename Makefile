@@ -1,3 +1,9 @@
+WORKTREE_ENV_FILE ?= .tmp_untracked/worktree.env
+
+ifneq ("$(wildcard $(WORKTREE_ENV_FILE))","")
+include $(WORKTREE_ENV_FILE)
+endif
+
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
 	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
 	ui-test-e2e-real-ui-smoke dev-all dev-all-mock reset agent-start merge-list \
@@ -7,7 +13,10 @@ HOST ?= 127.0.0.1
 PORT ?= 8000
 UI_DIR ?= ui
 UI_PORT ?= 3000
-PY_AG_UI_URL ?= http://127.0.0.1:8000/ag-ui/
+PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
+
+export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
+export DUCKDB_PATH MILVUS_LITE_URI ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
 
 deps:
 	uv sync --all-groups
@@ -54,20 +63,23 @@ ui-test:
 	cd $(UI_DIR) && pnpm test
 
 ui-test-e2e:
-	cd $(UI_DIR) && pnpm test:e2e
+	cd $(UI_DIR) && UI_PORT=$(UI_PORT) pnpm test:e2e
 
 ui-test-e2e-real:
-	cd $(UI_DIR) && PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
+	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
 
 ui-test-e2e-real-ui-smoke:
 	@set -eu; \
 	BACKEND_STARTED=0; \
 	BACKEND_PID=""; \
+	LOG_DIR="$${ARTIFACT_ROOT_DIR:-/tmp}"; \
+	LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-backend-$(PORT).log"; \
+	mkdir -p "$$LOG_DIR"; \
 	if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
 		echo "Backend already running at http://$(HOST):$(PORT)"; \
 	else \
 		echo "Backend not running; starting temporary backend on http://$(HOST):$(PORT)"; \
-		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >/tmp/ikea-agent-ui-smoke-backend.log 2>&1 & \
+		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >"$$LOG_PATH" 2>&1 & \
 		BACKEND_PID=$$!; \
 		BACKEND_STARTED=1; \
 		trap 'if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
@@ -80,11 +92,11 @@ ui-test-e2e-real-ui-smoke:
 			sleep 1; \
 		done; \
 		if ! curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
-			echo "Backend did not become ready; see /tmp/ikea-agent-ui-smoke-backend.log"; \
+			echo "Backend did not become ready; see $$LOG_PATH"; \
 			exit 1; \
 		fi; \
 	fi; \
-	cd $(UI_DIR) && RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
+	cd $(UI_DIR) && UI_PORT=$(UI_PORT) RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
 
 dev-all:
 	@set -e; \
@@ -101,8 +113,6 @@ dev-all-mock:
 	wait
 
 reset:
-	@pkill -f "next dev --port $(UI_PORT)" || true
-	@pkill -f "uvicorn ikea_agent.chat_app.main:create_app" || true
 	@lsof -tiTCP:$(UI_PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@lsof -tiTCP:$(PORT) -sTCP:LISTEN | xargs kill 2>/dev/null || true
 	@rm -rf $(UI_DIR)/.next 2>/dev/null || true

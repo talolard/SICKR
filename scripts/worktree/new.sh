@@ -82,6 +82,8 @@ WORKTREE_NAME="${EPIC_ID}-${SLUG}"
 WORKTREE_PATH="${ROOT_PATH%/}/${WORKTREE_NAME}"
 BRANCH_NAME="epic/${EPIC_ID}-${SLUG}"
 
+bash "${REPO_ROOT}/scripts/worktree/check-slot.sh" --slot "${SLOT}"
+
 mkdir -p "${ROOT_PATH}"
 if [[ -e "${WORKTREE_PATH}" ]]; then
   printf 'Worktree path already exists: %s\n' "${WORKTREE_PATH}" >&2
