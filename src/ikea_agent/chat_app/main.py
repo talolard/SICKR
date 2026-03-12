@@ -16,20 +16,14 @@ from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
 from starlette.types import ASGIApp
 
-from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
-from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.index import (
     AgentCatalogItem,
     AgentDescription,
+    AnyAgentDeps,
     build_agent_ag_ui_agent,
+    build_agent_deps,
     describe_agent,
     list_agent_catalog,
-)
-from ikea_agent.chat.agents.search.deps import SearchAgentDeps
-from ikea_agent.chat.agents.state import (
-    FloorPlanIntakeAgentState,
-    ImageAnalysisAgentState,
-    SearchAgentState,
 )
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
@@ -78,13 +72,10 @@ from ikea_agent.persistence.run_history_repository import (
 )
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 from ikea_agent.shared.types import BundleProposalToolResult, ImageToolOutput
-from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 logger = getLogger(__name__)
-
-AnyAgentDeps = FloorPlanIntakeDeps | SearchAgentDeps | ImageAnalysisAgentDeps
 
 
 class _ArchivedMessagesResult(Protocol):
@@ -896,34 +887,14 @@ def _build_deps_by_agent(
 ) -> dict[str, AnyAgentDeps]:
     """Build typed deps per agent name."""
 
-    deps_by_agent: dict[str, AnyAgentDeps] = {}
-    for item in catalog:
-        name = item["name"]
-        if name == "floor_plan_intake":
-            deps_by_agent[name] = FloorPlanIntakeDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                floor_plan_scene_store=FloorPlanSceneStore(),
-                state=FloorPlanIntakeAgentState(),
-            )
-            continue
-        if name == "search":
-            deps_by_agent[name] = SearchAgentDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                state=SearchAgentState(),
-            )
-            continue
-        if name == "image_analysis":
-            deps_by_agent[name] = ImageAnalysisAgentDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                state=ImageAnalysisAgentState(),
-            )
-            continue
-        msg = f"No deps builder configured for agent `{name}`."
-        raise RuntimeError(msg)
-    return deps_by_agent
+    return {
+        item["name"]: build_agent_deps(
+            item["name"],
+            runtime=runtime,
+            attachment_store=attachment_store,
+        )
+        for item in catalog
+    }
 
 
 def _build_web_apps(
