@@ -32,6 +32,7 @@
 ## Archive
 
 - [Documentation Archive](archive/index.md)
+- `plans/archive/` keeps retired bootstrap and planning history.
 
 ## Redirects
 
@@ -39,4 +40,5 @@
 
 ## Legacy
 
-Historical docs/specs/plans/SQL archived under `legacy/` are reference-only.
+`legacy/` keeps reference-only old runtime code, SQL, and historical implementation
+artifacts that are not part of the active runtime or planning surface.

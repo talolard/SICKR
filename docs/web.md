@@ -23,6 +23,14 @@
 - Chat request flow is parse request -> selected `pydantic_ai.Agent` -> tool call(s) -> streamed response.
 - Retrieval uses Milvus Lite for semantic candidates and DuckDB for metadata hydration.
 
+## Thread Selection Behavior
+
+- The main UI keeps the active thread id in both the URL and local storage.
+- If the user selects a thread id that is not resumable on the backend yet, the UI
+  starts a new thread instead and surfaces a warning explaining the fallback.
+- This temporary fallback behavior is implemented in
+  `ui/src/app/CopilotKitProviders.tsx`.
+
 ## Routes
 
 - `GET /api/agents` returns registered agent metadata for the UI
