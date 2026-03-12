@@ -24,7 +24,7 @@ dependencies = [
   "python-dotenv>=1.1.1",
   "renovation>=0.1.1",
   "sqlalchemy>=2.0.44",
-  "setuptools<83",
+  "setuptools<82",
   "structlog>=25.4.0",
   "usd-core>=24.8",
   "uvicorn>=0.40.0",
