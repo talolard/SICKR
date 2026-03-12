@@ -16,7 +16,6 @@ from ikea_agent.tools.image_analysis.core import (
 )
 from ikea_agent.tools.image_analysis.models import (
     AttachmentRefPayload,
-    DepthEstimationOptions,
     DepthEstimationRequest,
     DepthEstimationToolResult,
     DepthParametersUsed,
@@ -496,20 +495,3 @@ async def analyze_room_photo(
 
     service = FalImageAnalysisService(attachment_store)
     return await service.analyze_room_photo(request)
-
-
-def build_depth_request_from_options(
-    *,
-    image: AttachmentRefPayload,
-    options: DepthEstimationOptions,
-) -> DepthEstimationRequest:
-    """Map combined-tool depth options into the standalone depth request model."""
-
-    return DepthEstimationRequest(
-        image=image,
-        ensemble_size=options.ensemble_size,
-        processing_res=options.processing_res,
-        resample_method=options.resample_method,
-        seed=options.seed,
-        output_format=options.output_format,
-    )

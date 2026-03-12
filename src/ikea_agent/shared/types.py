@@ -12,8 +12,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MarketCode = Literal["DE"]
-EmbeddingProvider = Literal["pydantic_ai_google"]
 SortMode = Literal["relevance", "price_asc", "price_desc", "size"]
 
 
@@ -116,23 +114,6 @@ class ShortRetrievalResult:
     depth_cm: float | None
     height_cm: float | None
     price_eur: float | None
-
-    @staticmethod
-    def from_retrieval_result(result: RetrievalResult) -> ShortRetrievalResult:
-        """Build short result from a full retrieval result record."""
-
-        return ShortRetrievalResult(
-            product_id=result.canonical_product_key,
-            product_name=result.product_name,
-            product_type=result.product_type,
-            description_text=result.description_text,
-            main_category=result.main_category,
-            sub_category=result.sub_category,
-            width_cm=result.width_cm,
-            depth_cm=result.depth_cm,
-            height_cm=result.height_cm,
-            price_eur=result.price_eur,
-        )
 
 
 @dataclass(frozen=True, slots=True)
