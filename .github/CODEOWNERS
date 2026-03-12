@@ -1,0 +1,18 @@
+# Default owner. Expand these paths into teams once ownership is split.
+* @talolard
+
+# Repo automation
+/.github/ @talolard
+/AGENTS.md @talolard
+
+# Backend runtime
+/src/ @talolard
+/tests/ @talolard
+
+# Frontend workspace
+/ui/ @talolard
+
+# Planning and docs
+/docs/ @talolard
+/plans/ @talolard
+/spec/ @talolard
