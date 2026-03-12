@@ -1,10 +1,10 @@
 name: PR CI
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
   push:
     branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
   checks: write
 
@@ -21,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
 
       - name: Set up Python + uv cache
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
           enable-cache: true
@@ -39,7 +40,7 @@ jobs:
       - name: Run Pyrefly (annotations)
         run: uv run pyrefly check --output-format=github
 
-      - name: Run backend tests (JUnit)
+      - name: Run backend tests (JUnit + coverage)
         id: backend_tests
         env:
           GOOGLE_API_KEY: ci-fake-google-key
@@ -47,10 +48,24 @@ jobs:
         run: |
           mkdir -p artifacts
           set +e
-          uv run pytest --junitxml=artifacts/pytest-junit.xml
+          uv run pytest \
+            --junitxml=artifacts/pytest-junit.xml \
+            --cov=src/ikea_agent \
+            --cov-report=xml:artifacts/backend-coverage.xml \
+            --cov-report=json:artifacts/backend-coverage.json
           exit_code=$?
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
           exit 0
+
+      - name: Upload backend coverage artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            artifacts/backend-coverage.json
+            artifacts/backend-coverage.xml
+          if-no-files-found: error
 
       - name: Publish backend test report
         if: ${{ !cancelled() }}
@@ -75,7 +90,7 @@ jobs:
         working-directory: ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -164,15 +179,26 @@ jobs:
           echo "Frontend typecheck failed. See annotations above."
           exit 1
 
-      - name: Run frontend unit tests (Vitest + JUnit)
+      - name: Run frontend unit tests (Vitest + JUnit + coverage)
         id: frontend_tests
         run: |
           mkdir -p ../artifacts
           set +e
-          pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit=../artifacts/vitest-junit.xml
+          rm -rf coverage
+          pnpm exec vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=../artifacts/vitest-junit.xml
           test_exit=$?
           echo "exit_code=${test_exit}" >> "$GITHUB_OUTPUT"
           exit 0
+
+      - name: Upload frontend coverage artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: |
+            ui/coverage/coverage-summary.json
+            ui/coverage/lcov.info
+          if-no-files-found: error
 
       - name: Publish frontend unit test report
         if: ${{ !cancelled() }}
@@ -189,6 +215,160 @@ jobs:
           echo "Frontend unit tests failed. See annotations and Frontend Vitest report."
           exit 1
 
+  coverage:
+    name: Coverage (backend + frontend)
+    needs: [backend, frontend-unit]
+    if: ${{ needs.backend.result == 'success' && needs['frontend-unit'].result == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      backend_percent: ${{ steps.export_report.outputs.backend_percent }}
+      frontend_percent: ${{ steps.export_report.outputs.frontend_percent }}
+      patch_percent: ${{ steps.export_report.outputs.patch_percent }}
+      baseline_available: ${{ steps.export_report.outputs.baseline_available }}
+      total_regressed: ${{ steps.export_report.outputs.total_regressed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download backend coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage
+          path: artifacts/backend
+
+      - name: Download frontend coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: artifacts/frontend
+
+      - name: Capture pull request diff
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p artifacts
+          git diff --unified=0 --no-color "${BASE_SHA}...${HEAD_SHA}" > artifacts/changed.diff
+
+      - name: Find default-branch coverage baseline
+        if: ${{ github.event_name == 'pull_request' }}
+        id: find_baseline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowId = 'pr-ci.yml';
+            const defaultBranch = context.payload.repository.default_branch;
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflowId,
+              branch: defaultBranch,
+              event: 'push',
+              status: 'success',
+              per_page: 100,
+            });
+
+            for (const run of runs) {
+              const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+              const artifact = artifacts.find((candidate) => candidate.name === 'coverage-baseline' && !candidate.expired);
+              if (!artifact) {
+                continue;
+              }
+              core.setOutput('found', 'true');
+              core.setOutput('run_id', String(run.id));
+              core.setOutput('run_url', run.html_url);
+              return;
+            }
+
+            core.setOutput('found', 'false');
+
+      - name: Download default-branch coverage baseline
+        if: ${{ steps.find_baseline.outputs.found == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-baseline
+          path: artifacts/baseline
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find_baseline.outputs.run_id }}
+
+      - name: Build coverage report
+        run: |
+          mkdir -p coverage-report
+          args=(
+            --backend-json artifacts/backend/backend-coverage.json
+            --frontend-summary artifacts/frontend/coverage-summary.json
+            --frontend-lcov artifacts/frontend/lcov.info
+            --repo-root "$PWD"
+            --summary-md coverage-report/summary.md
+            --report-json coverage-report/report.json
+          )
+          if [ -f artifacts/changed.diff ]; then
+            args+=(--diff artifacts/changed.diff)
+          fi
+          if [ -f artifacts/baseline/report.json ]; then
+            args+=(--baseline artifacts/baseline/report.json)
+          fi
+          python3 scripts/ci_coverage_report.py "${args[@]}"
+
+      - name: Export coverage outputs
+        id: export_report
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path("coverage-report/report.json").read_text())
+          patch_percent = report["patch"]["percent"]
+          patch_value = "n/a" if patch_percent is None else f"{patch_percent:.2f}%"
+
+          outputs = {
+              "backend_percent": f'{report["backend"]["percent"]:.2f}%',
+              "frontend_percent": f'{report["frontend"]["percent"]:.2f}%',
+              "patch_percent": patch_value,
+              "baseline_available": str(report["baseline_available"]).lower(),
+              "total_regressed": str(report["total_regressed"]).lower(),
+          }
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              for key, value in outputs.items():
+                  handle.write(f"{key}={value}\n")
+          PY
+
+      - name: Publish coverage summary
+        run: cat coverage-report/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report
+          if-no-files-found: error
+
+      - name: Upload default-branch coverage baseline
+        if: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-baseline
+          path: coverage-report/report.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Fail on coverage regression
+        if: ${{ steps.export_report.outputs.total_regressed == 'true' }}
+        run: |
+          echo "Coverage totals regressed compared to the latest default-branch baseline."
+          exit 1
+
   e2e-mock:
     name: E2E (Playwright mock)
     runs-on: ubuntu-latest
@@ -197,7 +377,7 @@ jobs:
         working-directory: ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -216,7 +396,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('ui/pnpm-lock.yaml') }}
@@ -248,7 +428,7 @@ jobs:
 
       - name: Upload Playwright report artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: ui/playwright-report
@@ -271,10 +451,10 @@ jobs:
         working-directory: ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
 
       - name: Set up Python + uv cache
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.13"
           enable-cache: true
@@ -322,3 +502,48 @@ jobs:
           if [ -f /tmp/ikea-agent.pid ]; then
             kill "$(cat /tmp/ikea-agent.pid)" || true
           fi
+
+  ci-summary:
+    name: CI Summary
+    if: ${{ always() }}
+    needs: [backend, frontend-unit, coverage, e2e-mock, e2e-all-models]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish CI summary
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_RESULT: ${{ needs['frontend-unit'].result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          COVERAGE_BACKEND: ${{ needs.coverage.outputs.backend_percent }}
+          COVERAGE_FRONTEND: ${{ needs.coverage.outputs.frontend_percent }}
+          COVERAGE_PATCH: ${{ needs.coverage.outputs.patch_percent }}
+          COVERAGE_BASELINE: ${{ needs.coverage.outputs.baseline_available }}
+          E2E_MOCK_RESULT: ${{ needs['e2e-mock'].result }}
+          E2E_ALL_MODELS_RESULT: ${{ needs['e2e-all-models'].result }}
+        run: |
+          backend_detail="GitHub annotations + Backend Pytest report"
+          frontend_detail="GitHub annotations + Frontend Vitest report"
+          e2e_mock_detail="Playwright report artifact + E2E Playwright Mock report"
+          e2e_real_detail="Disabled optional lane"
+          coverage_detail="not available"
+
+          if [ "${COVERAGE_RESULT}" = "success" ] || [ "${COVERAGE_RESULT}" = "failure" ]; then
+            coverage_detail="backend ${COVERAGE_BACKEND}, frontend ${COVERAGE_FRONTEND}, patch ${COVERAGE_PATCH}"
+            if [ "${COVERAGE_BASELINE}" = "true" ]; then
+              coverage_detail="${coverage_detail}; default-branch baseline compared"
+            else
+              coverage_detail="${coverage_detail}; baseline unavailable"
+            fi
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## CI Summary
+
+          | Lane | Result | Detail |
+          | --- | --- | --- |
+          | Backend (ruff, pyrefly, pytest) | ${BACKEND_RESULT} | ${backend_detail} |
+          | Frontend Unit (eslint, tsc, vitest) | ${FRONTEND_RESULT} | ${frontend_detail} |
+          | Coverage (backend + frontend) | ${COVERAGE_RESULT} | ${coverage_detail} |
+          | E2E (Playwright mock) | ${E2E_MOCK_RESULT} | ${e2e_mock_detail} |
+          | E2E (real backend, all models) | ${E2E_ALL_MODELS_RESULT} | ${e2e_real_detail} |
+          EOF

@@ -5,13 +5,16 @@
 GitHub Actions workflow: `.github/workflows/pr-ci.yml`
 
 Trigger behavior:
+- Runs on `push` to `main` to refresh the default-branch coverage baseline
 - Runs on `pull_request` events: `opened`, `reopened`, `synchronize`, `ready_for_review`
 - Supports manual runs through `workflow_dispatch`
 
 Active jobs:
-- `backend`: Ruff + Pyrefly + Pytest (JUnit + annotations)
-- `frontend-unit`: ESLint + TypeScript + Vitest (JUnit + annotations)
+- `backend`: Ruff + Pyrefly + Pytest (JUnit + coverage + annotations)
+- `frontend-unit`: ESLint + TypeScript + Vitest (JUnit + coverage + annotations)
+- `coverage`: GitHub-native backend/frontend coverage comparison against the latest default-branch baseline
 - `e2e-mock`: Playwright against mock route (JUnit + report artifact)
+- `ci-summary`: one at-a-glance rollup of all CI lanes plus coverage numbers
 
 Disabled scaffold job:
 - `e2e-all-models` is present but gated with `if: ${{ false }}`.
@@ -35,6 +38,33 @@ Checks emit annotations in GitHub UI for:
 Current gating behavior:
 - ESLint is blocking (`--max-warnings=0`).
 - TypeScript and all test lanes are blocking.
+- `Coverage (backend + frontend)` is blocking when backend or frontend total coverage regresses relative to the latest default-branch baseline.
+- `CI Summary` is informational; it summarizes lane status and coverage numbers but does not gate merges on its own.
+
+## Coverage Reporting
+
+Coverage is measured directly in CI. No hosted coverage service is used.
+
+Current artifacts:
+- Backend: `coverage.py` JSON and XML generated during the `backend` job
+- Frontend: Vitest LCOV plus `coverage-summary.json` generated during the `frontend-unit` job
+- Coverage summary: JSON + Markdown artifact from the `coverage` job
+
+Default-branch baseline flow:
+- A successful `push` run on `main` uploads a `coverage-baseline` artifact from the `coverage` job.
+- Pull request runs locate the latest successful baseline artifact from `main`.
+- The `coverage` job compares current backend/frontend totals against that baseline inside GitHub Actions.
+
+Pull request coverage signals:
+- Backend total coverage
+- Frontend total coverage
+- Patch coverage on changed executable lines in measured files
+- Regression status versus the latest default-branch baseline
+
+Authoritative PR surfaces:
+- `Coverage (backend + frontend)` check: canonical coverage gate and detailed coverage summary
+- `CI Summary` check: compact overview of all CI lanes, including whether optional real-backend e2e was skipped
+- Existing suite-level checks (`Backend Pytest`, `Frontend Vitest`, `E2E Playwright Mock`): detailed test failure reporting
 
 ## No-Secrets / No-Paid-Calls Test Guard
 
