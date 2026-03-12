@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { DepthEstimationToolResult } from "@/components/tooling/DepthEstimationToolRenderer";
 import type { ObjectDetectionToolResult } from "@/components/tooling/ObjectDetectionToolRenderer";
+import type { RoomDetailDetailsFromPhotoToolResult } from "@/components/tooling/RoomDetailDetailsFromPhotoToolRenderer";
 import type { RoomPhotoAnalysisToolResult } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import type { SegmentationToolResult } from "@/components/tooling/SegmentationToolRenderer";
 import {
@@ -14,6 +15,36 @@ const roomPhotoAnalysisSchema = z.object({
   caption: z.string(),
   images: z.array(attachmentRefSchema),
   room_hints: z.array(z.string()),
+});
+
+const roomDetailDetailsSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  room_type: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  all_images_appear_to_show_rooms: z.boolean().nullable(),
+  non_room_image_indices: z.array(z.number()),
+  cross_image_room_relationship: z.enum([
+    "same_room_likely",
+    "different_rooms_confirmed",
+    "uncertain",
+  ]),
+  objects_of_interest: z.object({
+    major_furniture: z.array(z.string()),
+    fixtures: z.array(z.string()),
+    lifestyle_indicators: z.array(z.string()),
+    other_items: z.array(z.string()),
+  }),
+  image_assessments: z.array(
+    z.object({
+      image_index: z.number(),
+      appears_to_show_room: z.boolean().nullable(),
+      room_type: z.string(),
+      confidence: z.enum(["high", "medium", "low"]),
+      notes: z.array(z.string()),
+    }),
+  ),
+  notes: z.array(z.string()),
 });
 
 const objectDetectionSchema = z.object({
@@ -98,6 +129,19 @@ export function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysis
     caption: validated.data.caption,
     images: validated.data.images.map(normalizeAttachmentRef),
     room_hints: validated.data.room_hints,
+  };
+}
+
+export function parseRoomDetailDetailsResult(
+  result: unknown,
+): RoomDetailDetailsFromPhotoToolResult | null {
+  const validated = roomDetailDetailsSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    ...validated.data,
+    images: validated.data.images.map(normalizeAttachmentRef),
   };
 }
 

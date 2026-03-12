@@ -5,7 +5,14 @@ import { z } from "zod";
 
 import { createAnalysisFeedback } from "@/lib/api/threadDataClient";
 
-import { parseDepthEstimationResult, parseObjectDetectionResult, parseRoomPhotoAnalysisResult, parseSegmentationResult } from "./parsing";
+import { RoomDetailDetailsFromPhotoToolRenderer } from "@/components/tooling/RoomDetailDetailsFromPhotoToolRenderer";
+import {
+  parseDepthEstimationResult,
+  parseObjectDetectionResult,
+  parseRoomDetailDetailsResult,
+  parseRoomPhotoAnalysisResult,
+  parseSegmentationResult,
+} from "./parsing";
 import { DefaultToolCard, LoadingToolMessage } from "./shared";
 import { DepthEstimationToolRenderer } from "@/components/tooling/DepthEstimationToolRenderer";
 import { ObjectDetectionToolRenderer } from "@/components/tooling/ObjectDetectionToolRenderer";
@@ -129,6 +136,34 @@ export function useImageAnalysisToolRenderers({
       return (
         <DefaultToolCard
           name="analyze_room_photo"
+          status="failed"
+          result={undefined}
+          args={undefined}
+          errorMessage={errorMessage}
+        />
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "get_room_detail_details_from_photo",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return <LoadingToolMessage message="Summarizing room details..." />;
+      }
+      const parsed = parseRoomDetailDetailsResult(result);
+      if (parsed) {
+        return <RoomDetailDetailsFromPhotoToolRenderer result={parsed} />;
+      }
+      const parsedResult = parseResult(result);
+      const errorMessage =
+        typeof parsedResult === "string"
+          ? parsedResult
+          : "Tool returned an invalid room-detail payload.";
+      return (
+        <DefaultToolCard
+          name="get_room_detail_details_from_photo"
           status="failed"
           result={undefined}
           args={undefined}

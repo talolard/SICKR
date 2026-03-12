@@ -17,10 +17,6 @@ class AgentModelConfig(BaseModel):
     """Optional model override configuration for one named agent."""
 
     model: str | None = Field(default=None)
-    persistence_mode: Literal["state_per_thread", "data_per_turn", "disabled"] | None = Field(
-        default=None
-    )
-    capture_turn_history: bool | None = Field(default=None)
 
 
 class AppSettings(BaseSettings):
@@ -50,6 +46,7 @@ class AppSettings(BaseSettings):
     gcp_region: str = Field(default="us-central1")
     gemini_model: str = Field(default="gemini-embedding-001")
     gemini_generation_model: str = Field(default="gemini-3.1-pro-preview")
+    gemini_image_analysis_model: str = Field(default="gemini-2.5-flash")
     embedding_provider: str = Field(default="google-gla")
     embedding_model_uri: str = Field(default="google-gla:gemini-embedding-001")
     gemini_api_key: str | None = Field(
@@ -69,7 +66,6 @@ class AppSettings(BaseSettings):
     trace_capture_enabled: bool = Field(default=False)
     trace_root_dir: str = Field(default="traces")
     default_query_limit: int = Field(default=25, ge=1, le=200)
-    default_market: str = Field(default="Germany")
 
     embedding_dimensions: int = Field(default=256, ge=64, le=3072)
     retrieval_candidate_limit: int = Field(default=250, ge=50, le=2000)
@@ -105,41 +101,6 @@ class AppSettings(BaseSettings):
         if resolved and resolved.model:
             return resolved.model
         return None
-
-    def agent_persistence_mode(
-        self, agent_name: str
-    ) -> Literal["state_per_thread", "data_per_turn", "disabled"] | None:
-        """Return configured persistence mode override for one agent."""
-
-        resolved = self._resolve_agent_config(agent_name)
-        if resolved is not None:
-            return resolved.persistence_mode
-        return None
-
-    def agent_capture_turn_history(self, agent_name: str) -> bool | None:
-        """Return configured turn-history capture override for one agent."""
-
-        resolved = self._resolve_agent_config(agent_name)
-        if resolved is not None:
-            return resolved.capture_turn_history
-        return None
-
-    def subagent_model(self, subagent_name: str) -> str | None:
-        """Backward-compatible alias for `agent_model`."""
-
-        return self.agent_model(subagent_name)
-
-    def subagent_persistence_mode(
-        self, subagent_name: str
-    ) -> Literal["state_per_thread", "data_per_turn", "disabled"] | None:
-        """Backward-compatible alias for `agent_persistence_mode`."""
-
-        return self.agent_persistence_mode(subagent_name)
-
-    def subagent_capture_turn_history(self, subagent_name: str) -> bool | None:
-        """Backward-compatible alias for `agent_capture_turn_history`."""
-
-        return self.agent_capture_turn_history(subagent_name)
 
 
 @lru_cache(maxsize=1)

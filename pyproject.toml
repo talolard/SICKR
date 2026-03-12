@@ -144,3 +144,11 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+
+[tool.vulture]
+paths = ["src", "tests", "vulture_whitelist.py"]
+exclude = ["legacy/", "migrations/", ".tmp_untracked/"]
+ignore_decorators = ["@app.get", "@app.post", "@app.patch", "@pytest.fixture", "@field_validator", "@model_validator"]
+ignore_names = ["model_config"]
+min_confidence = 60
+sort_by_size = true

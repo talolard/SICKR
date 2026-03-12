@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactElement } from "react";
-import type { BundleProposal } from "@/lib/bundleProposalsStore";
-import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
+
 import { useCatalogToolRenderers } from "@/components/copilotkit/renderers/useCatalogToolRenderers";
 import { useDefaultToolRenderer } from "@/components/copilotkit/renderers/useDefaultToolRenderer";
 import { useImageAnalysisToolRenderers } from "@/components/copilotkit/renderers/useImageAnalysisToolRenderers";
+import type { BundleProposal } from "@/lib/bundleProposalsStore";
+import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type CopilotToolRenderersProps = {
   threadId?: string | null;

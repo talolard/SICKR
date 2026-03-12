@@ -52,9 +52,3 @@ class FloorPlanSceneStore:
         snapshot = SceneSnapshot(revision=revision, scene=clone_scene(scene))
         self._by_session[key] = snapshot
         return SceneSnapshot(revision=snapshot.revision, scene=clone_scene(snapshot.scene))
-
-    def clear(self, session_id: str | None) -> None:
-        """Remove one session from the store."""
-
-        key = session_id or "__anonymous__"
-        self._by_session.pop(key, None)
