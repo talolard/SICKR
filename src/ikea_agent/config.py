@@ -50,6 +50,7 @@ class AppSettings(BaseSettings):
     gcp_region: str = Field(default="us-central1")
     gemini_model: str = Field(default="gemini-embedding-001")
     gemini_generation_model: str = Field(default="gemini-3.1-pro-preview")
+    gemini_image_analysis_model: str = Field(default="gemini-2.5-flash")
     embedding_provider: str = Field(default="google-gla")
     embedding_model_uri: str = Field(default="google-gla:gemini-embedding-001")
     gemini_api_key: str | None = Field(

@@ -15,6 +15,23 @@ from pydantic import BaseModel, ConfigDict, Field
 MarketCode = Literal["DE"]
 EmbeddingProvider = Literal["pydantic_ai_google"]
 SortMode = Literal["relevance", "price_asc", "price_desc", "size"]
+RoomType = Literal[
+    "bathroom",
+    "bedroom",
+    "dining_room",
+    "entryway",
+    "hallway",
+    "home_office",
+    "kitchen",
+    "laundry_room",
+    "living_room",
+    "nursery",
+    "outdoor",
+    "studio",
+    "utility_room",
+    "other",
+    "unknown",
+]
 
 
 @dataclass(frozen=True, slots=True)

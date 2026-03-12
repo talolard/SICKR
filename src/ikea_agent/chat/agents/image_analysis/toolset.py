@@ -17,6 +17,8 @@ from ikea_agent.tools.image_analysis import (
     DepthEstimationToolResult,
     ObjectDetectionRequest,
     ObjectDetectionToolResult,
+    RoomDetailDetailsFromPhotoRequest,
+    RoomDetailDetailsFromPhotoResult,
     RoomPhotoAnalysisRequest,
     RoomPhotoAnalysisToolResult,
     SegmentationRequest,
@@ -25,6 +27,9 @@ from ikea_agent.tools.image_analysis import (
 from ikea_agent.tools.image_analysis import analyze_room_photo as run_room_photo_analysis
 from ikea_agent.tools.image_analysis import detect_objects_in_image as run_object_detection
 from ikea_agent.tools.image_analysis import estimate_depth_map as run_depth_estimation
+from ikea_agent.tools.image_analysis import (
+    get_room_detail_details_from_photo as run_room_detail_details_from_photo,
+)
 from ikea_agent.tools.image_analysis import segment_image_with_prompt as run_image_segmentation
 
 logger = getLogger(__name__)
@@ -35,6 +40,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "estimate_depth_map",
     "segment_image_with_prompt",
     "analyze_room_photo",
+    "get_room_detail_details_from_photo",
 )
 
 
@@ -162,6 +168,55 @@ async def analyze_room_photo(
     return result
 
 
+async def get_room_detail_details_from_photo(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: RoomDetailDetailsFromPhotoRequest | None = None,
+) -> RoomDetailDetailsFromPhotoResult:
+    """Extract room-detail observations across one or more uploaded room photos."""
+
+    logger.info(
+        "get_room_detail_details_from_photo_start",
+        extra=telemetry_context(ctx.deps.state),
+    )
+    resolved_request = request
+    if resolved_request is None:
+        if not ctx.deps.state.attachments:
+            raise ValueError("No uploaded images available. Upload room photos first.")
+        resolved_request = RoomDetailDetailsFromPhotoRequest(
+            images=[
+                AttachmentRefPayload.from_ref(attachment)
+                for attachment in ctx.deps.state.attachments
+            ]
+        )
+
+    result = await run_room_detail_details_from_photo(
+        request=resolved_request,
+        attachment_store=ctx.deps.attachment_store,
+    )
+    repository = analysis_repository(ctx.deps.runtime)
+    if repository is not None:
+        repository.record_analysis(
+            tool_name="get_room_detail_details_from_photo",
+            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            run_id=ctx.deps.state.run_id,
+            input_asset_id=resolved_request.images[0].attachment_id,
+            input_asset_ids=[image.attachment_id for image in resolved_request.images],
+            request_json=resolved_request.model_dump(mode="json"),
+            result_json=result.model_dump(mode="json"),
+            detections=[],
+        )
+    logger.info(
+        "get_room_detail_details_from_photo_complete",
+        extra={
+            "image_count": len(resolved_request.images),
+            "room_type": result.room_type,
+            "cross_image_room_relationship": result.cross_image_room_relationship,
+            **telemetry_context(ctx.deps.state),
+        },
+    )
+    return result
+
+
 def build_image_analysis_toolset() -> FunctionToolset[ImageAnalysisAgentDeps]:
     """Build toolset for image-analysis agent."""
 
@@ -172,5 +227,9 @@ def build_image_analysis_toolset() -> FunctionToolset[ImageAnalysisAgentDeps]:
             Tool(estimate_depth_map, name="estimate_depth_map"),
             Tool(segment_image_with_prompt, name="segment_image_with_prompt"),
             Tool(analyze_room_photo, name="analyze_room_photo"),
+            Tool(
+                get_room_detail_details_from_photo,
+                name="get_room_detail_details_from_photo",
+            ),
         ]
     )

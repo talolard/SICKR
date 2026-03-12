@@ -21,6 +21,10 @@ import {
   type RoomPhotoAnalysisToolResult,
 } from "@/components/tooling/RoomPhotoAnalysisToolRenderer";
 import {
+  RoomDetailDetailsFromPhotoToolRenderer,
+  type RoomDetailDetailsFromPhotoToolResult,
+} from "@/components/tooling/RoomDetailDetailsFromPhotoToolRenderer";
+import {
   SegmentationToolRenderer,
   type SegmentationToolResult,
 } from "@/components/tooling/SegmentationToolRenderer";
@@ -56,6 +60,35 @@ const roomPhotoAnalysisSchema = z.object({
   caption: z.string(),
   images: z.array(attachmentRefSchema),
   room_hints: z.array(z.string()),
+});
+const roomDetailDetailsSchema = z.object({
+  caption: z.string(),
+  images: z.array(attachmentRefSchema),
+  room_type: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  all_images_appear_to_show_rooms: z.boolean().nullable(),
+  non_room_image_indices: z.array(z.number()),
+  cross_image_room_relationship: z.enum([
+    "same_room_likely",
+    "different_rooms_confirmed",
+    "uncertain",
+  ]),
+  objects_of_interest: z.object({
+    major_furniture: z.array(z.string()),
+    fixtures: z.array(z.string()),
+    lifestyle_indicators: z.array(z.string()),
+    other_items: z.array(z.string()),
+  }),
+  image_assessments: z.array(
+    z.object({
+      image_index: z.number(),
+      appears_to_show_room: z.boolean().nullable(),
+      room_type: z.string(),
+      confidence: z.enum(["high", "medium", "low"]),
+      notes: z.array(z.string()),
+    }),
+  ),
+  notes: z.array(z.string()),
 });
 const objectDetectionSchema = z.object({
   caption: z.string(),
@@ -238,6 +271,27 @@ function parseRoomPhotoAnalysisResult(result: unknown): RoomPhotoAnalysisToolRes
     caption: validated.data.caption,
     images: validated.data.images.map(normalizeAttachmentRef),
     room_hints: validated.data.room_hints,
+  };
+}
+
+function parseRoomDetailDetailsResult(
+  result: unknown,
+): RoomDetailDetailsFromPhotoToolResult | null {
+  const validated = roomDetailDetailsSchema.safeParse(parseResult(result));
+  if (!validated.success) {
+    return null;
+  }
+  return {
+    caption: validated.data.caption,
+    images: validated.data.images.map(normalizeAttachmentRef),
+    room_type: validated.data.room_type,
+    confidence: validated.data.confidence,
+    all_images_appear_to_show_rooms: validated.data.all_images_appear_to_show_rooms,
+    non_room_image_indices: validated.data.non_room_image_indices,
+    cross_image_room_relationship: validated.data.cross_image_room_relationship,
+    objects_of_interest: validated.data.objects_of_interest,
+    image_assessments: validated.data.image_assessments,
+    notes: validated.data.notes,
   };
 }
 
@@ -733,6 +787,40 @@ export function CopilotToolRenderers({
         <div className="rounded border bg-white p-2">
           <DefaultToolCallRenderer
             name="analyze_room_photo"
+            status="failed"
+            result={undefined}
+            args={undefined}
+            errorMessage={errorMessage}
+          />
+        </div>
+      );
+    },
+  });
+
+  useRenderTool({
+    name: "get_room_detail_details_from_photo",
+    parameters: z.unknown(),
+    render: ({ status, result }) => {
+      if (status !== "complete") {
+        return (
+          <div className="rounded border bg-white p-2">
+            <p className="text-sm text-gray-700">Analyzing room images...</p>
+          </div>
+        );
+      }
+      const parsed = parseRoomDetailDetailsResult(result);
+      if (parsed) {
+        return <RoomDetailDetailsFromPhotoToolRenderer result={parsed} />;
+      }
+      const parsedResult = parseResult(result);
+      const errorMessage =
+        typeof parsedResult === "string"
+          ? parsedResult
+          : "Tool returned an invalid room-detail payload.";
+      return (
+        <div className="rounded border bg-white p-2">
+          <DefaultToolCallRenderer
+            name="get_room_detail_details_from_photo"
             status="failed"
             result={undefined}
             args={undefined}
