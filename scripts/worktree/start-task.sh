@@ -166,6 +166,8 @@ BRANCH_NAME="epic/${EPIC_ID}-${SLUG}"
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
 
+bash "${REPO_ROOT}/scripts/worktree/check-slot.sh" --slot "${SLOT}"
+
 if (( DRY_RUN == 1 )); then
   cat <<DRYRUN
 Issue: ${ISSUE_ID}

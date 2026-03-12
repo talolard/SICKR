@@ -12,6 +12,11 @@ make agent-start SLOT=7 QUERY="floor plan intake"
 
 This command creates an isolated worktree, claims the selected bead, bootstraps runtime files, and writes per-worktree environment settings.
 
+After bootstrap:
+
+- plain `make` targets automatically load `.tmp_untracked/worktree.env`
+- slot claims are rejected if another worktree or running process is already using that slot's ports
+
 ## Rules
 
 - Mutating work runs in a dedicated worktree.
