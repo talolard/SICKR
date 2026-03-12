@@ -66,6 +66,13 @@ When using libraries search for documentation in
 - **Pre-commit quality gate: `make tidy`** (runs format → lint-fix → typecheck → test in one command).
 - Use `make format-all` for a quick format+lint pass without running the test suite.
 
+### Local Probe Isolation
+
+- When running startup or performance probes alongside a live local session, use alternate ports and isolated local state.
+- For extra backend instances, override `DUCKDB_PATH` and `MILVUS_LITE_URI` to temp files so the probe does not contend with the main dev server's `data/ikea.duckdb` lock.
+- If the probe writes artifacts or feedback bundles, also override `ARTIFACT_ROOT_DIR`, `FEEDBACK_ROOT_DIR`, and `TRACE_ROOT_DIR` to temp directories.
+- Do not run a second `next dev` from the same checkout; Next uses `ui/.next/dev/lock`. Use a separate worktree or checkout for parallel UI dev servers.
+
 ## Behavioral Readiness Gate
 
 - For behavioral/runtime changes (agent logic, prompts, tools, routing, or UI behavior), run `make ui-test-e2e-real-ui-smoke` and ensure it passes before telling the user work is ready.
