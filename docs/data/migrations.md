@@ -46,3 +46,11 @@ Revision `20260306_0003` adds:
 - `app.room_3d_snapshots`
   - thread-scoped camera/lighting snapshot metadata
   - links persisted PNG snapshot assets to optional room_3d_asset bindings
+
+## Current Analysis Input Table
+
+Revision `20260312_0004` adds:
+
+- `app.analysis_input_assets`
+  - ordered source-of-truth links from one `analysis_runs` row to one or more uploaded image assets
+  - preserves image ordinal for multi-photo analysis tools such as `get_room_detail_details_from_photo`

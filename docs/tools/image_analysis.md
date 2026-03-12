@@ -4,7 +4,7 @@
 
 Provide attachment-driven image analysis capabilities for room understanding and photo-guided iteration.
 
-These tools are backed by fal.ai model endpoints and are registered directly on the active PydanticAI agent.
+These tools are registered directly on the active PydanticAI agent. Most image-processing tools remain fal.ai-backed, while the room-detail extraction tool uses the repo-standard Gemini path through PydanticAI.
 
 ## Registered tools
 
@@ -19,11 +19,16 @@ These tools are backed by fal.ai model endpoints and are registered directly on 
   - Returns prompt-targeted masks; supports `return_multiple_masks` with up to 32 masks.
 - `analyze_room_photo`
   - Combined tool that runs object detection and depth estimation in one call.
+- `get_room_detail_details_from_photo`
+  - Internal model path: PydanticAI Google model using `gemini_image_analysis_model`
+  - Accepts multiple uploaded room images in one call.
+  - Returns structured room type, cross-image relationship, grouped objects of interest, and per-image assessments.
 
 ## Input and output contract
 
-- All requests take `image: AttachmentRefPayload` pointing to an uploaded image.
-- All responses include:
+- Single-image tools take `image: AttachmentRefPayload`.
+- `get_room_detail_details_from_photo` takes `images: list[AttachmentRefPayload]` and validates that each entry is an uploaded image attachment.
+- fal-backed image outputs include:
   - `caption: str`
   - `images: list[AttachmentRefPayload]`
 - Each tool adds typed structured fields:
@@ -32,6 +37,13 @@ These tools are backed by fal.ai model endpoints and are registered directly on 
   - Masks (`label`, optional `query`, optional `score`, optional `bbox_xyxy_px`, `mask_image`)
   - Segmentation query summary (`queries`, `query_results`)
   - Combined hints (`room_hints`)
+  - Room-detail extraction:
+    - `room_type`
+    - `confidence`
+    - `cross_image_room_relationship`
+    - grouped `objects_of_interest`
+    - `image_assessments`
+    - `notes`
 
 ### SAM-3 segmentation request shape
 
@@ -62,6 +74,10 @@ Set one of:
 Runtime behavior:
 
 - If `FAL_KEY` is missing and `FAI_AI_API_KEY` exists, runtime maps `FAI_AI_API_KEY` to `FAL_KEY`.
+- Gemini-backed room-detail extraction uses:
+  - `ALLOW_MODEL_REQUESTS=1`
+  - `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+  - optional `GEMINI_IMAGE_ANALYSIS_MODEL` override (defaults to `gemini-2.5-flash`)
 
 ## Execution flow
 
@@ -74,6 +90,13 @@ Shared core is implemented in `src/ikea_agent/tools/image_analysis/core.py`:
 5. Persist outputs back into `AttachmentStore` and return local attachment refs.
 
 This keeps UI rendering stable and avoids dependency on external expiring URLs.
+
+Room-detail extraction is implemented in `src/ikea_agent/tools/image_analysis/room_detail_tool.py`:
+
+1. Resolve all uploaded image attachments from `AttachmentStore`.
+2. Build one PydanticAI multimodal request with `BinaryContent` per image.
+3. Run one structured Gemini extraction for the full image set.
+4. Persist one `analysis_runs` row plus ordered `analysis_input_assets` rows.
 
 ## Notes on reliability
 
@@ -98,5 +121,6 @@ Dedicated CopilotKit tool renderers:
 - `DepthEstimationToolRenderer`
 - `SegmentationToolRenderer`
 - `RoomPhotoAnalysisToolRenderer`
+- `RoomDetailDetailsFromPhotoToolRenderer`
 
 Registry: `ui/src/components/copilotkit/CopilotToolRenderers.tsx`

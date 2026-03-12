@@ -10,6 +10,7 @@ from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import (
     AnalysisDetectionRecord,
+    AnalysisInputAssetRecord,
     AnalysisRunRecord,
     ensure_persistence_schema,
 )
@@ -104,3 +105,88 @@ def test_record_analysis_returns_none_for_missing_input_asset(tmp_path: Path) ->
     )
 
     assert analysis_id is None
+
+
+def test_record_analysis_persists_ordered_input_asset_rows(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(thread_id="thread-analysis", run_id=None):
+        source_a = store.save_image_bytes(
+            content=b"source-image-a",
+            mime_type="image/png",
+            filename="source-a.png",
+            kind="user_upload",
+        )
+        source_b = store.save_image_bytes(
+            content=b"source-image-b",
+            mime_type="image/png",
+            filename="source-b.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    analysis_id = repository.record_analysis(
+        tool_name="get_room_detail_details_from_photo",
+        thread_id="thread-analysis",
+        run_id=None,
+        input_asset_id=source_a.ref.attachment_id,
+        input_asset_ids=[source_a.ref.attachment_id, source_b.ref.attachment_id],
+        request_json={"images": [source_a.ref.attachment_id, source_b.ref.attachment_id]},
+        result_json={"room_type": "living_room"},
+        detections=[],
+    )
+
+    assert analysis_id is not None
+
+    with session_factory() as session:
+        input_rows = session.execute(
+            select(
+                AnalysisInputAssetRecord.analysis_id,
+                AnalysisInputAssetRecord.asset_id,
+                AnalysisInputAssetRecord.ordinal,
+            )
+            .where(AnalysisInputAssetRecord.analysis_id == analysis_id)
+            .order_by(AnalysisInputAssetRecord.ordinal.asc())
+        ).all()
+
+    assert [(row.asset_id, row.ordinal) for row in input_rows] == [
+        (source_a.ref.attachment_id, 1),
+        (source_b.ref.attachment_id, 2),
+    ]
+
+
+def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(thread_id="thread-analysis", run_id=None):
+        source = store.save_image_bytes(
+            content=b"source-image",
+            mime_type="image/png",
+            filename="source.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    analysis_id = repository.record_analysis(
+        tool_name="get_room_detail_details_from_photo",
+        thread_id="thread-analysis",
+        run_id=None,
+        input_asset_id=source.ref.attachment_id,
+        input_asset_ids=[source.ref.attachment_id, "missing-asset"],
+        request_json={"images": [source.ref.attachment_id, "missing-asset"]},
+        result_json={"room_type": "unknown"},
+        detections=[],
+    )
+
+    assert analysis_id is None
+
+    with session_factory() as session:
+        analysis_rows = session.execute(select(AnalysisRunRecord.analysis_id)).all()
+        input_rows = session.execute(select(AnalysisInputAssetRecord.analysis_input_asset_id)).all()
+
+    assert analysis_rows == []
+    assert input_rows == []

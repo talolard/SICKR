@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from ikea_agent.tools.image_analysis.models import (
     AttachmentRefPayload,
     DepthEstimationRequest,
+    RoomDetailDetailsFromPhotoRequest,
+    RoomDetailDetailsFromPhotoResult,
+    RoomDetailObjectsOfInterest,
     RoomPhotoAnalysisRequest,
+    RoomPhotoImageAssessment,
     SegmentationRequest,
 )
 
@@ -71,3 +75,61 @@ def test_combined_room_analysis_defaults() -> None:
     assert request.run_object_detection is True
     assert request.run_depth is True
     assert request.object_detection.include_overlay_image is True
+
+
+def test_room_detail_request_rejects_non_image_attachment() -> None:
+    with pytest.raises(ValidationError):
+        RoomDetailDetailsFromPhotoRequest.model_validate(
+            {
+                "images": [
+                    {
+                        **_attachment().model_dump(),
+                        "mime_type": "application/pdf",
+                    }
+                ]
+            }
+        )
+
+
+def test_room_detail_result_normalizes_grouped_labels_and_notes() -> None:
+    result = RoomDetailDetailsFromPhotoResult.model_validate(
+        {
+            "caption": "Room detail analysis complete.",
+            "room_type": "living_room",
+            "objects_of_interest": {
+                "major_furniture": [" sofa ", "sofa", "coffee table"],
+                "fixtures": ["radiator", " radiator "],
+                "lifestyle_indicators": ["cat", "cat"],
+                "other_items": ["rug", " rug "],
+            },
+            "image_assessments": [
+                {
+                    "image_index": 0,
+                    "appears_to_show_room": True,
+                    "room_type": "living_room",
+                    "confidence": "high",
+                    "notes": [" bright room ", "bright room"],
+                }
+            ],
+            "notes": [" open shelving ", "open shelving"],
+            "non_room_image_indices": [2, 2, 1],
+        }
+    )
+
+    assert result.objects_of_interest == RoomDetailObjectsOfInterest(
+        major_furniture=["sofa", "coffee table"],
+        fixtures=["radiator"],
+        lifestyle_indicators=["cat"],
+        other_items=["rug"],
+    )
+    assert result.image_assessments == [
+        RoomPhotoImageAssessment(
+            image_index=0,
+            appears_to_show_room=True,
+            room_type="living_room",
+            confidence="high",
+            notes=["bright room"],
+        )
+    ]
+    assert result.notes == ["open shelving"]
+    assert result.non_room_image_indices == [2, 1]

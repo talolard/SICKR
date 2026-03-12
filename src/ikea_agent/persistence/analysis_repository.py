@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ikea_agent.persistence.models import (
     AgentRunRecord,
     AnalysisDetectionRecord,
+    AnalysisInputAssetRecord,
     AnalysisRunRecord,
     AssetRecord,
     ThreadRecord,
@@ -32,6 +34,7 @@ class AnalysisRepository:
         thread_id: str,
         run_id: str | None,
         input_asset_id: str,
+        input_asset_ids: Sequence[str] | None = None,
         request_json: dict[str, object],
         result_json: dict[str, object],
         detections: list[DetectedObject],
@@ -43,8 +46,11 @@ class AnalysisRepository:
         """
 
         now = datetime.now(UTC)
+        resolved_input_asset_ids = (
+            tuple(input_asset_ids) if input_asset_ids is not None else (input_asset_id,)
+        )
         with self._session_factory() as session:
-            if not self._asset_exists(session=session, asset_id=input_asset_id):
+            if not self._all_assets_exist(session=session, asset_ids=resolved_input_asset_ids):
                 return None
             self._ensure_thread(session=session, thread_id=thread_id, now=now)
             session.flush()
@@ -64,6 +70,15 @@ class AnalysisRepository:
                 )
             )
             session.flush()
+            for index, asset_id in enumerate(resolved_input_asset_ids, start=1):
+                session.add(
+                    AnalysisInputAssetRecord(
+                        analysis_input_asset_id=(f"ain-{analysis_id[-20:]}-{index:04d}"),
+                        analysis_id=analysis_id,
+                        asset_id=asset_id,
+                        ordinal=index,
+                    )
+                )
             for index, detection in enumerate(detections):
                 x1, y1, x2, y2 = detection.bbox_xyxy_px
                 nx1, ny1, nx2, ny2 = detection.bbox_xyxy_norm
@@ -87,13 +102,14 @@ class AnalysisRepository:
             return analysis_id
 
     @staticmethod
-    def _asset_exists(*, session: Session, asset_id: str) -> bool:
-        return (
-            session.execute(
+    def _all_assets_exist(*, session: Session, asset_ids: tuple[str, ...]) -> bool:
+        for asset_id in asset_ids:
+            asset_exists = session.execute(
                 select(AssetRecord.asset_id).where(AssetRecord.asset_id == asset_id)
             ).scalar_one_or_none()
-            is not None
-        )
+            if asset_exists is None:
+                return False
+        return True
 
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:

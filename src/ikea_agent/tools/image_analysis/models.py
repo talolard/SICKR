@@ -1,12 +1,31 @@
-"""Typed request/response contracts for fal.ai-backed image analysis tools."""
+"""Typed request/response contracts for image analysis tools."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ikea_agent.shared.types import AttachmentRef
+from ikea_agent.shared.types import AttachmentRef, RoomType
+
+RoomEvidenceConfidence = Literal["high", "medium", "low"]
+CrossImageRoomRelationship = Literal[
+    "same_room_likely",
+    "different_rooms_confirmed",
+    "uncertain",
+]
+
+
+def _normalize_string_list(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for raw_value in values:
+        value = raw_value.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    return normalized
 
 
 class AttachmentRefPayload(BaseModel):
@@ -183,3 +202,89 @@ class RoomPhotoAnalysisToolResult(ImageToolEnvelope):
     object_detection: ObjectDetectionToolResult | None = None
     depth: DepthEstimationToolResult | None = None
     room_hints: list[str] = Field(default_factory=list)
+
+
+class RoomDetailDetailsFromPhotoRequest(BaseModel):
+    """Request payload for one structured Gemini room-detail extraction call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    images: list[AttachmentRefPayload] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _require_image_mime_types(self) -> RoomDetailDetailsFromPhotoRequest:
+        non_images = [
+            image.attachment_id for image in self.images if not image.mime_type.startswith("image/")
+        ]
+        if non_images:
+            joined = ", ".join(non_images)
+            msg = f"RoomDetailDetailsFromPhotoRequest requires image attachments: {joined}"
+            raise ValueError(msg)
+        return self
+
+
+class RoomDetailObjectsOfInterest(BaseModel):
+    """Grouped object labels returned by room-detail extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    major_furniture: list[str] = Field(default_factory=list)
+    fixtures: list[str] = Field(default_factory=list)
+    lifestyle_indicators: list[str] = Field(default_factory=list)
+    other_items: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_labels(self) -> RoomDetailObjectsOfInterest:
+        self.major_furniture = _normalize_string_list(self.major_furniture)
+        self.fixtures = _normalize_string_list(self.fixtures)
+        self.lifestyle_indicators = _normalize_string_list(self.lifestyle_indicators)
+        self.other_items = _normalize_string_list(self.other_items)
+        return self
+
+
+class RoomPhotoImageAssessment(BaseModel):
+    """Per-image room assessment used to preserve ambiguity across multiple photos."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_index: int = Field(ge=0)
+    appears_to_show_room: bool | None = None
+    room_type: RoomType = "unknown"
+    confidence: RoomEvidenceConfidence = "low"
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_notes(self) -> RoomPhotoImageAssessment:
+        self.notes = _normalize_string_list(self.notes)
+        return self
+
+
+class RoomDetailDetailsFromPhotoResult(BaseModel):
+    """Structured result returned by `get_room_detail_details_from_photo`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    caption: str = "Room detail analysis complete."
+    room_type: RoomType = "unknown"
+    confidence: RoomEvidenceConfidence = "low"
+    all_images_appear_to_show_rooms: bool | None = None
+    non_room_image_indices: list[int] = Field(default_factory=list)
+    cross_image_room_relationship: CrossImageRoomRelationship = "uncertain"
+    objects_of_interest: RoomDetailObjectsOfInterest = Field(
+        default_factory=RoomDetailObjectsOfInterest
+    )
+    image_assessments: list[RoomPhotoImageAssessment] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_result(self) -> RoomDetailDetailsFromPhotoResult:
+        seen_indices: set[int] = set()
+        normalized_indices: list[int] = []
+        for index in self.non_room_image_indices:
+            if index < 0 or index in seen_indices:
+                continue
+            seen_indices.add(index)
+            normalized_indices.append(index)
+        self.non_room_image_indices = normalized_indices
+        self.notes = _normalize_string_list(self.notes)
+        return self

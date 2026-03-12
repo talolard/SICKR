@@ -7,15 +7,20 @@ from typing import cast
 
 import pytest
 from PIL import Image
+from pydantic_ai import BinaryContent
 
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.tools.image_analysis import get_room_detail_details_from_photo
 from ikea_agent.tools.image_analysis.models import (
     AttachmentRefPayload,
     DepthEstimationRequest,
     ObjectDetectionRequest,
+    RoomDetailDetailsFromPhotoRequest,
+    RoomDetailDetailsFromPhotoResult,
     RoomPhotoAnalysisRequest,
     SegmentationRequest,
 )
+from ikea_agent.tools.image_analysis.room_detail_tool import RoomDetailDetailsService
 from ikea_agent.tools.image_analysis.tool import (
     analyze_room_photo,
     detect_objects_in_image,
@@ -202,3 +207,91 @@ def test_analyze_room_photo_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert result.object_detection is not None
     assert result.depth is not None
     assert result.room_hints
+
+
+def test_get_room_detail_details_from_photo_wrapper(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = AttachmentStore(tmp_path / "attachments")
+    payload_a = _store_attachment(store)
+    payload_b = _store_attachment(store)
+    captured_content: dict[str, object] = {}
+
+    async def _fake_run_extractor(
+        self: RoomDetailDetailsService,
+        user_content: list[str | BinaryContent],
+    ) -> RoomDetailDetailsFromPhotoResult:
+        _ = self
+        captured_content["user_content"] = user_content
+        return RoomDetailDetailsFromPhotoResult(
+            caption="Room detail analysis complete.",
+            room_type="living_room",
+            confidence="high",
+            all_images_appear_to_show_rooms=True,
+            cross_image_room_relationship="same_room_likely",
+            objects_of_interest={
+                "major_furniture": ["sofa"],
+                "fixtures": ["radiator"],
+                "lifestyle_indicators": ["cat"],
+                "other_items": ["rug"],
+            },
+            image_assessments=[
+                {
+                    "image_index": 0,
+                    "appears_to_show_room": True,
+                    "room_type": "living_room",
+                    "confidence": "high",
+                    "notes": ["Wide shot"],
+                },
+                {
+                    "image_index": 1,
+                    "appears_to_show_room": True,
+                    "room_type": "living_room",
+                    "confidence": "medium",
+                    "notes": ["Side angle"],
+                },
+            ],
+            notes=["Pet-visible living room."],
+        )
+
+    monkeypatch.setattr(RoomDetailDetailsService, "_run_extractor", _fake_run_extractor)
+
+    result = asyncio.run(
+        get_room_detail_details_from_photo(
+            request=RoomDetailDetailsFromPhotoRequest(images=[payload_a, payload_b]),
+            attachment_store=store,
+        )
+    )
+
+    assert result.room_type == "living_room"
+    user_content = cast("list[str | BinaryContent]", captured_content["user_content"])
+    assert len(user_content) == 3
+    assert user_content[0] == "Analyze the attached room photos for interior-design context."
+    assert isinstance(user_content[1], BinaryContent)
+    assert isinstance(user_content[2], BinaryContent)
+
+
+def test_get_room_detail_details_from_photo_wrapper_rejects_missing_attachment(
+    tmp_path: Path,
+) -> None:
+    store = AttachmentStore(tmp_path / "attachments")
+
+    with pytest.raises(ValueError, match="Attachment not found: missing-image"):
+        asyncio.run(
+            get_room_detail_details_from_photo(
+                request=RoomDetailDetailsFromPhotoRequest(
+                    images=[
+                        AttachmentRefPayload(
+                            attachment_id="missing-image",
+                            mime_type="image/png",
+                            uri="/attachments/missing-image",
+                            width=640,
+                            height=480,
+                            file_name="missing.png",
+                        )
+                    ]
+                ),
+                attachment_store=store,
+            )
+        )

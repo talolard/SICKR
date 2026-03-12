@@ -33,6 +33,7 @@ def test_alembic_upgrade_creates_conversation_persistence_tables(tmp_path: Path)
         "assets",
         "floor_plan_revisions",
         "analysis_runs",
+        "analysis_input_assets",
         "analysis_detections",
         "search_runs",
         "search_results",
