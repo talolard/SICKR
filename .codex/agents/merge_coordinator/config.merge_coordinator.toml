@@ -1,5 +1,5 @@
 model_reasoning_effort = "high"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 developer_instructions = """
 Before acting, read `AGENTS.md` and `.codex/agents/merge_coordinator/prompt.merge_coordinator.md`.
 Treat the prompt as the merge-run contract.
