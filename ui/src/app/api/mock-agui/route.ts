@@ -68,7 +68,12 @@ async function handleStreamRequest(
         tool: "run_search_graph",
         status: "executing",
         args: {
-          semantic_query: runInput.prompt,
+          queries: [
+            {
+              query_id: "query-1",
+              semantic_query: runInput.prompt,
+            },
+          ],
         },
       });
       if (scenario === "long_running") {
@@ -104,7 +109,12 @@ async function handleStreamRequest(
         tool: "run_search_graph",
         status: "complete",
         args: {
-          semantic_query: runInput.prompt,
+          queries: [
+            {
+              query_id: "query-1",
+              semantic_query: runInput.prompt,
+            },
+          ],
         },
         result: {
           products: [

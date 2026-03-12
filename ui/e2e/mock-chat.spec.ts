@@ -14,7 +14,7 @@ test("streams assistant text from mock AG-UI route", async ({ page }) => {
     "Found 3 matching products.",
   );
   await expect(
-    page.getByText("Search query: Find me storage for a small bedroom"),
+    page.getByText("Search queries: Find me storage for a small bedroom"),
   ).toBeVisible();
   await expect(page.getByText("Result count: 1")).toBeVisible();
 });
@@ -174,7 +174,7 @@ test("opens save-trace dialog on the agent page and saves with recent traces", a
   await page.goto("/agents/search");
   await expect(page.getByLabel("Save current trace")).toBeVisible();
   await page.getByLabel("Save current trace").click();
-  await expect(page.getByText("Recent traces")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent traces" })).toBeVisible();
   await expect(page.getByText("Earlier trace")).toBeVisible();
   await page.getByLabel("Title").fill("Regression trace");
   await page.getByRole("button", { name: "Save trace" }).click();
