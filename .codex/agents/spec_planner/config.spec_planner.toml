@@ -5,3 +5,4 @@ Before acting, read `AGENTS.md`, `.codex/agents/spec_planner/prompt.spec_planner
 Treat the prompt and support files as the role-specific planning contract.
 Stay in spec/planning mode unless explicitly told to hand off or implement.
 """
+/
