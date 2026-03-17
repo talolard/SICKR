@@ -130,6 +130,8 @@ Important details:
 - attachment storage uses a temp directory per case
 - bundle-stage fixtures seed both search results and a matching catalog view so `propose_bundle`
   can hydrate realistic line items without reaching the real catalog
+- the real runtime now rejects ungrounded `propose_bundle` items, so fixtures must provide the
+  complementary products they expect the model to surface
 
 This keeps the eval focused on query planning while preserving the actual agent and toolset flow.
 
@@ -199,7 +201,9 @@ eval grading still uses native span extraction during `evals.search.run`.
 
 For the hallway-lighting follow-up work, keep thread `agent_search-286fe4b8` in the
 fixture notes and use Logfire only as a supplemental grounding source when the historical
-trace is available.
+trace is available. The later Mark 17 investigation could only recover a follow-up UI lookup
+where `GET /api/threads/agent_search-286fe4b8` returned `404`, so the fixture-backed cases are
+the durable guardrail for the original failure shape.
 
 ## Why This Lives Outside Pytest
 
