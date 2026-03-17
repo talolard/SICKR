@@ -117,7 +117,7 @@ This file is the task-to-task handoff log for the SVG floor-plan migration epic.
 - Updated docs:
   - `docs/tools/floor_planner.md`
   - `docs/tools/agent_tool_bridge.md`
-  - `docs/ui_copilotkit_milestone_status.md`
+  - `docs/archive/ui_copilotkit_milestone_status.md`
 - Final quality gates run:
   - `make tidy`
   - `cd ui && pnpm typecheck`

@@ -4,8 +4,10 @@ from dataclasses import dataclass
 
 from ikea_agent.chat.runtime import (
     build_google_embedding_settings,
+    resolve_reranker_backend,
     sync_milvus_from_snapshot_if_empty,
 )
+from ikea_agent.config import AppSettings
 
 
 def test_google_embedding_settings_use_retrieval_query_task_type() -> None:
@@ -71,3 +73,15 @@ def test_sync_milvus_from_snapshot_if_empty_skips_when_populated() -> None:
     assert inserted == 0
     assert repository.calls == 0
     assert milvus.upserted_rows is None
+
+
+def test_resolve_reranker_backend_uses_identity_when_disabled() -> None:
+    settings = AppSettings(rerank_enabled=False, rerank_backend="transformer")
+
+    assert resolve_reranker_backend(settings) == "identity"
+
+
+def test_resolve_reranker_backend_uses_configured_backend_when_enabled() -> None:
+    settings = AppSettings(rerank_enabled=True, rerank_backend="lexical")
+
+    assert resolve_reranker_backend(settings) == "lexical"
