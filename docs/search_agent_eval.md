@@ -1,5 +1,11 @@
 # Search Agent Eval
 
+Quick run:
+
+```bash
+uv run python -m evals.search
+```
+
 This eval now measures two related behaviors:
 
 - first-step **query decomposition** via `run_search_graph`
@@ -36,8 +42,10 @@ It runs through a direct Python entrypoint and is intentionally independent of p
 
 Files:
 
-- [`evals/search/dataset.py`](../evals/search/dataset.py)
-  Defines the cases and the evaluators.
+- [`evals/search/__init__.py`](../evals/search/__init__.py)
+  Package entrypoint and the quickest place to discover the canonical run command.
+- [`evals/search/datasets/`](../evals/search/datasets)
+  Search eval case modules plus the dataset assembly point.
 - [`evals/search/harness.py`](../evals/search/harness.py)
   Runs the real search agent with injected toolset services and capture support.
 - [`evals/search/fixtures.py`](../evals/search/fixtures.py)
@@ -135,19 +143,19 @@ Prerequisites:
 Run:
 
 ```bash
-uv run python -m evals.search.run
+uv run python -m evals.search
 ```
 
 Verbose mode:
 
 ```bash
-uv run python -m evals.search.run --verbose
+uv run python -m evals.search --verbose
 ```
 
 Optional concurrency override:
 
 ```bash
-uv run python -m evals.search.run --max-concurrency 2
+uv run python -m evals.search --max-concurrency 2
 ```
 
 The runner will:
@@ -208,7 +216,10 @@ is not a pytest test.
 
 ## Extending The Dataset
 
-Add new cases in [`evals/search/dataset.py`](../evals/search/dataset.py).
+Add new cases in a focused module under [`evals/search/datasets/`](../evals/search/datasets).
+Keep the assembly in [`evals/search/datasets/__init__.py`](../evals/search/datasets/__init__.py)
+small, and put shared authoring helpers in
+[`evals/search/datasets/common.py`](../evals/search/datasets/common.py).
 
 Keep `expected_search_attributes` and `expected_bundle_attributes` focused on:
 
