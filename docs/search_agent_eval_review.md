@@ -1,6 +1,10 @@
 # Search Agent Eval Review
 
-This review covers [`docs/search_agent_eval.md`](./search_agent_eval.md) and the code it points at, plus the newer pytest-based eval files that now coexist with it:
+This review covers [`docs/search_agent_eval.md`](./search_agent_eval.md) and the code it pointed at when the review was written.
+It is intentionally preserved as a critique of the **pre-migration** harness that used to live under `tests/chat/agents/search/`.
+That harness has now been replaced by the authoritative `evals/search/` implementation, and the old `tests/...` eval files referenced below have been deleted.
+
+The historical files reviewed were:
 
 - [`tests/chat/agents/search/eval_search_tool_calls.py`](../tests/chat/agents/search/eval_search_tool_calls.py)
 - [`tests/chat/agents/search/run_eval.py`](../tests/chat/agents/search/run_eval.py)
