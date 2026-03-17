@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
 
+import pytest
 from pydantic_ai import RunContext
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
@@ -134,6 +135,35 @@ def _run_context(*, price_eur: float | None) -> RunContext[SearchAgentDeps]:
     return cast("RunContext[SearchAgentDeps]", SimpleNamespace(deps=deps))
 
 
+def _ground_item(ctx: RunContext[SearchAgentDeps], *, item_id: str) -> None:
+    ctx.deps.state.remember_search_batch(
+        SearchBatchToolResult(
+            queries=[
+                SearchQueryToolResult(
+                    query_id="grounding-query",
+                    semantic_query="grounding query",
+                    results=[
+                        ShortRetrievalResult(
+                            product_id=item_id,
+                            product_name=f"Grounded {item_id}",
+                            product_type="Chair",
+                            description_text="Grounded by test search",
+                            main_category="chairs",
+                            sub_category="desk",
+                            width_cm=50.0,
+                            depth_cm=50.0,
+                            height_cm=90.0,
+                            price_eur=99.0,
+                        )
+                    ],
+                    total_candidates=1,
+                    returned_count=1,
+                )
+            ]
+        )
+    )
+
+
 def _services(
     *,
     pipeline: _SearchPipelineSpy,
@@ -177,10 +207,12 @@ def test_run_search_graph_forwards_one_batched_query_list() -> None:
     assert len(pipeline_spy.calls) == 1
     assert [query.query_id for query in pipeline_spy.calls[0]] == ["desk", "lamp"]
     assert [query.query_id for query in result.queries] == ["desk", "lamp"]
+    assert [item.product_id for item in ctx.deps.state.grounded_products] == ["desk-1", "lamp-1"]
 
 
 def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure() -> None:
     ctx = _run_context(price_eur=20.0)
+    _ground_item(ctx, item_id="chair-1")
     pipeline_spy = _SearchPipelineSpy()
     repository_spy = _SearchRepositorySpy()
     toolset = build_search_toolset(
@@ -214,6 +246,7 @@ def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure
 
 def test_propose_bundle_merges_duplicates_and_reports_warning() -> None:
     ctx = _run_context(price_eur=15.0)
+    _ground_item(ctx, item_id="chair-1")
 
     result = propose_bundle(
         ctx,
@@ -235,6 +268,7 @@ def test_propose_bundle_merges_duplicates_and_reports_warning() -> None:
 
 def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None:
     ctx = _run_context(price_eur=None)
+    _ground_item(ctx, item_id="chair-2")
 
     result = propose_bundle(
         ctx,
@@ -254,3 +288,15 @@ def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None
     assert pricing_validation.status == "warn"
     assert budget_validation.status == "unknown"
     assert result.notes == "Needs pricing follow-up."
+
+
+def test_propose_bundle_rejects_items_that_were_not_grounded_by_search() -> None:
+    ctx = _run_context(price_eur=20.0)
+    _ground_item(ctx, item_id="chair-1")
+
+    with pytest.raises(ValueError, match="Ungrounded item ids: `chair-2`"):
+        propose_bundle(
+            ctx,
+            title="Desk seating bundle",
+            items=[BundleProposalItemInput(item_id="chair-2", quantity=1, reason="Seat at desk")],
+        )
