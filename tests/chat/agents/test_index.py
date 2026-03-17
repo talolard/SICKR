@@ -9,6 +9,12 @@ from ikea_agent.chat.agents.index import (
     get_agent,
     list_agent_catalog,
 )
+from ikea_agent.chat.agents.search.agent import (
+    DEFAULT_SEARCH_MODEL,
+)
+from ikea_agent.chat.agents.search.agent import (
+    resolve_model_name as resolve_search_model_name,
+)
 
 
 def test_list_agent_catalog_includes_floor_plan_intake() -> None:
@@ -88,3 +94,25 @@ def test_agent_model_resolution_falls_back_to_global(
     )
 
     assert resolve_model_name() == "global-model"
+
+
+class _SearchOnlySettings:
+    gemini_generation_model = "global-model"
+
+    @staticmethod
+    def agent_model(name: str) -> None:
+        _ = name
+
+
+def test_search_agent_model_resolution_falls_back_to_search_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _get_settings() -> _SearchOnlySettings:
+        return _SearchOnlySettings()
+
+    monkeypatch.setattr(
+        "ikea_agent.chat.agents.search.agent.get_settings",
+        _get_settings,
+    )
+
+    assert resolve_search_model_name() == DEFAULT_SEARCH_MODEL
