@@ -1,8 +1,9 @@
 """Model construction helpers for agent runtime.
 
-The default repo experience should be deterministic and safe: local runs and CI
-must not accidentally trigger paid network calls just because a user opened the UI.
-Real model-backed runs are opt-in via settings.
+Live model requests now follow the application defaults, but tests remain
+deterministic because the backend suite applies Pydantic AI's request gate
+globally in `tests/conftest.py`. Missing API keys still degrade to `TestModel`
+so local runs fail clearly instead of making partial network attempts.
 """
 
 from __future__ import annotations

@@ -45,7 +45,7 @@ class AppSettings(BaseSettings):
     gcp_project_id: str = Field(default="gen-lang-client-0545732168")
     gcp_region: str = Field(default="us-central1")
     gemini_model: str = Field(default="gemini-embedding-001")
-    gemini_generation_model: str = Field(default="gemini-3.1-pro-preview")
+    gemini_generation_model: str = Field(default="gemini-3.1-flash-lite-preview")
     gemini_image_analysis_model: str = Field(default="gemini-2.5-flash")
     embedding_provider: str = Field(default="google-gla")
     embedding_model_uri: str = Field(default="google-gla:gemini-embedding-001")
@@ -54,7 +54,7 @@ class AppSettings(BaseSettings):
         validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     )
     allow_model_requests: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices("ALLOW_MODEL_REQUESTS", "APP_ALLOW_MODEL_REQUESTS"),
     )
 
