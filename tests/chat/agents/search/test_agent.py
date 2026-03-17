@@ -29,6 +29,10 @@ def test_search_agent_loads_prompt_instructions() -> None:
     instructions = "\n".join(str(item) for item in agent._instructions)
     assert "Home Solutions Architect" in instructions
     assert "run_search_graph" in instructions
+    assert "broader IKEA catalog" in instructions
+    assert "semantic descriptions, short keyword phrases" in instructions
+    assert "Do **not** invent unsupported IKEA products" in instructions
+    assert "Do not mention a needed support product and then drop it." in instructions
 
 
 def test_search_agent_registers_search_tools() -> None:
