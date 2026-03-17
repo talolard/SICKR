@@ -281,8 +281,8 @@ This file is the continuity log for the conversation persistence epic and all ch
   - `tests/chat/test_thread_api.py`
   - Seeds thread/run/asset/floor-plan/analysis/search rows and validates all new API responses.
 - Generated TypeScript types from OpenAPI and added typed client wrappers:
-  - OpenAPI snapshot: `ui/src/lib/api/openapi.thread-data.json`
-  - Generated types: `ui/src/lib/api/generated.ts`
+  - OpenAPI snapshot: `ui/src/lib/api/openapi.thread-data.json` (later removed in the 2026-03-17 cleanup)
+  - Generated types: `ui/src/lib/api/generated.ts` (later removed in the 2026-03-17 cleanup)
   - Typed client wrapper: `ui/src/lib/api/threadDataClient.ts`
 - Added UI integration for non-chat panel using generated-client types:
   - `ui/src/components/thread/ThreadDataPanel.tsx`
@@ -300,3 +300,20 @@ This file is the continuity log for the conversation persistence epic and all ch
   - Thread-title updates mutate `app.threads.title` directly; behavior is validated locally but should be monitored under higher-write concurrency.
 - Next step recommendation:
   - Close epic `tal_maria_ikea-l18` after final tidy/commit and note future enhancements (rooms grouping, richer UI panels) as follow-up beads.
+
+### 2026-03-17 - Runtime surface cleanup
+- Removed dead runtime and UI surfaces that the current UI no longer calls:
+  - `POST /api/comments`
+  - `POST /generated-images/floor-plan`
+  - `POST /room-3d/openusd-ingest`
+  - `GET /api/threads`
+  - `PATCH /api/threads/{thread_id}/title`
+  - `GET /api/threads/{thread_id}/floor-plan-revisions`
+  - `GET /api/threads/{thread_id}/analyses`
+  - `GET /api/threads/{thread_id}/analyses/{analysis_id}/feedback`
+  - `GET /api/threads/{thread_id}/images/{asset_id}/detections`
+  - `GET/POST /api/threads/{thread_id}/room-3d-assets`
+  - `GET/POST /api/threads/{thread_id}/room-3d-snapshots`
+- Deleted the unused Next proxies and helper modules that only supported those routes.
+- Simplified the thread-data client by inlining its small surviving TypeScript types and removing the unneeded generated OpenAPI snapshot/types files.
+- Preserved the generated 3D floor-plan preview path; active 2D/3D preview UI and room snapshot state remain in place.

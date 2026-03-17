@@ -61,32 +61,6 @@ class AnalysisFeedbackItem(BaseModel):
     created_at: str
 
 
-class CommentBundleCreateResponse(BaseModel):
-    """Response payload for one persisted UI feedback bundle."""
-
-    comment_id: str
-    directory: str
-    markdown_path: str
-    saved_images_count: int
-
-
-class CommentBundleCreateRequest(BaseModel):
-    """Request payload for persisting one UI feedback bundle."""
-
-    title: str | None = None
-    comment: str = ""
-    page_url: str | None = None
-    thread_id: str | None = None
-    user_agent: str | None = None
-    include_console_log: bool = True
-    include_dom_snapshot: bool = True
-    include_ui_state: bool = True
-    console_log: str | None = None
-    dom_snapshot: str | None = None
-    ui_state: str | None = None
-    attachment_ids: list[str] = Field(default_factory=list)
-
-
 class TraceReportCreateRequest(BaseModel):
     """Request payload for persisting one current-thread trace report."""
 

@@ -225,9 +225,7 @@ def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path)
                 AnalysisFeedbackRecord.analysis_id,
                 AnalysisFeedbackRecord.thread_id,
                 AnalysisFeedbackRecord.query_text,
-            ).where(
-                AnalysisFeedbackRecord.analysis_feedback_id == created.analysis_feedback_id
-            )
+            ).where(AnalysisFeedbackRecord.analysis_feedback_id == created.analysis_feedback_id)
         ).one()
 
     assert persisted.analysis_id == "analysis-api"

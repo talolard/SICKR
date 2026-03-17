@@ -1,8 +1,29 @@
-import type { components } from "@/lib/api/generated";
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
 
-export type ThreadDetailItem = components["schemas"]["ThreadDetailItem"];
-export type AssetListItem = components["schemas"]["AssetListItem"];
+export type ThreadDetailItem = {
+  thread_id: string;
+  title: string | null;
+  status: string;
+  last_activity_at: string | null;
+  run_count: number;
+  asset_count: number;
+  floor_plan_revision_count: number;
+  analysis_count: number;
+  search_count: number;
+};
+
+export type AssetListItem = {
+  asset_id: string;
+  run_id: string | null;
+  created_by_tool: string | null;
+  kind: string;
+  mime_type: string;
+  file_name: string | null;
+  storage_path: string;
+  size_bytes: number;
+  created_at: string | null;
+};
+
 export type AnalysisFeedbackKind = "confirm" | "reject" | "uncertain";
 
 export type AnalysisFeedbackCreateRequest = {
