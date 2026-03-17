@@ -234,6 +234,7 @@ def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure
     assert result.title == "Desk seating bundle"
     assert result.bundle_total_eur == 40.0
     assert result.items[0].line_total_eur == 40.0
+    assert result.items[0].description_text == "Useful chair"
     assert [validation.kind for validation in result.validations] == [
         "pricing_complete",
         "duplicate_items",

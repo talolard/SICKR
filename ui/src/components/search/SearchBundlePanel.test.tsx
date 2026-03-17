@@ -83,12 +83,21 @@ describe("SearchBundlePanel", () => {
 
   it("expands and highlights the active bundle when selected from chat", () => {
     const scrollIntoView = vi.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
     window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
 
     render(<SearchBundlePanel activeBundleId="bundle-1" proposals={[proposal]} />);
 
     expect(screen.getByText("Selected")).toBeInTheDocument();
     expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest" });
+
+    window.requestAnimationFrame = originalRequestAnimationFrame;
+    window.HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   });
 });
