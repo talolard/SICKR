@@ -12,8 +12,8 @@ project-excludes = [
     "**/.ruff_cache/**",
 ]
 
-# Deterministic import resolution for src-layout package.
-search-path = ["src"]
+# Deterministic import resolution for src-layout package and typed tests.
+search-path = ["src", "."]
 disable-search-path-heuristics = true
 use-ignore-files = true
 
