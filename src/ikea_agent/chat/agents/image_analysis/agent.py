@@ -10,7 +10,11 @@ from pydantic_ai.models.google import GoogleModelSettings, ThinkingConfigDict
 
 from ikea_agent.chat.agents.common import AgentPrompt
 from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
-from ikea_agent.chat.agents.image_analysis.toolset import TOOL_NAMES, build_image_analysis_toolset
+from ikea_agent.chat.agents.image_analysis.toolset import (
+    TOOL_NAMES,
+    ImageAnalysisToolsetServices,
+    build_image_analysis_toolset,
+)
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -34,7 +38,9 @@ def resolve_model_name(*, explicit_model: str | None = None) -> str:
 
 
 def build_image_analysis_agent(
-    *, explicit_model: str | None = None
+    *,
+    explicit_model: str | None = None,
+    toolset_services: ImageAnalysisToolsetServices | None = None,
 ) -> Agent[ImageAnalysisAgentDeps, str]:
     """Build image-analysis agent."""
 
@@ -60,7 +66,7 @@ def build_image_analysis_agent(
         output_type=str,
         name="agent_image_analysis",
         instructions=PROMPT.instruction_text(),
-        toolsets=[build_image_analysis_toolset()],
+        toolsets=[build_image_analysis_toolset(toolset_services)],
     )
 
 

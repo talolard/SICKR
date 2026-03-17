@@ -11,6 +11,7 @@ from ikea_agent.chat.agents.common import AgentPrompt
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
 from ikea_agent.chat.agents.floor_plan_intake.toolset import (
     TOOL_NAMES,
+    FloorPlanIntakeToolsetServices,
     build_floor_plan_intake_toolset,
 )
 from ikea_agent.chat.modeling import build_google_or_test_model
@@ -39,7 +40,9 @@ def resolve_model_name(*, explicit_model: str | None = None) -> str:
 
 
 def build_floor_plan_intake_agent(
-    *, explicit_model: str | None = None
+    *,
+    explicit_model: str | None = None,
+    toolset_services: FloorPlanIntakeToolsetServices | None = None,
 ) -> Agent[FloorPlanIntakeDeps, str]:
     """Build the floor-plan intake agent as a regular pydantic-ai agent."""
 
@@ -61,7 +64,7 @@ def build_floor_plan_intake_agent(
         output_type=str,
         name="agent_floor_plan_intake",
         instructions=PROMPT.instruction_text(),
-        toolsets=[build_floor_plan_intake_toolset()],
+        toolsets=[build_floor_plan_intake_toolset(toolset_services)],
     )
 
 

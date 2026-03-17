@@ -10,7 +10,11 @@ from pydantic_ai.models.google import GoogleModelSettings, ThinkingConfigDict
 
 from ikea_agent.chat.agents.common import AgentPrompt
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
-from ikea_agent.chat.agents.search.toolset import TOOL_NAMES, build_search_toolset
+from ikea_agent.chat.agents.search.toolset import (
+    TOOL_NAMES,
+    SearchToolsetServices,
+    build_search_toolset,
+)
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -33,7 +37,11 @@ def resolve_model_name(*, explicit_model: str | None = None) -> str:
     return settings.gemini_generation_model
 
 
-def build_search_agent(*, explicit_model: str | None = None) -> Agent[SearchAgentDeps, str]:
+def build_search_agent(
+    *,
+    explicit_model: str | None = None,
+    toolset_services: SearchToolsetServices | None = None,
+) -> Agent[SearchAgentDeps, str]:
     """Build search agent."""
 
     settings = get_settings()
@@ -58,7 +66,7 @@ def build_search_agent(*, explicit_model: str | None = None) -> Agent[SearchAgen
         instructions=PROMPT.instruction_text(),
         output_type=str,
         name="agent_search",
-        toolsets=[build_search_toolset()],
+        toolsets=[build_search_toolset(toolset_services)],
     )
 
 

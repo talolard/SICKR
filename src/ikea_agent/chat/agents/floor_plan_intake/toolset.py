@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from typing import Literal
@@ -12,9 +14,13 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
 from ikea_agent.chat.agents.shared import floor_plan_repository, telemetry_context
+from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.tools.floorplanner.models import (
     FloorPlannerValidationError,
+    FloorPlanRenderOutput,
     FloorPlanRenderRequest,
+    FloorPlanScene,
     scene_to_summary,
 )
 from ikea_agent.tools.floorplanner.tool import render_floor_plan as run_floor_planner
@@ -29,14 +35,34 @@ TOOL_NAMES: tuple[str, ...] = (
     "confirm_floor_plan_revision",
 )
 
+FloorPlanRenderer = Callable[..., tuple[FloorPlanScene, FloorPlanRenderOutput, ToolReturn | None]]
+FloorPlanRepositoryFactory = Callable[[ChatRuntime], FloorPlanRepository | None]
 
-def render_floor_plan(
+
+@dataclass(frozen=True, slots=True)
+class FloorPlanIntakeToolsetServices:
+    """Service seams for floor-plan tools."""
+
+    render_floor_plan: FloorPlanRenderer
+    get_floor_plan_repository: FloorPlanRepositoryFactory
+
+
+def default_floor_plan_intake_toolset_services() -> FloorPlanIntakeToolsetServices:
+    """Return the current default service bindings for floor-plan tools."""
+
+    return FloorPlanIntakeToolsetServices(
+        render_floor_plan=run_floor_planner,
+        get_floor_plan_repository=floor_plan_repository,
+    )
+
+
+def _render_floor_plan_with_services(
     ctx: RunContext[FloorPlanIntakeDeps],
     request: FloorPlanRenderRequest,
+    *,
+    services: FloorPlanIntakeToolsetServices,
 ) -> dict[str, object] | ToolReturn:
-    """Render and/or update the active floor-plan scene with SVG+PNG outputs."""
-
-    repository = floor_plan_repository(ctx.deps.runtime)
+    repository = services.get_floor_plan_repository(ctx.deps.runtime)
     snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
     if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
         persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
@@ -50,7 +76,7 @@ def render_floor_plan(
     next_revision = 1 if snapshot is None else snapshot.revision + 1
 
     try:
-        scene, output, _tool_return = run_floor_planner(
+        scene, output, _tool_return = services.render_floor_plan(
             request,
             scene_revision=next_revision,
             current_scene=current_scene,
@@ -149,14 +175,27 @@ def render_floor_plan(
     return payload
 
 
-def load_floor_plan_scene_yaml(
+def render_floor_plan(
+    ctx: RunContext[FloorPlanIntakeDeps],
+    request: FloorPlanRenderRequest,
+) -> dict[str, object] | ToolReturn:
+    """Render and/or update the active floor-plan scene with SVG+PNG outputs."""
+
+    return _render_floor_plan_with_services(
+        ctx,
+        request,
+        services=default_floor_plan_intake_toolset_services(),
+    )
+
+
+def _load_floor_plan_scene_yaml_with_services(
     ctx: RunContext[FloorPlanIntakeDeps],
     yaml_text: str,
     scene_level: Literal["baseline", "detailed"] = "detailed",
+    *,
+    services: FloorPlanIntakeToolsetServices,
 ) -> dict[str, object]:
-    """Load YAML into typed floor-plan scene state for iterative rendering."""
-
-    repository = floor_plan_repository(ctx.deps.runtime)
+    repository = services.get_floor_plan_repository(ctx.deps.runtime)
     scene = parse_scene_yaml(yaml_text, scene_level=scene_level)
     summary = scene_to_summary(scene)
     snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
@@ -181,10 +220,27 @@ def load_floor_plan_scene_yaml(
     }
 
 
-def export_floor_plan_scene_yaml(ctx: RunContext[FloorPlanIntakeDeps]) -> dict[str, object]:
-    """Export current typed floor-plan scene state to YAML text."""
+def load_floor_plan_scene_yaml(
+    ctx: RunContext[FloorPlanIntakeDeps],
+    yaml_text: str,
+    scene_level: Literal["baseline", "detailed"] = "detailed",
+) -> dict[str, object]:
+    """Load YAML into typed floor-plan scene state for iterative rendering."""
 
-    repository = floor_plan_repository(ctx.deps.runtime)
+    return _load_floor_plan_scene_yaml_with_services(
+        ctx,
+        yaml_text,
+        scene_level,
+        services=default_floor_plan_intake_toolset_services(),
+    )
+
+
+def _export_floor_plan_scene_yaml_with_services(
+    ctx: RunContext[FloorPlanIntakeDeps],
+    *,
+    services: FloorPlanIntakeToolsetServices,
+) -> dict[str, object]:
+    repository = services.get_floor_plan_repository(ctx.deps.runtime)
     snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
     if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
         persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
@@ -203,14 +259,23 @@ def export_floor_plan_scene_yaml(ctx: RunContext[FloorPlanIntakeDeps]) -> dict[s
     }
 
 
-def confirm_floor_plan_revision(
+def export_floor_plan_scene_yaml(ctx: RunContext[FloorPlanIntakeDeps]) -> dict[str, object]:
+    """Export current typed floor-plan scene state to YAML text."""
+
+    return _export_floor_plan_scene_yaml_with_services(
+        ctx,
+        services=default_floor_plan_intake_toolset_services(),
+    )
+
+
+def _confirm_floor_plan_revision_with_services(
     ctx: RunContext[FloorPlanIntakeDeps],
     revision: int | None = None,
     confirmation_note: str | None = None,
+    *,
+    services: FloorPlanIntakeToolsetServices,
 ) -> dict[str, object]:
-    """Persist explicit user confirmation for a floor-plan revision."""
-
-    repository = floor_plan_repository(ctx.deps.runtime)
+    repository = services.get_floor_plan_repository(ctx.deps.runtime)
     thread_id = ctx.deps.state.thread_id
     if repository is None or thread_id is None:
         raise ValueError("Floor-plan persistence is unavailable for this runtime.")
@@ -239,14 +304,71 @@ def confirm_floor_plan_revision(
     }
 
 
-def build_floor_plan_intake_toolset() -> FunctionToolset[FloorPlanIntakeDeps]:
+def confirm_floor_plan_revision(
+    ctx: RunContext[FloorPlanIntakeDeps],
+    revision: int | None = None,
+    confirmation_note: str | None = None,
+) -> dict[str, object]:
+    """Persist explicit user confirmation for a floor-plan revision."""
+
+    return _confirm_floor_plan_revision_with_services(
+        ctx,
+        revision,
+        confirmation_note,
+        services=default_floor_plan_intake_toolset_services(),
+    )
+
+
+def build_floor_plan_intake_toolset(
+    services: FloorPlanIntakeToolsetServices | None = None,
+) -> FunctionToolset[FloorPlanIntakeDeps]:
     """Build toolset for floor-plan intake agent."""
+
+    resolved_services = services or default_floor_plan_intake_toolset_services()
+
+    def render_floor_plan_tool(
+        ctx: RunContext[FloorPlanIntakeDeps],
+        request: FloorPlanRenderRequest,
+    ) -> dict[str, object] | ToolReturn:
+        return _render_floor_plan_with_services(ctx, request, services=resolved_services)
+
+    def load_floor_plan_scene_yaml_tool(
+        ctx: RunContext[FloorPlanIntakeDeps],
+        yaml_text: str,
+        scene_level: Literal["baseline", "detailed"] = "detailed",
+    ) -> dict[str, object]:
+        return _load_floor_plan_scene_yaml_with_services(
+            ctx,
+            yaml_text,
+            scene_level,
+            services=resolved_services,
+        )
+
+    def export_floor_plan_scene_yaml_tool(
+        ctx: RunContext[FloorPlanIntakeDeps],
+    ) -> dict[str, object]:
+        return _export_floor_plan_scene_yaml_with_services(
+            ctx,
+            services=resolved_services,
+        )
+
+    def confirm_floor_plan_revision_tool(
+        ctx: RunContext[FloorPlanIntakeDeps],
+        revision: int | None = None,
+        confirmation_note: str | None = None,
+    ) -> dict[str, object]:
+        return _confirm_floor_plan_revision_with_services(
+            ctx,
+            revision,
+            confirmation_note,
+            services=resolved_services,
+        )
 
     return FunctionToolset(
         tools=[
-            Tool(render_floor_plan, name="render_floor_plan"),
-            Tool(load_floor_plan_scene_yaml, name="load_floor_plan_scene_yaml"),
-            Tool(export_floor_plan_scene_yaml, name="export_floor_plan_scene_yaml"),
-            Tool(confirm_floor_plan_revision, name="confirm_floor_plan_revision"),
+            Tool(render_floor_plan_tool, name="render_floor_plan"),
+            Tool(load_floor_plan_scene_yaml_tool, name="load_floor_plan_scene_yaml"),
+            Tool(export_floor_plan_scene_yaml_tool, name="export_floor_plan_scene_yaml"),
+            Tool(confirm_floor_plan_revision_tool, name="confirm_floor_plan_revision"),
         ]
     )

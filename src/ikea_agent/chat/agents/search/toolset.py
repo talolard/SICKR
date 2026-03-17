@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import replace
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from logging import getLogger
 from uuid import uuid4
@@ -19,8 +20,10 @@ from ikea_agent.chat.agents.shared import (
     search_repository,
     telemetry_context,
 )
+from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat.search_pipeline import run_search_pipeline_batch
-from ikea_agent.persistence.room_3d_repository import Room3DSnapshotEntry
+from ikea_agent.persistence.room_3d_repository import Room3DRepository, Room3DSnapshotEntry
+from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     BundleProposalItemInput,
     BundleProposalLineItem,
@@ -38,6 +41,33 @@ TOOL_NAMES: tuple[str, ...] = (
     "list_room_3d_snapshot_context",
 )
 
+SearchBatchRunner = Callable[..., Awaitable[SearchBatchToolResult]]
+SearchRepositoryFactory = Callable[[ChatRuntime], SearchRepository | None]
+Room3DRepositoryFactory = Callable[[ChatRuntime], Room3DRepository | None]
+
+
+@dataclass(frozen=True, slots=True)
+class SearchToolsetServices:
+    """Service seams for search tools.
+
+    Keeping these seams explicit lets evals and deterministic tests replace
+    infrastructure-heavy operations without mutating module globals.
+    """
+
+    run_search_batch: SearchBatchRunner
+    get_search_repository: SearchRepositoryFactory
+    get_room_3d_repository: Room3DRepositoryFactory
+
+
+def default_search_toolset_services() -> SearchToolsetServices:
+    """Return the current default service bindings for the search toolset."""
+
+    return SearchToolsetServices(
+        run_search_batch=run_search_pipeline_batch,
+        get_search_repository=search_repository,
+        get_room_3d_repository=room_3d_repository,
+    )
+
 
 def _normalize_candidate_pool_limit(query: SearchQueryInput) -> int | None:
     if query.candidate_pool_limit is None:
@@ -54,14 +84,14 @@ def _normalize_search_queries(queries: list[SearchQueryInput]) -> list[SearchQue
     ]
 
 
-async def run_search_graph(
+async def _run_search_graph_with_services(
     ctx: RunContext[SearchAgentDeps],
     queries: list[SearchQueryInput],
+    *,
+    services: SearchToolsetServices,
 ) -> SearchBatchToolResult:
-    """Run one or more semantic searches in one batched embedding pass."""
-
     normalized_queries = _normalize_search_queries(queries)
-    output = await run_search_pipeline_batch(
+    output = await services.run_search_batch(
         runtime=ctx.deps.runtime,
         queries=normalized_queries,
     )
@@ -73,7 +103,7 @@ async def run_search_graph(
             **telemetry_context(ctx.deps.state),
         },
     )
-    search_repo = search_repository(ctx.deps.runtime)
+    search_repo = services.get_search_repository(ctx.deps.runtime)
     if search_repo is not None:
         for query_input, query_output in zip(normalized_queries, output.queries, strict=True):
             search_repo.record_search_run(
@@ -86,6 +116,19 @@ async def run_search_graph(
                 results=query_output.results,
             )
     return output
+
+
+async def run_search_graph(
+    ctx: RunContext[SearchAgentDeps],
+    queries: list[SearchQueryInput],
+) -> SearchBatchToolResult:
+    """Run one or more semantic searches in one batched embedding pass."""
+
+    return await _run_search_graph_with_services(
+        ctx,
+        queries,
+        services=default_search_toolset_services(),
+    )
 
 
 def _hydrate_bundle_items(
@@ -233,15 +276,15 @@ def _build_bundle_validations(
     return validations
 
 
-def propose_bundle(
+def _propose_bundle_with_services(
     ctx: RunContext[SearchAgentDeps],
     title: str,
     items: list[BundleProposalItemInput],
     notes: str | None = None,
     budget_cap_eur: float | None = None,
+    *,
+    services: SearchToolsetServices,
 ) -> BundleProposalToolResult:
-    """Hydrate and append one optional bundle proposal for search UI rendering."""
-
     normalized_title = title.strip()
     if not normalized_title:
         raise ValueError("Bundle title must not be blank.")
@@ -269,7 +312,7 @@ def propose_bundle(
     )
     ctx.deps.state.append_bundle_proposal(result)
 
-    repository = search_repository(ctx.deps.runtime)
+    repository = services.get_search_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_bundle_proposal(
             thread_id=ctx.deps.state.thread_id or "anonymous-thread",
@@ -292,11 +335,32 @@ def propose_bundle(
     return result
 
 
-def list_room_3d_snapshot_context(ctx: RunContext[SearchAgentDeps]) -> dict[str, object]:
-    """Return captured 3D snapshot context from state and persisted thread records."""
+def propose_bundle(
+    ctx: RunContext[SearchAgentDeps],
+    title: str,
+    items: list[BundleProposalItemInput],
+    notes: str | None = None,
+    budget_cap_eur: float | None = None,
+) -> BundleProposalToolResult:
+    """Hydrate and append one optional bundle proposal for search UI rendering."""
 
+    return _propose_bundle_with_services(
+        ctx,
+        title,
+        items,
+        notes,
+        budget_cap_eur,
+        services=default_search_toolset_services(),
+    )
+
+
+def _list_room_3d_snapshot_context_with_services(
+    ctx: RunContext[SearchAgentDeps],
+    *,
+    services: SearchToolsetServices,
+) -> dict[str, object]:
     persisted: list[Room3DSnapshotEntry] = []
-    repository = room_3d_repository(ctx.deps.runtime)
+    repository = services.get_room_3d_repository(ctx.deps.runtime)
     if repository is not None and ctx.deps.state.thread_id is not None:
         persisted = repository.list_room_3d_snapshots(thread_id=ctx.deps.state.thread_id)
     payload = build_room_3d_snapshot_context_payload(
@@ -314,13 +378,59 @@ def list_room_3d_snapshot_context(ctx: RunContext[SearchAgentDeps]) -> dict[str,
     return payload
 
 
-def build_search_toolset() -> FunctionToolset[SearchAgentDeps]:
+def list_room_3d_snapshot_context(ctx: RunContext[SearchAgentDeps]) -> dict[str, object]:
+    """Return captured 3D snapshot context from state and persisted thread records."""
+
+    return _list_room_3d_snapshot_context_with_services(
+        ctx,
+        services=default_search_toolset_services(),
+    )
+
+
+def build_search_toolset(
+    services: SearchToolsetServices | None = None,
+) -> FunctionToolset[SearchAgentDeps]:
     """Build toolset for search agent."""
+
+    resolved_services = services or default_search_toolset_services()
+
+    async def run_search_graph_tool(
+        ctx: RunContext[SearchAgentDeps],
+        queries: list[SearchQueryInput],
+    ) -> SearchBatchToolResult:
+        return await _run_search_graph_with_services(ctx, queries, services=resolved_services)
+
+    def propose_bundle_tool(
+        ctx: RunContext[SearchAgentDeps],
+        title: str,
+        items: list[BundleProposalItemInput],
+        notes: str | None = None,
+        budget_cap_eur: float | None = None,
+    ) -> BundleProposalToolResult:
+        return _propose_bundle_with_services(
+            ctx,
+            title,
+            items,
+            notes,
+            budget_cap_eur,
+            services=resolved_services,
+        )
+
+    def list_room_3d_snapshot_context_tool(
+        ctx: RunContext[SearchAgentDeps],
+    ) -> dict[str, object]:
+        return _list_room_3d_snapshot_context_with_services(
+            ctx,
+            services=resolved_services,
+        )
 
     return FunctionToolset(
         tools=[
-            Tool(run_search_graph, name="run_search_graph"),
-            Tool(propose_bundle, name="propose_bundle"),
-            Tool(list_room_3d_snapshot_context, name="list_room_3d_snapshot_context"),
+            Tool(run_search_graph_tool, name="run_search_graph"),
+            Tool(propose_bundle_tool, name="propose_bundle"),
+            Tool(
+                list_room_3d_snapshot_context_tool,
+                name="list_room_3d_snapshot_context",
+            ),
         ]
     )
