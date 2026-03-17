@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
 
-import pytest
 from pydantic_ai import RunContext
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
-from ikea_agent.chat.agents.search.toolset import propose_bundle, run_search_graph
+from ikea_agent.chat.agents.search.toolset import (
+    SearchToolsetServices,
+    build_search_toolset,
+    propose_bundle,
+)
 from ikea_agent.chat.agents.state import SearchAgentState
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     BundleProposalItemInput,
     BundleProposalToolResult,
@@ -22,6 +27,15 @@ from ikea_agent.shared.types import (
     SearchQueryToolResult,
     ShortRetrievalResult,
 )
+
+RunSearchGraphFunc = Callable[
+    [RunContext[SearchAgentDeps], list[SearchQueryInput]],
+    Awaitable[SearchBatchToolResult],
+]
+ProposeBundleFunc = Callable[
+    [RunContext[SearchAgentDeps], str, list[BundleProposalItemInput], str | None, float | None],
+    BundleProposalToolResult,
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,21 +134,40 @@ def _run_context(*, price_eur: float | None) -> RunContext[SearchAgentDeps]:
     return cast("RunContext[SearchAgentDeps]", SimpleNamespace(deps=deps))
 
 
-def test_run_search_graph_forwards_one_batched_query_list(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    ctx = _run_context(price_eur=20.0)
-    pipeline_spy = _SearchPipelineSpy()
-
-    monkeypatch.setattr(
-        "ikea_agent.chat.agents.search.toolset.run_search_pipeline_batch",
-        pipeline_spy,
+def _services(
+    *,
+    pipeline: _SearchPipelineSpy,
+    search_repository_override: _SearchRepositorySpy | None = None,
+) -> SearchToolsetServices:
+    return SearchToolsetServices(
+        run_search_batch=pipeline,
+        get_search_repository=lambda _runtime: cast(
+            "SearchRepository | None",
+            search_repository_override,
+        ),
+        get_room_3d_repository=lambda _runtime: None,
     )
 
+
+async def _run_search_graph_once(
+    run_search_graph: RunSearchGraphFunc,
+    ctx: RunContext[SearchAgentDeps],
+    queries: list[SearchQueryInput],
+) -> SearchBatchToolResult:
+    return await run_search_graph(ctx, queries)
+
+
+def test_run_search_graph_forwards_one_batched_query_list() -> None:
+    ctx = _run_context(price_eur=20.0)
+    pipeline_spy = _SearchPipelineSpy()
+    toolset = build_search_toolset(_services(pipeline=pipeline_spy))
+    run_search_graph = cast("RunSearchGraphFunc", toolset.tools["run_search_graph"].function)
+
     result = asyncio.run(
-        run_search_graph(
+        _run_search_graph_once(
+            run_search_graph,
             ctx,
-            queries=[
+            [
                 SearchQueryInput(query_id="desk", semantic_query="small desk"),
                 SearchQueryInput(query_id="lamp", semantic_query="task lamp", limit=3),
             ],
@@ -146,22 +179,24 @@ def test_run_search_graph_forwards_one_batched_query_list(
     assert [query.query_id for query in result.queries] == ["desk", "lamp"]
 
 
-def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure() -> None:
     ctx = _run_context(price_eur=20.0)
+    pipeline_spy = _SearchPipelineSpy()
     repository_spy = _SearchRepositorySpy()
-
-    monkeypatch.setattr(
-        "ikea_agent.chat.agents.search.toolset.search_repository",
-        lambda _runtime: repository_spy,
+    toolset = build_search_toolset(
+        _services(
+            pipeline=pipeline_spy,
+            search_repository_override=repository_spy,
+        )
     )
+    propose_bundle = cast("ProposeBundleFunc", toolset.tools["propose_bundle"].function)
 
     result = propose_bundle(
         ctx,
-        title="Desk seating bundle",
-        budget_cap_eur=30.0,
-        items=[BundleProposalItemInput(item_id="chair-1", quantity=2, reason="Seat for desk work")],
+        "Desk seating bundle",
+        [BundleProposalItemInput(item_id="chair-1", quantity=2, reason="Seat for desk work")],
+        None,
+        30.0,
     )
 
     assert result.title == "Desk seating bundle"

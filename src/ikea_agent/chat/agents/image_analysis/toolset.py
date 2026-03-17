@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass
 from logging import getLogger
 
 from pydantic_ai import RunContext
@@ -11,6 +12,8 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.shared import analysis_repository, telemetry_context
+from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.persistence.analysis_repository import AnalysisRepository
 from ikea_agent.tools.image_analysis import (
     AttachmentRefPayload,
     DepthEstimationRequest,
@@ -43,6 +46,38 @@ TOOL_NAMES: tuple[str, ...] = (
     "get_room_detail_details_from_photo",
 )
 
+AnalysisRepositoryFactory = Callable[[ChatRuntime], AnalysisRepository | None]
+ObjectDetectionRunner = Callable[..., Awaitable[ObjectDetectionToolResult]]
+DepthEstimationRunner = Callable[..., Awaitable[DepthEstimationToolResult]]
+SegmentationRunner = Callable[..., Awaitable[SegmentationToolResult]]
+RoomPhotoAnalysisRunner = Callable[..., Awaitable[RoomPhotoAnalysisToolResult]]
+RoomDetailAnalysisRunner = Callable[..., Awaitable[RoomDetailDetailsFromPhotoResult]]
+
+
+@dataclass(frozen=True, slots=True)
+class ImageAnalysisToolsetServices:
+    """Service seams for image-analysis tools."""
+
+    get_analysis_repository: AnalysisRepositoryFactory
+    detect_objects_in_image: ObjectDetectionRunner
+    estimate_depth_map: DepthEstimationRunner
+    segment_image_with_prompt: SegmentationRunner
+    analyze_room_photo: RoomPhotoAnalysisRunner
+    get_room_detail_details_from_photo: RoomDetailAnalysisRunner
+
+
+def default_image_analysis_toolset_services() -> ImageAnalysisToolsetServices:
+    """Return the current default service bindings for image-analysis tools."""
+
+    return ImageAnalysisToolsetServices(
+        get_analysis_repository=analysis_repository,
+        detect_objects_in_image=run_object_detection,
+        estimate_depth_map=run_depth_estimation,
+        segment_image_with_prompt=run_image_segmentation,
+        analyze_room_photo=run_room_photo_analysis,
+        get_room_detail_details_from_photo=run_room_detail_details_from_photo,
+    )
+
 
 def list_uploaded_images(ctx: RunContext[ImageAnalysisAgentDeps]) -> list[dict[str, object]]:
     """List uploaded images from AG-UI state."""
@@ -57,18 +92,18 @@ def list_uploaded_images(ctx: RunContext[ImageAnalysisAgentDeps]) -> list[dict[s
     return [asdict(attachment) for attachment in ctx.deps.state.attachments]
 
 
-async def detect_objects_in_image(
+async def _detect_objects_in_image_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: ObjectDetectionRequest,
+    *,
+    services: ImageAnalysisToolsetServices,
 ) -> ObjectDetectionToolResult:
-    """Detect objects in one uploaded image using Florence object detection."""
-
     logger.info("detect_objects_in_image_start", extra=telemetry_context(ctx.deps.state))
-    result = await run_object_detection(
+    result = await services.detect_objects_in_image(
         request=request,
         attachment_store=ctx.deps.attachment_store,
     )
-    repository = analysis_repository(ctx.deps.runtime)
+    repository = services.get_analysis_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_analysis(
             tool_name="detect_objects_in_image",
@@ -82,18 +117,31 @@ async def detect_objects_in_image(
     return result
 
 
-async def estimate_depth_map(
+async def detect_objects_in_image(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: ObjectDetectionRequest,
+) -> ObjectDetectionToolResult:
+    """Detect objects in one uploaded image using Florence object detection."""
+
+    return await _detect_objects_in_image_with_services(
+        ctx,
+        request,
+        services=default_image_analysis_toolset_services(),
+    )
+
+
+async def _estimate_depth_map_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: DepthEstimationRequest,
+    *,
+    services: ImageAnalysisToolsetServices,
 ) -> DepthEstimationToolResult:
-    """Estimate a relative depth map for one uploaded image using Marigold."""
-
     logger.info("estimate_depth_map_start", extra=telemetry_context(ctx.deps.state))
-    result = await run_depth_estimation(
+    result = await services.estimate_depth_map(
         request=request,
         attachment_store=ctx.deps.attachment_store,
     )
-    repository = analysis_repository(ctx.deps.runtime)
+    repository = services.get_analysis_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_analysis(
             tool_name="estimate_depth_map",
@@ -107,18 +155,31 @@ async def estimate_depth_map(
     return result
 
 
-async def segment_image_with_prompt(
+async def estimate_depth_map(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: DepthEstimationRequest,
+) -> DepthEstimationToolResult:
+    """Estimate a relative depth map for one uploaded image using Marigold."""
+
+    return await _estimate_depth_map_with_services(
+        ctx,
+        request,
+        services=default_image_analysis_toolset_services(),
+    )
+
+
+async def _segment_image_with_prompt_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: SegmentationRequest,
+    *,
+    services: ImageAnalysisToolsetServices,
 ) -> SegmentationToolResult:
-    """Create prompt-driven segmentation masks for one uploaded image using SAM."""
-
     logger.info("segment_image_with_prompt_start", extra=telemetry_context(ctx.deps.state))
-    result = await run_image_segmentation(
+    result = await services.segment_image_with_prompt(
         request=request,
         attachment_store=ctx.deps.attachment_store,
     )
-    repository = analysis_repository(ctx.deps.runtime)
+    repository = services.get_analysis_repository(ctx.deps.runtime)
     if repository is not None:
         analysis_id = repository.record_analysis(
             tool_name="segment_image_with_prompt",
@@ -134,12 +195,25 @@ async def segment_image_with_prompt(
     return result
 
 
-async def analyze_room_photo(
+async def segment_image_with_prompt(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: SegmentationRequest,
+) -> SegmentationToolResult:
+    """Create prompt-driven segmentation masks for one uploaded image using SAM."""
+
+    return await _segment_image_with_prompt_with_services(
+        ctx,
+        request,
+        services=default_image_analysis_toolset_services(),
+    )
+
+
+async def _analyze_room_photo_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: RoomPhotoAnalysisRequest | None = None,
+    *,
+    services: ImageAnalysisToolsetServices,
 ) -> RoomPhotoAnalysisToolResult:
-    """Run combined room-photo understanding (object detection + depth)."""
-
     logger.info("analyze_room_photo_start", extra=telemetry_context(ctx.deps.state))
     resolved_request = request
     if resolved_request is None:
@@ -149,11 +223,11 @@ async def analyze_room_photo(
             image=AttachmentRefPayload.from_ref(ctx.deps.state.attachments[0])
         )
 
-    result = await run_room_photo_analysis(
+    result = await services.analyze_room_photo(
         request=resolved_request,
         attachment_store=ctx.deps.attachment_store,
     )
-    repository = analysis_repository(ctx.deps.runtime)
+    repository = services.get_analysis_repository(ctx.deps.runtime)
     if repository is not None:
         detections = result.object_detection.detections if result.object_detection else []
         repository.record_analysis(
@@ -168,12 +242,25 @@ async def analyze_room_photo(
     return result
 
 
-async def get_room_detail_details_from_photo(
+async def analyze_room_photo(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: RoomPhotoAnalysisRequest | None = None,
+) -> RoomPhotoAnalysisToolResult:
+    """Run combined room-photo understanding (object detection + depth)."""
+
+    return await _analyze_room_photo_with_services(
+        ctx,
+        request,
+        services=default_image_analysis_toolset_services(),
+    )
+
+
+async def _get_room_detail_details_from_photo_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: RoomDetailDetailsFromPhotoRequest | None = None,
+    *,
+    services: ImageAnalysisToolsetServices,
 ) -> RoomDetailDetailsFromPhotoResult:
-    """Extract room-detail observations across one or more uploaded room photos."""
-
     logger.info(
         "get_room_detail_details_from_photo_start",
         extra=telemetry_context(ctx.deps.state),
@@ -189,11 +276,11 @@ async def get_room_detail_details_from_photo(
             ]
         )
 
-    result = await run_room_detail_details_from_photo(
+    result = await services.get_room_detail_details_from_photo(
         request=resolved_request,
         attachment_store=ctx.deps.attachment_store,
     )
-    repository = analysis_repository(ctx.deps.runtime)
+    repository = services.get_analysis_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_analysis(
             tool_name="get_room_detail_details_from_photo",
@@ -217,18 +304,85 @@ async def get_room_detail_details_from_photo(
     return result
 
 
-def build_image_analysis_toolset() -> FunctionToolset[ImageAnalysisAgentDeps]:
+async def get_room_detail_details_from_photo(
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    request: RoomDetailDetailsFromPhotoRequest | None = None,
+) -> RoomDetailDetailsFromPhotoResult:
+    """Extract room-detail observations across one or more uploaded room photos."""
+
+    return await _get_room_detail_details_from_photo_with_services(
+        ctx,
+        request,
+        services=default_image_analysis_toolset_services(),
+    )
+
+
+def build_image_analysis_toolset(
+    services: ImageAnalysisToolsetServices | None = None,
+) -> FunctionToolset[ImageAnalysisAgentDeps]:
     """Build toolset for image-analysis agent."""
+
+    resolved_services = services or default_image_analysis_toolset_services()
+
+    async def detect_objects_in_image_tool(
+        ctx: RunContext[ImageAnalysisAgentDeps],
+        request: ObjectDetectionRequest,
+    ) -> ObjectDetectionToolResult:
+        return await _detect_objects_in_image_with_services(
+            ctx,
+            request,
+            services=resolved_services,
+        )
+
+    async def estimate_depth_map_tool(
+        ctx: RunContext[ImageAnalysisAgentDeps],
+        request: DepthEstimationRequest,
+    ) -> DepthEstimationToolResult:
+        return await _estimate_depth_map_with_services(
+            ctx,
+            request,
+            services=resolved_services,
+        )
+
+    async def segment_image_with_prompt_tool(
+        ctx: RunContext[ImageAnalysisAgentDeps],
+        request: SegmentationRequest,
+    ) -> SegmentationToolResult:
+        return await _segment_image_with_prompt_with_services(
+            ctx,
+            request,
+            services=resolved_services,
+        )
+
+    async def analyze_room_photo_tool(
+        ctx: RunContext[ImageAnalysisAgentDeps],
+        request: RoomPhotoAnalysisRequest | None = None,
+    ) -> RoomPhotoAnalysisToolResult:
+        return await _analyze_room_photo_with_services(
+            ctx,
+            request,
+            services=resolved_services,
+        )
+
+    async def get_room_detail_details_from_photo_tool(
+        ctx: RunContext[ImageAnalysisAgentDeps],
+        request: RoomDetailDetailsFromPhotoRequest | None = None,
+    ) -> RoomDetailDetailsFromPhotoResult:
+        return await _get_room_detail_details_from_photo_with_services(
+            ctx,
+            request,
+            services=resolved_services,
+        )
 
     return FunctionToolset(
         tools=[
             Tool(list_uploaded_images, name="list_uploaded_images"),
-            Tool(detect_objects_in_image, name="detect_objects_in_image"),
-            Tool(estimate_depth_map, name="estimate_depth_map"),
-            Tool(segment_image_with_prompt, name="segment_image_with_prompt"),
-            Tool(analyze_room_photo, name="analyze_room_photo"),
+            Tool(detect_objects_in_image_tool, name="detect_objects_in_image"),
+            Tool(estimate_depth_map_tool, name="estimate_depth_map"),
+            Tool(segment_image_with_prompt_tool, name="segment_image_with_prompt"),
+            Tool(analyze_room_photo_tool, name="analyze_room_photo"),
             Tool(
-                get_room_detail_details_from_photo,
+                get_room_detail_details_from_photo_tool,
                 name="get_room_detail_details_from_photo",
             ),
         ]
