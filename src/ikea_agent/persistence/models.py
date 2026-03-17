@@ -437,6 +437,42 @@ class BundleProposalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class RevealedPreferenceRecord(Base):
+    """Thread-scoped durable preference memory captured from conversation."""
+
+    __tablename__ = "revealed_preferences"
+    __table_args__ = (
+        Index("ix_revealed_preferences_thread_id", "thread_id"),
+        Index("ix_revealed_preferences_run_id", "run_id"),
+        UniqueConstraint(
+            "thread_id",
+            "signal_key",
+            "value",
+            name="uq_revealed_preferences_thread_signal_value",
+        ),
+        {"schema": APP_SCHEMA},
+    )
+
+    revealed_preference_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    signal_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[str] = mapped_column(String(128), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_message_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 def ensure_persistence_schema(engine: Engine) -> None:
     """Create persistence schema and tables when missing."""
 

@@ -15,6 +15,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
+    build_remember_preference_tool,
     build_room_3d_snapshot_context_payload,
     room_3d_repository,
     search_repository,
@@ -36,6 +37,7 @@ from ikea_agent.shared.types import (
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
+    "remember_preference",
     "run_search_graph",
     "propose_bundle",
     "list_room_3d_snapshot_context",
@@ -452,6 +454,7 @@ def build_search_toolset(
 
     return FunctionToolset(
         tools=[
+            build_remember_preference_tool(),
             Tool(run_search_graph_tool, name="run_search_graph"),
             Tool(propose_bundle_tool, name="propose_bundle"),
             Tool(

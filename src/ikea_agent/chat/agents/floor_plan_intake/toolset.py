@@ -13,7 +13,11 @@ from pydantic_ai.tools import Tool
 from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
-from ikea_agent.chat.agents.shared import floor_plan_repository, telemetry_context
+from ikea_agent.chat.agents.shared import (
+    build_remember_preference_tool,
+    floor_plan_repository,
+    telemetry_context,
+)
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.tools.floorplanner.models import (
@@ -29,6 +33,7 @@ from ikea_agent.tools.floorplanner.yaml_codec import dump_scene_yaml, parse_scen
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
+    "remember_preference",
     "render_floor_plan",
     "load_floor_plan_scene_yaml",
     "export_floor_plan_scene_yaml",
@@ -366,6 +371,7 @@ def build_floor_plan_intake_toolset(
 
     return FunctionToolset(
         tools=[
+            build_remember_preference_tool(),
             Tool(render_floor_plan_tool, name="render_floor_plan"),
             Tool(load_floor_plan_scene_yaml_tool, name="load_floor_plan_scene_yaml"),
             Tool(export_floor_plan_scene_yaml_tool, name="export_floor_plan_scene_yaml"),
