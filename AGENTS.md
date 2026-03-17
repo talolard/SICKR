@@ -30,6 +30,12 @@ When using libraries search for documentation in
 - Commit messages must be high-level and human-readable, focused on intent.
 - Commit bodies should explain problem -> approach -> outcome, not just file lists.
 
+## Project Stage
+
+- This repository is pre-production.
+- For exploratory prompt/eval work, a small hand-authored dataset and an uncalibrated LLM judge are acceptable unless explicitly asked to harden them.
+- Do not demand production-grade eval governance, production-traffic-derived datasets, or human-calibration loops by default for early exploratory work.
+
 ## Codex Multi-Agent Role System
 
 - Project-local Codex role definitions live in `.codex/config.toml`.
