@@ -9,18 +9,19 @@ import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type CopilotToolRenderersProps = {
-  threadId?: string | null;
+  onBundleSelected?: (bundleId: string) => void;
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
   onBundleProposed?: (proposal: BundleProposal) => void;
 };
 
 export function CopilotToolRenderers({
-  threadId,
+  onBundleSelected,
   onFloorPlanRendered,
   onBundleProposed,
 }: CopilotToolRenderersProps): ReactElement | null {
   useDefaultToolRenderer();
   useCatalogToolRenderers({
+    ...(onBundleSelected ? { onBundleSelected } : {}),
     ...(onFloorPlanRendered ? { onFloorPlanRendered } : {}),
     ...(onBundleProposed ? { onBundleProposed } : {}),
   });
