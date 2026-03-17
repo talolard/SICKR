@@ -15,7 +15,6 @@
 - [Phase 1 Status](phase1_status.md)
 - [Web Runbook](web.md)
 - [Multi-Agent Worktree Workflow](worktree_multi_agent_workflow.md)
-- [Feedback Bundles](feedback_bundles.md)
 - [Subagents Process Retrospective](subagents_process_retrospective.md)
 - [Data Model and Storage](data/index.md)
 - [Current Graph Data Access](data/current_graph_data_access.md)

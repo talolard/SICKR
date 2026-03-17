@@ -109,7 +109,6 @@ Room-detail extraction is implemented in `src/ikea_agent/tools/image_analysis/ro
 - Segmentation results now include `analysis_id` when persistence is enabled.
 - UI can persist per-mask user feedback (`confirm`/`reject`/`uncertain`) to:
   - `POST /api/threads/{thread_id}/analyses/{analysis_id}/feedback`
-  - `GET /api/threads/{thread_id}/analyses/{analysis_id}/feedback`
 - Stored fields include optional `mask_ordinal`, `mask_label`, `query_text`, and freeform `note`.
 
 ## UI rendering
