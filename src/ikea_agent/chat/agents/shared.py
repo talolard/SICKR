@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from urllib.parse import quote
-
 from ikea_agent.chat.agents.state import CommonAgentState, Room3DSnapshotContext
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.persistence.analysis_repository import AnalysisRepository
@@ -78,18 +76,3 @@ def build_room_3d_snapshot_context_payload(
         "state_count": len(state_snapshots),
         "persisted_count": len(persisted_payload),
     }
-
-
-def preview_svg_data_uri() -> str:
-    """Return deterministic SVG preview as a URL-safe data URI."""
-
-    svg_text = """
-<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"420\">
-  <rect x=\"20\" y=\"20\" width=\"600\" height=\"380\" fill=\"#f6f6f6\" stroke=\"#333\" />
-  <rect x=\"80\" y=\"80\" width=\"180\" height=\"120\" fill=\"#d9e6ff\" stroke=\"#1d4ed8\" />
-  <rect x=\"340\" y=\"120\" width=\"220\" height=\"160\" fill=\"#ffe4d6\" stroke=\"#c2410c\" />
-  <text x=\"90\" y=\"110\" font-size=\"20\" fill=\"#1f2937\">Wardrobe</text>
-  <text x=\"350\" y=\"150\" font-size=\"20\" fill=\"#1f2937\">Bed</text>
-</svg>
-""".strip()
-    return f"data:image/svg+xml,{quote(svg_text)}"
