@@ -10,6 +10,7 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
 - `EMBEDDING_DIMENSIONS` default: `256`
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
+- `ALLOW_MODEL_REQUESTS` default: `1`
 - `MMR_LAMBDA` default: `0.8`
 - `MMR_PRESELECT_LIMIT` default: `30`
 - `EMBEDDING_NEIGHBOR_LIMIT` default: `0` (`0` means store all pairwise neighbors)
@@ -28,6 +29,13 @@ Agents resolve generation models with this precedence:
 1. Explicit runtime override passed by caller.
 2. Per-agent config in `agents` (legacy alias: `subagents`).
 3. Global `GEMINI_GENERATION_MODEL`.
+
+The search agent uses this same precedence now and no longer carries a separate
+hardcoded fallback model.
+
+Backend tests still force model requests off regardless of app defaults by using
+Pydantic AI's `override_allow_model_requests(False)` autouse fixture in
+[`tests/conftest.py`](../tests/conftest.py).
 
 Environment example for one override:
 
