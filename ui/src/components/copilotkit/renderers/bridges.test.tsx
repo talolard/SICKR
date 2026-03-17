@@ -51,7 +51,7 @@ describe("BundleProposalBridge", () => {
         }),
       );
     });
-    expect(screen.getByText("Bundle added to side panel.")).toBeInTheDocument();
+    expect(screen.getByText("Saved to bundles panel")).toBeInTheDocument();
   });
 });
 
