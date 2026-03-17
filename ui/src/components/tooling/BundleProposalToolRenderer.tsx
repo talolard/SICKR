@@ -1,9 +1,22 @@
 import type { ReactElement } from "react";
 
-export function BundleProposalToolRenderer(): ReactElement {
+import { BundleProposalSummaryCard } from "@/components/search/BundleProposalSummaryCard";
+import type { BundleProposal } from "@/lib/bundleProposalsStore";
+
+type BundleProposalToolRendererProps = {
+  onOpenBundle?: (() => void) | undefined;
+  proposal: BundleProposal;
+};
+
+export function BundleProposalToolRenderer({
+  onOpenBundle,
+  proposal,
+}: BundleProposalToolRendererProps): ReactElement {
   return (
-    <div className="rounded border bg-white p-2">
-      <p className="text-sm text-gray-700">Bundle added to side panel.</p>
-    </div>
+    <BundleProposalSummaryCard
+      actionLabel={onOpenBundle ? "Open bundle details" : "Saved to bundles panel"}
+      {...(onOpenBundle ? { onClick: onOpenBundle } : {})}
+      proposal={proposal}
+    />
   );
 }

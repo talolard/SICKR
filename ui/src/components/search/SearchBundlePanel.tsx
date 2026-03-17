@@ -1,22 +1,13 @@
 "use client";
 
-import { useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
-
-type SearchBundlePanelProps = {
-  error?: string | null;
-  isLoading?: boolean;
-  proposals: BundleProposal[];
-};
-
-function formatPrice(value: number | null): string {
-  return value === null ? "—" : `€${value.toFixed(2)}`;
-}
-
-function formatCreatedAt(value: string): string {
-  return new Date(value).toLocaleString();
-}
+import {
+  bundleSummaryCardId,
+  BundleProposalSummaryCard,
+  formatBundlePrice,
+} from "@/components/search/BundleProposalSummaryCard";
 
 function validationTone(status: BundleProposal["validations"][number]["status"]): string {
   switch (status) {
@@ -61,15 +52,34 @@ function BundleValidationList({ proposal }: { proposal: BundleProposal }): React
   );
 }
 
+type SearchBundlePanelProps = {
+  activeBundleId?: string | null;
+  error?: string | null;
+  isLoading?: boolean;
+  proposals: BundleProposal[];
+};
+
 export function SearchBundlePanel({
+  activeBundleId = null,
   error = null,
   isLoading = false,
   proposals,
 }: SearchBundlePanelProps): ReactElement {
-  const [expandedBundleIds, setExpandedBundleIds] = useState<Set<string>>(() => new Set());
+  const [manuallyExpandedBundleIds, setManuallyExpandedBundleIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const expandedBundleIds = useMemo(() => {
+    if (!activeBundleId) {
+      return manuallyExpandedBundleIds;
+    }
+    const next = new Set(manuallyExpandedBundleIds);
+    next.add(activeBundleId);
+    return next;
+  }, [activeBundleId, manuallyExpandedBundleIds]);
 
   function toggleBundle(bundleId: string): void {
-    setExpandedBundleIds((current) => {
+    setManuallyExpandedBundleIds((current) => {
       const next = new Set(current);
       if (next.has(bundleId)) {
         next.delete(bundleId);
@@ -79,6 +89,18 @@ export function SearchBundlePanel({
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!activeBundleId) {
+      return;
+    }
+    globalThis.window?.requestAnimationFrame(() => {
+      document.getElementById(bundleSummaryCardId(activeBundleId))?.scrollIntoView?.({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+  }, [activeBundleId]);
 
   if (proposals.length === 0) {
     return (
@@ -109,39 +131,19 @@ export function SearchBundlePanel({
 
           return (
             <article className="rounded-lg border border-gray-200 bg-gray-50/60" key={proposal.bundle_id}>
-              <button
-                aria-expanded={isExpanded}
-                className="flex w-full items-start justify-between gap-4 p-4 text-left"
+              <BundleProposalSummaryCard
+                actionLabel={isExpanded ? "Hide details" : "Show details"}
+                highlighted={proposal.bundle_id === activeBundleId}
                 onClick={() => {
                   toggleBundle(proposal.bundle_id);
                 }}
-                type="button"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-gray-900">{proposal.title}</h3>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                      {proposal.items.length} {proposal.items.length === 1 ? "item" : "items"}
-                    </span>
-                  </div>
-                  {proposal.notes ? (
-                    <p className="mt-1 line-clamp-2 text-xs text-gray-600">{proposal.notes}</p>
-                  ) : null}
-                  {proposal.budget_cap_eur !== null ? (
-                    <p className="mt-1 text-[11px] text-gray-500">
-                      Budget cap: {formatPrice(proposal.budget_cap_eur)}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500">Total</p>
-                  <p className="text-sm font-semibold text-gray-900">{formatPrice(proposal.bundle_total_eur)}</p>
-                  <p className="mt-1 text-[11px] text-gray-500">{formatCreatedAt(proposal.created_at)}</p>
-                  <p className="mt-2 text-xs font-medium text-gray-700">{isExpanded ? "Hide details" : "Show details"}</p>
-                </div>
-              </button>
+                proposal={proposal}
+              />
               {isExpanded ? (
-                <div className="border-t border-gray-200 bg-white p-4">
+                <div
+                  className="border-t border-gray-200 bg-white p-4"
+                  id={`${bundleSummaryCardId(proposal.bundle_id)}-details`}
+                >
                   <BundleValidationList proposal={proposal} />
                   <div
                     className="mt-3 max-h-96 space-y-3 overflow-y-auto pr-1"
@@ -157,13 +159,27 @@ export function SearchBundlePanel({
                             <h4 className="text-sm font-semibold text-gray-900">{item.product_name}</h4>
                             <p className="text-[11px] text-gray-500">{item.item_id}</p>
                           </div>
-                          <div className="shrink-0 text-right text-xs text-gray-600">
-                            <p>Qty {item.quantity}</p>
-                            <p className="font-medium text-gray-900">
-                              {item.line_total_eur === null
-                                ? "Pending price"
-                                : formatPrice(item.line_total_eur)}
-                            </p>
+                          <div className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2">
+                            <dl className="grid grid-cols-3 gap-3 text-left text-xs text-gray-600">
+                              <div>
+                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Unit</dt>
+                                <dd className="mt-1 font-medium text-gray-900">
+                                  {item.price_eur === null ? "Pending" : formatBundlePrice(item.price_eur)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Qty</dt>
+                                <dd className="mt-1 font-medium text-gray-900">{item.quantity}</dd>
+                              </div>
+                              <div>
+                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Total</dt>
+                                <dd className="mt-1 font-medium text-gray-900">
+                                  {item.line_total_eur === null
+                                    ? "Pending"
+                                    : formatBundlePrice(item.line_total_eur)}
+                                </dd>
+                              </div>
+                            </dl>
                           </div>
                         </div>
                         <dl className="mt-3 grid gap-3 md:grid-cols-2">
@@ -180,14 +196,6 @@ export function SearchBundlePanel({
                             <dd className="mt-1 text-sm text-gray-600">{item.description_text ?? "—"}</dd>
                           </div>
                         </dl>
-                        <p className="mt-3 text-xs text-gray-600">
-                          Unit price:{" "}
-                          {item.price_eur === null ? (
-                            <span className="font-medium text-amber-700">Pending price</span>
-                          ) : (
-                            <span className="font-medium text-gray-900">{formatPrice(item.price_eur)}</span>
-                          )}
-                        </p>
                       </article>
                     ))}
                   </div>
