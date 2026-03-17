@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.google import GoogleModelSettings, ThinkingConfigDict
 
 from ikea_agent.chat.agents.common import AgentPrompt
@@ -14,6 +16,7 @@ from ikea_agent.chat.agents.floor_plan_intake.toolset import (
     FloorPlanIntakeToolsetServices,
     build_floor_plan_intake_toolset,
 )
+from ikea_agent.chat.agents.shared import build_preference_instruction
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -24,6 +27,10 @@ PROMPT = AgentPrompt(PROMPT_PATH)
 NOTES = (
     "Runs an iterative intake loop directly in a pydantic-ai agent and uses the shared "
     "`render_floor_plan` tool contract so CopilotKit can render floor-plan outputs."
+)
+PREFERENCE_INSTRUCTION: Callable[[RunContext[FloorPlanIntakeDeps]], str] = cast(
+    "Callable[[RunContext[FloorPlanIntakeDeps]], str]",
+    build_preference_instruction(),
 )
 
 
@@ -63,7 +70,7 @@ def build_floor_plan_intake_agent(
         deps_type=FloorPlanIntakeDeps,
         output_type=str,
         name="agent_floor_plan_intake",
-        instructions=PROMPT.instruction_text(),
+        instructions=[PROMPT.instruction_text(), PREFERENCE_INSTRUCTION],
         toolsets=[build_floor_plan_intake_toolset(toolset_services)],
     )
 

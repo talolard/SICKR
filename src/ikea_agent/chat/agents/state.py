@@ -8,6 +8,7 @@ from ikea_agent.shared.types import (
     AttachmentRef,
     BundleProposalToolResult,
     GroundedSearchProduct,
+    RevealedPreferenceMemory,
     SearchBatchToolResult,
 )
 
@@ -46,6 +47,16 @@ class CommonAgentState(BaseModel):
     thread_id: str | None = None
     run_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)
+    revealed_preferences: list[RevealedPreferenceMemory] = Field(default_factory=list)
+
+    def remember_preference(self, preference: RevealedPreferenceMemory) -> None:
+        """Upsert one persisted preference record into in-memory AG-UI state."""
+
+        for index, existing in enumerate(self.revealed_preferences):
+            if existing.signal_key == preference.signal_key and existing.value == preference.value:
+                self.revealed_preferences[index] = preference
+                return
+        self.revealed_preferences.append(preference)
 
 
 class FloorPlanIntakeAgentState(CommonAgentState):

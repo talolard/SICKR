@@ -32,6 +32,7 @@ from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 
@@ -111,6 +112,11 @@ def create_app(
         if hasattr(chat_runtime, "session_factory")
         else None
     )
+    revealed_preference_repository = (
+        RevealedPreferenceRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
     thread_query_repository = (
         ThreadQueryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -151,6 +157,7 @@ def create_app(
             agents=agents,
             deps_by_agent=deps_by_agent,
             run_history_repository=run_history_repository,
+            revealed_preference_repository=revealed_preference_repository,
         )
 
     if mount_web_ui:
