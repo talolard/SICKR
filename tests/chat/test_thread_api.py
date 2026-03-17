@@ -4,27 +4,22 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
 
-from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat_app.main import create_app
 from ikea_agent.persistence.models import (
     AgentRunRecord,
-    AnalysisDetectionRecord,
+    AnalysisFeedbackRecord,
     AnalysisRunRecord,
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
-    Room3DAssetRecord,
-    Room3DSnapshotRecord,
-    SearchResultRecord,
     SearchRunRecord,
     ThreadRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
@@ -114,23 +109,6 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 created_at=now,
             )
         )
-        session.flush()
-        session.add(
-            AnalysisDetectionRecord(
-                analysis_detection_id="det-api",
-                analysis_id="analysis-api",
-                ordinal=1,
-                label="chair",
-                bbox_x1_px=1,
-                bbox_y1_px=2,
-                bbox_x2_px=3,
-                bbox_y2_px=4,
-                bbox_x1_norm=0.1,
-                bbox_y1_norm=0.2,
-                bbox_x2_norm=0.3,
-                bbox_y2_norm=0.4,
-            )
-        )
         session.add(
             SearchRunRecord(
                 search_id="search-api",
@@ -179,169 +157,79 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 created_at=now,
             )
         )
-        session.add(
-            SearchResultRecord(
-                search_result_id="search-res-api",
-                search_id="search-api",
-                rank=1,
-                product_id="prod-1",
-                product_name="PAX",
-                product_type="wardrobe",
-                main_category="storage",
-                sub_category="wardrobes",
-                width_cm=80.0,
-                depth_cm=60.0,
-                height_cm=200.0,
-                price_eur=199.0,
-            )
-        )
-        session.add(
-            Room3DAssetRecord(
-                room_3d_asset_id="room3d-asset-api",
-                thread_id="thread-api",
-                run_id="run-api",
-                source_asset_id="asset-api",
-                usd_format="usda",
-                metadata_json='{"default_prim": "/Room"}',
-                created_at=now,
-            )
-        )
-        session.add(
-            Room3DSnapshotRecord(
-                room_3d_snapshot_id="room3d-snapshot-api",
-                thread_id="thread-api",
-                run_id="run-api",
-                snapshot_asset_id="asset-api",
-                room_3d_asset_id="room3d-asset-api",
-                camera_json='{"fov_deg": 55.0}',
-                lighting_json='{"emphasized_light_count": 1}',
-                comment="Desk corner is too dark.",
-                created_at=now,
-            )
-        )
         session.commit()
 
 
-def test_thread_data_routes_return_thread_scoped_records(tmp_path: Path) -> None:
+def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _seed(runtime, tmp_path=tmp_path)
-    client = TestClient(
-        create_app(
-            runtime=cast("ChatRuntime", runtime),
-            mount_web_ui=False,
-            mount_ag_ui=False,
-        )
-    )
+    repository = ThreadQueryRepository(runtime.session_factory)
 
-    list_response = client.get("/api/threads")
-    detail_response = client.get("/api/threads/thread-api")
-    title_response = client.patch("/api/threads/thread-api/title", json={"title": "Updated"})
-    assets_response = client.get("/api/threads/thread-api/assets")
-    revisions_response = client.get("/api/threads/thread-api/floor-plan-revisions")
-    analyses_response = client.get("/api/threads/thread-api/analyses")
-    bundle_response = client.get("/api/threads/thread-api/bundle-proposals")
-    detections_response = client.get("/api/threads/thread-api/images/asset-api/detections")
-    room_assets_response = client.get("/api/threads/thread-api/room-3d-assets")
-    room_snapshots_response = client.get("/api/threads/thread-api/room-3d-snapshots")
-    room_asset_create_response = client.post(
-        "/api/threads/thread-api/room-3d-assets",
-        json={
-            "source_asset_id": "asset-api",
-            "usd_format": "usdz",
-            "metadata": {"prim_count": 3},
-            "run_id": "run-api",
-        },
-    )
-    room_snapshot_create_response = client.post(
-        "/api/threads/thread-api/room-3d-snapshots",
-        json={
-            "snapshot_asset_id": "asset-api",
-            "room_3d_asset_id": "room3d-asset-api",
-            "camera": {"fov_deg": 60},
-            "lighting": {"emphasized_light_count": 2},
-            "comment": "Check lighting around the bed.",
-            "run_id": "run-api",
-        },
-    )
-    room_snapshot_invalid_response = client.post(
-        "/api/threads/thread-api/room-3d-snapshots",
-        json={
-            "snapshot_asset_id": "asset-api",
-            "room_3d_asset_id": "room3d-asset-api",
-            # Missing required camera/lighting fields.
-        },
-    )
+    detail = repository.get_thread(thread_id="thread-api")
+    assets = repository.list_assets(thread_id="thread-api")
+    bundles = repository.list_bundle_proposals(thread_id="thread-api")
 
-    assert list_response.status_code == 200
-    assert detail_response.status_code == 200
-    assert title_response.status_code == 200
-    assert assets_response.status_code == 200
-    assert revisions_response.status_code == 200
-    assert analyses_response.status_code == 200
-    assert bundle_response.status_code == 200
-    assert detections_response.status_code == 200
-    assert room_assets_response.status_code == 200
-    assert room_snapshots_response.status_code == 200
-    assert room_asset_create_response.status_code == 200
-    assert room_snapshot_create_response.status_code == 200
-    assert room_snapshot_invalid_response.status_code == 422
+    assert detail is not None
+    assert detail.thread_id == "thread-api"
+    assert detail.asset_count == 1
+    assert detail.run_count == 1
+    assert detail.floor_plan_revision_count == 1
+    assert detail.analysis_count == 1
+    assert detail.search_count == 1
 
-    assert list_response.json()[0]["thread_id"] == "thread-api"
-    assert detail_response.json()["asset_count"] == 1
-    assert title_response.json()["title"] == "Updated"
-    assert assets_response.json()[0]["asset_id"] == "asset-api"
-    assert revisions_response.json()[0]["floor_plan_revision_id"] == "fprev-api"
-    assert analyses_response.json()[0]["analysis_id"] == "analysis-api"
-    assert bundle_response.json()[0]["bundle_id"] == "bundle-api"
-    assert bundle_response.json()[0]["items"][0]["item_id"] == "prod-1"
-    assert bundle_response.json()[0]["validations"][0]["kind"] == "budget_max_eur"
-    assert detections_response.json()[0]["analysis_detection_id"] == "det-api"
-    assert room_assets_response.json()[0]["room_3d_asset_id"] == "room3d-asset-api"
-    assert room_snapshots_response.json()[0]["room_3d_snapshot_id"] == "room3d-snapshot-api"
-    assert room_asset_create_response.json()["usd_format"] == "usdz"
-    assert room_snapshot_create_response.json()["comment"] == "Check lighting around the bed."
+    assert len(assets) == 1
+    assert assets[0].asset_id == "asset-api"
+    assert assets[0].created_by_tool == "upload"
+
+    assert len(bundles) == 1
+    assert bundles[0].bundle_id == "bundle-api"
+    assert bundles[0].items[0].item_id == "prod-1"
+    assert bundles[0].validations[0].kind == "budget_max_eur"
 
 
-def test_analysis_feedback_routes_persist_thread_scoped_records(tmp_path: Path) -> None:
+def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _seed(runtime, tmp_path=tmp_path)
-    client = TestClient(
-        create_app(
-            runtime=cast("ChatRuntime", runtime),
-            mount_web_ui=False,
-            mount_ag_ui=False,
-        )
+    repository = ThreadQueryRepository(runtime.session_factory)
+
+    created = repository.create_analysis_feedback(
+        thread_id="thread-api",
+        analysis_id="analysis-api",
+        feedback_kind="confirm",
+        mask_ordinal=1,
+        mask_label="bed",
+        query_text="bed",
+        note="Looks correct.",
+        run_id="run-api",
+    )
+    missing = repository.create_analysis_feedback(
+        thread_id="thread-api",
+        analysis_id="analysis-missing",
+        feedback_kind="reject",
+        mask_ordinal=None,
+        mask_label=None,
+        query_text=None,
+        note=None,
+        run_id=None,
     )
 
-    feedback_list_before_response = client.get(
-        "/api/threads/thread-api/analyses/analysis-api/feedback"
-    )
-    feedback_create_response = client.post(
-        "/api/threads/thread-api/analyses/analysis-api/feedback",
-        json={
-            "feedback_kind": "confirm",
-            "mask_ordinal": 1,
-            "mask_label": "bed",
-            "query_text": "bed",
-            "note": "Looks correct.",
-            "run_id": "run-api",
-        },
-    )
-    feedback_list_after_response = client.get(
-        "/api/threads/thread-api/analyses/analysis-api/feedback"
-    )
-    feedback_missing_analysis_response = client.post(
-        "/api/threads/thread-api/analyses/analysis-missing/feedback",
-        json={"feedback_kind": "reject"},
-    )
+    assert created is not None
+    assert created.feedback_kind == "confirm"
+    assert created.mask_label == "bed"
+    assert created.run_id == "run-api"
+    assert missing is None
 
-    assert feedback_list_before_response.status_code == 200
-    assert feedback_create_response.status_code == 200
-    assert feedback_list_after_response.status_code == 200
-    assert feedback_missing_analysis_response.status_code == 404
+    with runtime.session_factory() as session:
+        persisted = session.execute(
+            select(
+                AnalysisFeedbackRecord.analysis_id,
+                AnalysisFeedbackRecord.thread_id,
+                AnalysisFeedbackRecord.query_text,
+            ).where(
+                AnalysisFeedbackRecord.analysis_feedback_id == created.analysis_feedback_id
+            )
+        ).one()
 
-    assert feedback_list_before_response.json() == []
-    assert feedback_create_response.json()["feedback_kind"] == "confirm"
-    assert feedback_create_response.json()["mask_label"] == "bed"
-    assert len(feedback_list_after_response.json()) == 1
-    assert feedback_list_after_response.json()[0]["query_text"] == "bed"
+    assert persisted.analysis_id == "analysis-api"
+    assert persisted.thread_id == "thread-api"
+    assert persisted.query_text == "bed"
