@@ -28,6 +28,7 @@ dependencies = [
   "structlog>=25.4.0",
   "usd-core>=24.8",
   "uvicorn>=0.40.0",
+  "pydantic-evals>=1.67.0",
 ]
 
 [dependency-groups]
