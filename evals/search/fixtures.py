@@ -1,4 +1,30 @@
-"""Seeded search results for second-step search-agent evals."""
+"""Seeded retrieval fixtures for second-step search-agent eval cases.
+
+These fixtures look unusual because they intentionally do not try to model the full
+catalog, vector search stack, or retrieval quality. The live eval is meant to grade the
+search agent's behavior after the `run_search_graph` tool call boundary:
+
+- Did the agent issue a good set of search queries?
+- When retrieval produced plausible products, did it follow through with a grounded
+  `propose_bundle` call?
+- When retrieval produced nothing useful, did it avoid fabricating a bundle?
+
+To answer those questions deterministically, the harness replaces the real retrieval
+stack with small, hand-authored result sets. Each fixture seeds just enough catalog
+shape for the real agent to continue into the bundle step without needing Milvus,
+DuckDB, embeddings, or a large local dataset.
+
+Read this module as "bundle-stage eval inputs", not as a fake catalog. Each
+`SearchEvalFixture` describes one scenario family:
+
+- `default_results` are returned for any search query unless a more specific override
+  matches.
+- `query_overrides` let a case pin particular semantic queries to a different result
+  set when one scenario needs more precise branching.
+
+When authoring new fixtures, keep them minimal and scenario-driven. Add only the
+products needed to exercise the follow-through behavior the eval is asserting.
+"""
 
 from __future__ import annotations
 
