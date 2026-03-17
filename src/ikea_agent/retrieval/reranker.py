@@ -56,13 +56,14 @@ class LexicalReranker:
 
 
 class TransformerReranker:
-    """Cross-encoder reranker with lexical fallback when deps are unavailable."""
+    """Cross-encoder reranker for explicit transformer-backed installs."""
 
     def __init__(self, settings: AppSettings) -> None:
         self._settings = settings
+        _require_transformer_dependencies()
 
     def rerank(self, query_text: str, results: list[RetrievalResult]) -> list[RerankedItem]:
-        """Return reranked items using cross-encoder or lexical fallback."""
+        """Return reranked items using the configured cross-encoder model."""
 
         scores = _transformer_scores(
             query_text=query_text, results=results, settings=self._settings
@@ -149,11 +150,7 @@ def _transformer_scores(
     results: list[RetrievalResult],
     settings: AppSettings,
 ) -> list[float]:
-    try:
-        torch_mod = import_module("torch")
-        transformers_mod = import_module("transformers")
-    except Exception:
-        return _lexical_scores(query_text, results)
+    torch_mod, transformers_mod = _require_transformer_dependencies()
 
     device = "mps" if torch_mod.backends.mps.is_available() else "cpu"
     tokenizer = transformers_mod.AutoTokenizer.from_pretrained(settings.rerank_model_name)
@@ -182,6 +179,20 @@ def _transformer_scores(
     with torch_mod.no_grad():
         logits = model(**tokenized).logits.squeeze(-1)
     return [float(score) for score in logits.detach().cpu().tolist()]
+
+
+def _require_transformer_dependencies() -> tuple[Any, Any]:
+    """Fail fast when transformer reranking is selected without optional deps."""
+
+    try:
+        torch_mod = import_module("torch")
+        transformers_mod = import_module("transformers")
+    except Exception as exc:
+        raise RuntimeError(
+            "Transformer reranker requires optional `torch` and `transformers` "
+            "dependencies. Install them or set RERANK_BACKEND=lexical."
+        ) from exc
+    return torch_mod, transformers_mod
 
 
 def _tokens(text: str) -> list[str]:

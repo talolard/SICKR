@@ -159,6 +159,14 @@ def search_candidates(
     )
 
 
+def resolve_reranker_backend(settings: AppSettings) -> RerankerBackend:
+    """Resolve the one supported reranker backend story for current settings."""
+
+    if not settings.rerank_enabled:
+        return "identity"
+    return settings.rerank_backend
+
+
 def build_chat_runtime() -> ChatRuntime:
     """Build chat runtime with schema bootstrap and service dependencies."""
 
@@ -181,13 +189,7 @@ def build_chat_runtime() -> ChatRuntime:
         embedding_model=settings.gemini_model,
     )
 
-    backend: RerankerBackend
-    if not settings.rerank_enabled:
-        backend = "identity"
-    elif settings.rerank_backend == "lexical":
-        backend = "lexical"
-    else:
-        backend = "transformer"
+    backend = resolve_reranker_backend(settings)
 
     return ChatRuntime(
         settings=settings,

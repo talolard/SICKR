@@ -2,7 +2,7 @@
 
 Typed IKEA assistant runtime and UI integration project built around:
 
-- `pydantic-ai` + `pydantic-graph` for chat orchestration and tool execution
+- `pydantic-ai` agents + typed toolsets for chat orchestration and tool execution
 - FastAPI runtime exposing both web chat and AG-UI endpoints
 - Milvus Lite + DuckDB for retrieval
 - Next.js + TypeScript UI workspace for CopilotKit/AG-UI integration
@@ -10,13 +10,13 @@ Typed IKEA assistant runtime and UI integration project built around:
 ## What this repo does
 
 - Runs a chat-first IKEA assistant that can retrieve products, render tool activity, and stream responses.
-- Exposes AG-UI-compatible backend routes for CopilotKit-style frontends.
+- Exposes per-agent AG-UI backend routes for CopilotKit-style frontends.
 - Supports image attachments plus fal.ai-backed image analysis tools (object detection, depth estimation, segmentation).
 - Provides a deterministic mock UI mode for fast frontend iteration and E2E testing.
 
 ## Repository structure
 
-- `src/ikea_agent/chat/` — agent + graph logic
+- `src/ikea_agent/chat/` — agent builders, tool wiring, and runtime helpers
 - `src/ikea_agent/chat_app/` — FastAPI app (`/`, `/ag-ui`, `/attachments`, generated image routes)
 - `src/ikea_agent/retrieval/` — retrieval/rerank/data-access stack
 - `src/ikea_agent/shared/` — typed contracts + shared infra helpers
@@ -40,7 +40,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 1. Install Python deps: `make deps`
 2. Optional environment check: `make preflight`
 3. Start backend: `make chat`
-4. Open web UI: `http://127.0.0.1:8000`
+4. Open one mounted agent chat UI, for example: `http://127.0.0.1:8000/agents/search/chat/`
 
 ### Frontend (separate process)
 
@@ -63,9 +63,9 @@ flowchart LR
     U[User] --> UI["Next.js UI<br/>(ui/)"]
     UI --> CK["POST /api/copilotkit<br/>CopilotRuntime + HttpAgent"]
     CK --> AG["FastAPI /ag-ui<br/>pydantic-ai AG-UI app"]
-    AG --> G["Chat Graph<br/>pydantic-graph"]
-    G --> T1["Retrieval Tools<br/>Milvus Lite + DuckDB"]
-    G --> T2["Image/Attachment Tools<br/>/attachments + generated artifacts"]
+    AG --> A["Registered pydantic_ai.Agent<br/>per-agent deps + toolsets"]
+    A --> T1["Retrieval Tools<br/>Milvus Lite + DuckDB"]
+    A --> T2["Image/Attachment Tools<br/>/attachments + generated artifacts"]
     T1 --> AG
     T2 --> AG
     AG --> CK

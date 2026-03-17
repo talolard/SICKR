@@ -41,7 +41,7 @@ I’d like to have directories for planning and for docs. I would like agents to
 
 Under docs, there should be an index.md file that has an external docs section that will populate with external docs, and there should be a data folder where we have our base data.
 
-So, reading this document, please generally generate a new document init2.md that has the sequence of tasks, in order, that you’ll do, that we should do, to fulfill this, from environment setup to everything short of actually starting development.
+So, reading this document, please generally generate a new document plans/archive/init2.md that has the sequence of tasks, in order, that you’ll do, that we should do, to fulfill this, from environment setup to everything short of actually starting development.
 
 
 

@@ -1,4 +1,4 @@
-"""Common helpers for agent prompt loading and CLI input normalization."""
+"""Common helpers for agent prompt loading."""
 
 from __future__ import annotations
 
