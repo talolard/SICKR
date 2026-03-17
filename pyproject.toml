@@ -42,7 +42,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ikea_agent"]
+packages = ["src/ikea_agent", "evals"]
 
 [tool.uv]
 environments = ["sys_platform != 'emscripten'"]
@@ -55,7 +55,7 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-src = ["src", "tests"]
+src = ["src", "tests", "evals"]
 extend-exclude = [
   "legacy",
   ".tmp_untracked",
