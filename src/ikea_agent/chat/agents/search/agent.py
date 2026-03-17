@@ -23,11 +23,10 @@ DESCRIPTION = "Find IKEA products using retrieval, reranking, and diversity-awar
 PROMPT_PATH = Path(__file__).with_name("prompt.md")
 PROMPT = AgentPrompt(PROMPT_PATH)
 NOTES = "Search-focused agent with retrieval and 3D snapshot context tools."
-DEFAULT_SEARCH_MODEL = "gemini-3.1-flash-preview"
 
 
 def resolve_model_name(*, explicit_model: str | None = None) -> str:
-    """Resolve model using explicit override, agent config, then search-specific default."""
+    """Resolve model using explicit override, agent config, then global default."""
 
     if explicit_model:
         return explicit_model
@@ -35,7 +34,7 @@ def resolve_model_name(*, explicit_model: str | None = None) -> str:
     configured_model = settings.agent_model(AGENT_NAME)
     if configured_model:
         return configured_model
-    return DEFAULT_SEARCH_MODEL
+    return settings.gemini_generation_model
 
 
 def build_search_agent(
@@ -73,7 +72,6 @@ def build_search_agent(
 
 __all__ = [
     "AGENT_NAME",
-    "DEFAULT_SEARCH_MODEL",
     "DESCRIPTION",
     "NOTES",
     "PROMPT",

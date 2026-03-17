@@ -10,9 +10,6 @@ from ikea_agent.chat.agents.index import (
     list_agent_catalog,
 )
 from ikea_agent.chat.agents.search.agent import (
-    DEFAULT_SEARCH_MODEL,
-)
-from ikea_agent.chat.agents.search.agent import (
     resolve_model_name as resolve_search_model_name,
 )
 
@@ -104,7 +101,7 @@ class _SearchOnlySettings:
         _ = name
 
 
-def test_search_agent_model_resolution_falls_back_to_search_default(
+def test_search_agent_model_resolution_falls_back_to_global_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def _get_settings() -> _SearchOnlySettings:
@@ -115,4 +112,29 @@ def test_search_agent_model_resolution_falls_back_to_search_default(
         _get_settings,
     )
 
-    assert resolve_search_model_name() == DEFAULT_SEARCH_MODEL
+    assert resolve_search_model_name() == "global-model"
+
+
+class _SearchConfiguredSettings:
+    gemini_generation_model = "global-model"
+
+    @staticmethod
+    def agent_model(name: str) -> str | None:
+        if name == "search":
+            return "search-model"
+        return None
+
+
+def test_search_agent_model_resolution_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _get_settings() -> _SearchConfiguredSettings:
+        return _SearchConfiguredSettings()
+
+    monkeypatch.setattr(
+        "ikea_agent.chat.agents.search.agent.get_settings",
+        _get_settings,
+    )
+
+    assert resolve_search_model_name(explicit_model="explicit") == "explicit"
+    assert resolve_search_model_name() == "search-model"
