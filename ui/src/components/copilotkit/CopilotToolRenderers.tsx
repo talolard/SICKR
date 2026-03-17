@@ -10,12 +10,14 @@ import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type CopilotToolRenderersProps = {
   onBundleSelected?: (bundleId: string) => void;
+  threadId?: string | null;
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
   onBundleProposed?: (proposal: BundleProposal) => void;
 };
 
 export function CopilotToolRenderers({
   onBundleSelected,
+  threadId,
   onFloorPlanRendered,
   onBundleProposed,
 }: CopilotToolRenderersProps): ReactElement | null {
