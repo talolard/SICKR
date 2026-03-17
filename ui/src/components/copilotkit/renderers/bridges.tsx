@@ -127,5 +127,5 @@ export function BundleProposalBridge({
       />
     );
   }
-  return <BundleProposalToolRenderer />;
+  return <BundleProposalToolRenderer proposal={parsed.data} />;
 }
