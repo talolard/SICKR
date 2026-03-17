@@ -13,8 +13,8 @@ Updated: 2026-03-06
 - Milestone 5: thread/session persistence, URL thread routing, resume-on-refresh, thread isolation.
 - Milestone 6: persistent floor-plan preview panel beside chat, fed by `render_floor_plan` tool outputs
   with per-thread local persistence in UI state.
-- Milestone 7: 2D/3D floor-plan tabs with React Three Fiber room scene, OpenUSD ingest support,
-  and PNG snapshot capture wired into typed agent state + persistence APIs.
+- Milestone 7: 2D/3D floor-plan tabs with React Three Fiber room scene and PNG snapshot
+  capture wired into typed agent state + persistence APIs.
 
 ## Floor-plan preview reliability note
 

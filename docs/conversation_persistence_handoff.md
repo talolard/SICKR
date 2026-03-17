@@ -157,7 +157,7 @@ This file is the continuity log for the conversation persistence epic and all ch
   - `src/ikea_agent/config.py` adds `artifact_root_dir` (default `data/artifacts`).
   - `src/ikea_agent/chat_app/main.py` now constructs `AttachmentStore` with `asset_repository` and `artifact_root_dir`.
 - Persisted thread/run linkage for uploads and generated images:
-  - `/attachments` and `/generated-images/floor-plan` routes accept optional `x-thread-id` and `x-run-id` headers.
+  - `/attachments` accepts optional `x-thread-id` and `x-run-id` headers.
   - AG-UI route now sets shared state `thread_id`/`run_id` and binds attachment context for all tool-generated artifacts during the run.
 - Added state fields for linkage:
   - `src/ikea_agent/chat/deps.py` (`ChatAgentState.thread_id`, `ChatAgentState.run_id`).
