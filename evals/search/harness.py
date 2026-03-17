@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from evals.base import AgentEvalHarness
-from evals.search.dataset import SearchEvalInput
+from evals.base import (
+    AgentEvalHarness,
+    extract_message_tool_call_captures,
+    extract_message_tool_return_captures,
+)
+from evals.search.fixtures import SEARCH_EVAL_FIXTURES, SearchEvalFixture
+from evals.search.types import SearchEvalInput, SearchEvalRunCapture
 from ikea_agent.chat.agents.search.agent import build_search_agent
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.search.toolset import SearchToolsetServices
@@ -27,7 +32,12 @@ from ikea_agent.shared.types import (
 class _CatalogStub:
     """Catalog stub that keeps optional bundle calls from crashing the run."""
 
+    products_by_key: dict[str, RetrievalResult]
+
     def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
+        product = self.products_by_key.get(product_key)
+        if product is not None:
+            return product
         return RetrievalResult(
             canonical_product_key=product_key,
             product_name=f"Stub product {product_key}",
@@ -66,7 +76,9 @@ class _RuntimeStub:
 
 @dataclass(frozen=True, slots=True)
 class _SearchBatchStub:
-    """Stub search runner that records normalized tool inputs in spans only."""
+    """Stub search runner that can seed deterministic tool outputs per case."""
+
+    fixture: SearchEvalFixture | None = None
 
     async def __call__(
         self,
@@ -75,34 +87,70 @@ class _SearchBatchStub:
         queries: list[SearchQueryInput],
     ) -> SearchBatchToolResult:
         _ = runtime
-        return SearchBatchToolResult(
-            queries=[
+        query_results: list[SearchQueryToolResult] = []
+        for query in queries:
+            results = (
+                self.fixture.resolve_results(query.semantic_query)
+                if self.fixture is not None
+                else []
+            )
+            query_results.append(
                 SearchQueryToolResult(
                     query_id=query.query_id,
                     semantic_query=query.semantic_query,
-                    results=[],
-                    total_candidates=0,
-                    returned_count=0,
+                    results=results,
+                    total_candidates=len(results),
+                    returned_count=len(results),
                 )
-                for query in queries
-            ]
-        )
+            )
+        return SearchBatchToolResult(queries=query_results)
 
 
-def _build_toolset_services() -> SearchToolsetServices:
+def _build_toolset_services(fixture: SearchEvalFixture | None) -> SearchToolsetServices:
     return SearchToolsetServices(
-        run_search_batch=_SearchBatchStub(),
+        run_search_batch=_SearchBatchStub(fixture=fixture),
         get_search_repository=lambda _runtime: None,
         get_room_3d_repository=lambda _runtime: None,
     )
 
 
-def _build_stub_deps(root_dir: Path) -> SearchAgentDeps:
+def _fixture_catalog_products(fixture: SearchEvalFixture | None) -> dict[str, RetrievalResult]:
+    if fixture is None:
+        return {}
+    unique_products: dict[str, RetrievalResult] = {}
+    result_sets = [fixture.default_results]
+    result_sets.extend(override.results for override in fixture.query_overrides)
+    for result_set in result_sets:
+        for product in result_set:
+            unique_products[product.product_id] = RetrievalResult(
+                canonical_product_key=product.product_id,
+                product_name=product.product_name,
+                product_type=product.product_type,
+                description_text=product.description_text,
+                embedding_text=None,
+                main_category=product.main_category,
+                sub_category=product.sub_category,
+                dimensions_text=None,
+                width_cm=product.width_cm,
+                depth_cm=product.depth_cm,
+                height_cm=product.height_cm,
+                price_eur=product.price_eur,
+                url=None,
+                semantic_score=1.0,
+                filter_pass_reasons=(),
+                rank_explanation="eval fixture",
+            )
+    return unique_products
+
+
+def _build_stub_deps(root_dir: Path, *, fixture: SearchEvalFixture | None) -> SearchAgentDeps:
     return SearchAgentDeps(
         runtime=cast(
             "ChatRuntime",
             _RuntimeStub(
-                catalog_repository=_CatalogStub(),
+                catalog_repository=_CatalogStub(
+                    products_by_key=_fixture_catalog_products(fixture),
+                ),
                 settings=_SettingsStub(),
             ),
         ),
@@ -117,11 +165,24 @@ def _build_stub_deps(root_dir: Path) -> SearchAgentDeps:
 class SearchAgentEvalHarness(AgentEvalHarness[SearchEvalInput, str]):
     """Run the real search agent with infrastructure replaced at the toolset seam."""
 
+    async def capture_case(self, inputs: SearchEvalInput) -> SearchEvalRunCapture:
+        """Execute one live search-agent run and return the captured transcript artifacts."""
+
+        fixture = SEARCH_EVAL_FIXTURES.get(inputs.fixture_name) if inputs.fixture_name else None
+        agent = build_search_agent(toolset_services=_build_toolset_services(fixture))
+        with tempfile.TemporaryDirectory(prefix="search-eval-attachments-") as tmp_dir:
+            deps = _build_stub_deps(Path(tmp_dir), fixture=fixture)
+            result = await agent.run(inputs.user_message, deps=deps)
+            messages = result.all_messages()
+            return SearchEvalRunCapture(
+                final_output=result.output,
+                message_tool_calls=extract_message_tool_call_captures(messages),
+                message_tool_returns=extract_message_tool_return_captures(messages),
+                bundle_proposals=list(deps.state.bundle_proposals),
+            )
+
     async def run_case(self, inputs: SearchEvalInput) -> str:
         """Execute one live search-agent run for the supplied eval case."""
 
-        agent = build_search_agent(toolset_services=_build_toolset_services())
-        with tempfile.TemporaryDirectory(prefix="search-eval-attachments-") as tmp_dir:
-            deps = _build_stub_deps(Path(tmp_dir))
-            result = await agent.run(inputs.user_message, deps=deps)
-        return result.output
+        capture = await self.capture_case(inputs)
+        return capture.final_output

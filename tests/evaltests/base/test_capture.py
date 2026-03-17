@@ -6,8 +6,9 @@ from typing import cast
 from evals.base.capture import (
     extract_logfire_tool_call_captures,
     extract_message_tool_call_captures,
+    extract_message_tool_return_captures,
 )
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_evals.otel import SpanTree
 
 
@@ -80,3 +81,25 @@ def test_extract_message_tool_call_captures_reads_model_responses() -> None:
     assert captures[0].tool_name == "run_search_graph"
     assert captures[0].tool_call_id == "tool-call-2"
     assert captures[0].args == {"queries": [{"semantic_query": "outdoor desk"}]}
+
+
+def test_extract_message_tool_return_captures_reads_model_requests() -> None:
+    messages = [
+        ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="run_search_graph",
+                    tool_call_id="tool-call-2",
+                    content={"queries": [{"query_id": "q-1", "returned_count": 2}]},
+                )
+            ]
+        )
+    ]
+
+    captures = extract_message_tool_return_captures(messages, tool_name="run_search_graph")
+
+    assert len(captures) == 1
+    assert captures[0].tool_name == "run_search_graph"
+    assert captures[0].tool_call_id == "tool-call-2"
+    assert captures[0].content == {"queries": [{"query_id": "q-1", "returned_count": 2}]}
+    assert captures[0].outcome == "success"
