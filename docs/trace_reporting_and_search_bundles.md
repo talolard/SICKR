@@ -111,12 +111,18 @@ On wide screens, the search agent page now uses three distinct surfaces:
 
 Bundle proposals render in the main workbench, outside the chat transcript.
 Each bundle is collapsed by default and shows its title, total, item count, and summary metadata.
+The bundle explanation is fully visible in the summary card; longer explanations become scrollable with an
+explicit prompt so the user knows more text is available.
 Expanding a bundle reveals:
 
 - validator badges
 - budget cap context
 - a bounded scroll area for line items
-- the per-item rationale (`reason`) and description
+- a grouped per-item pricing summary (`unit`, `qty`, `total`) before the rationale and description
+- the per-item rationale (`reason`) and backend-hydrated description
 - explicit pending-price markers when totals are incomplete
 
-The in-chat renderer remains minimal and simply confirms that the bundle was added to the side panel.
+The in-chat renderer now reuses the same summary-card treatment so the user can click directly from the
+transcript into the saved bundle details.
+Chat-level runtime failures are also rendered inline via CopilotKit's chat error surface, in addition to any
+transient toast treatment.

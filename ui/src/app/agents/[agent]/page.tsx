@@ -4,11 +4,12 @@ import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
-import { CopilotSidebar, useAgent } from "@copilotkit/react-core/v2";
+import { useAgent } from "@copilotkit/react-core/v2";
 
 import { useThreadSession } from "@/app/CopilotKitProviders";
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
 import { AgentImageAttachmentPanel } from "@/components/attachments/AgentImageAttachmentPanel";
+import { AgentChatSidebar } from "@/components/copilotkit/AgentChatSidebar";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
@@ -82,6 +83,7 @@ export default function AgentChatPage(): ReactElement {
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
   const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
   const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
+  const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [isLoadingBundleProposals, setIsLoadingBundleProposals] = useState<boolean>(false);
   const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
 
@@ -114,6 +116,7 @@ export default function AgentChatPage(): ReactElement {
     let active = true;
     if (!threadId) {
       startTransition(() => {
+        setActiveBundleId(null);
         setBundleProposals([]);
         setBundleProposalError(null);
         setIsLoadingBundleProposals(false);
@@ -125,6 +128,7 @@ export default function AgentChatPage(): ReactElement {
 
     if (currentAgent !== "search") {
       startTransition(() => {
+        setActiveBundleId(null);
         setBundleProposals([]);
         setBundleProposalError(null);
         setIsLoadingBundleProposals(false);
@@ -136,6 +140,7 @@ export default function AgentChatPage(): ReactElement {
 
     const localProposals = loadBundleProposals(threadId);
     startTransition(() => {
+      setActiveBundleId(null);
       setBundleProposals(localProposals);
       setBundleProposalError(null);
       setIsLoadingBundleProposals(true);
@@ -216,8 +221,9 @@ export default function AgentChatPage(): ReactElement {
 
   const toolRenderers = (
     <CopilotToolRenderers
-      threadId={threadId}
+      onBundleSelected={setActiveBundleId}
       onBundleProposed={(proposal) => {
+        setActiveBundleId(proposal.bundle_id);
         if (!threadId) {
           setBundleProposals((current) => mergeBundleProposals([proposal], current));
           return;
@@ -333,6 +339,7 @@ export default function AgentChatPage(): ReactElement {
           </header>
           {isSearchAgent ? (
             <SearchBundlePanel
+              activeBundleId={activeBundleId}
               error={bundleProposalError}
               isLoading={isLoadingBundleProposals}
               proposals={bundleProposals}
@@ -340,7 +347,7 @@ export default function AgentChatPage(): ReactElement {
           ) : (
             <div className="flex flex-1 flex-col gap-3">
               {toolRenderers}
-              <CopilotSidebar />
+              <AgentChatSidebar />
             </div>
           )}
           {traceCaptureEnabled && threadId ? (
@@ -358,7 +365,7 @@ export default function AgentChatPage(): ReactElement {
           <aside className="min-h-[70vh] min-w-0">
             <div className="flex min-h-[70vh] min-w-0 flex-col rounded border border-gray-200 bg-white p-2">
               {toolRenderers}
-              <CopilotSidebar />
+              <AgentChatSidebar />
             </div>
           </aside>
         ) : null}
