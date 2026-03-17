@@ -186,6 +186,17 @@ class SearchBatchToolResult:
     queries: list[SearchQueryToolResult]
 
 
+class GroundedSearchProduct(BaseModel):
+    """One product that has been grounded by a prior search result in this run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: str
+    product_name: str
+    query_id: str
+    semantic_query: str
+
+
 BundleValidationKind = Literal[
     "budget_max_eur",
     "pricing_complete",

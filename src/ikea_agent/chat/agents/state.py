@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ikea_agent.shared.types import AttachmentRef, BundleProposalToolResult
+from ikea_agent.shared.types import (
+    AttachmentRef,
+    BundleProposalToolResult,
+    GroundedSearchProduct,
+    SearchBatchToolResult,
+)
 
 
 class Room3DSnapshotCamera(BaseModel):
@@ -52,6 +57,7 @@ class SearchAgentState(CommonAgentState):
 
     room_3d_snapshots: list[Room3DSnapshotContext] = Field(default_factory=list)
     bundle_proposals: list[BundleProposalToolResult] = Field(default_factory=list)
+    grounded_products: list[GroundedSearchProduct] = Field(default_factory=list)
 
     def append_bundle_proposal(self, proposal: BundleProposalToolResult) -> None:
         """Append one bundle proposal when it is not already present.
@@ -63,6 +69,29 @@ class SearchAgentState(CommonAgentState):
         if any(item.bundle_id == proposal.bundle_id for item in self.bundle_proposals):
             return
         self.bundle_proposals.append(proposal)
+
+    def remember_search_batch(self, batch: SearchBatchToolResult) -> None:
+        """Record product IDs returned by search so later bundle calls can stay grounded."""
+
+        seen_product_ids = {item.product_id for item in self.grounded_products}
+        for query in batch.queries:
+            for result in query.results:
+                if result.product_id in seen_product_ids:
+                    continue
+                self.grounded_products.append(
+                    GroundedSearchProduct(
+                        product_id=result.product_id,
+                        product_name=result.product_name,
+                        query_id=query.query_id,
+                        semantic_query=query.semantic_query,
+                    )
+                )
+                seen_product_ids.add(result.product_id)
+
+    def grounded_product_ids(self) -> set[str]:
+        """Return the grounded product ID set for quick bundle validation checks."""
+
+        return {item.product_id for item in self.grounded_products}
 
 
 class ImageAnalysisAgentState(CommonAgentState):

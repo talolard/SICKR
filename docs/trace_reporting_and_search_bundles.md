@@ -97,6 +97,8 @@ that history with the local append-only browser cache so proposals survive reloa
 
 The backend hydrates product metadata, computes totals, and runs richer bundle validation:
 
+- bundle items must already be grounded by a prior `run_search_graph` result in the current run;
+  ungrounded product IDs are rejected instead of being silently hydrated
 - `pricing_complete` reports when totals are incomplete because one or more items have no price
 - `duplicate_items` reports when repeated product entries were merged into one combined quantity
 - `budget_max_eur` still reports pass/fail/unknown based on the user budget ceiling

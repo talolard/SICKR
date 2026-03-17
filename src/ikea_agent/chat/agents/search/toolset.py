@@ -95,6 +95,7 @@ async def _run_search_graph_with_services(
         runtime=ctx.deps.runtime,
         queries=normalized_queries,
     )
+    ctx.deps.state.remember_search_batch(output)
     logger.info(
         "search_batch_completed",
         extra={
@@ -187,6 +188,30 @@ def _normalize_bundle_items(
         )
 
     return [merged_items[item_id] for item_id in deduped_order], duplicate_count
+
+
+def _validate_bundle_items_are_grounded(
+    ctx: RunContext[SearchAgentDeps],
+    items: list[BundleProposalItemInput],
+) -> None:
+    grounded_product_ids = ctx.deps.state.grounded_product_ids()
+    if not grounded_product_ids:
+        raise ValueError(
+            "Bundle proposal requires grounded search results. "
+            "Call `run_search_graph` first and only include returned products."
+        )
+
+    missing_product_ids = sorted(
+        {item.item_id for item in items if item.item_id not in grounded_product_ids}
+    )
+    if not missing_product_ids:
+        return
+
+    joined_ids = ", ".join(f"`{product_id}`" for product_id in missing_product_ids)
+    raise ValueError(
+        "Bundle proposal can only include products returned by `run_search_graph`. "
+        f"Ungrounded item ids: {joined_ids}."
+    )
 
 
 def _build_budget_validations(
@@ -292,6 +317,7 @@ def _propose_bundle_with_services(
         raise ValueError("Bundle proposal must include at least one item.")
 
     normalized_items, duplicate_count = _normalize_bundle_items(items)
+    _validate_bundle_items_are_grounded(ctx, normalized_items)
     hydrated_items, bundle_total, missing_price_count = _hydrate_bundle_items(ctx, normalized_items)
     validations = _build_bundle_validations(
         bundle_total=bundle_total,
