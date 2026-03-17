@@ -27,6 +27,17 @@ class MessageToolCallCapture:
     tool_call_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class MessageToolReturnCapture:
+    """One tool return captured from PydanticAI message history."""
+
+    kind: Literal["message_tool_return"]
+    tool_name: str
+    content: object | None
+    outcome: Literal["success", "failed", "denied"]
+    tool_call_id: str | None = None
+
+
 ToolCallCapture = LogfireToolCallCapture | MessageToolCallCapture
 
 

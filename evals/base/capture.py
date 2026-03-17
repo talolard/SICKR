@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_evals.otel import SpanTree
 
-from evals.base.types import LogfireToolCallCapture, MessageToolCallCapture
+from evals.base.types import (
+    LogfireToolCallCapture,
+    MessageToolCallCapture,
+    MessageToolReturnCapture,
+)
 
 
 def _coerce_json_object(raw: object) -> dict[str, object]:
@@ -84,6 +88,34 @@ def extract_message_tool_call_captures(
                     tool_name=part.tool_name,
                     tool_call_id=part.tool_call_id,
                     args=_coerce_json_object(part.args),
+                )
+            )
+    return captures
+
+
+def extract_message_tool_return_captures(
+    messages: Sequence[object],
+    *,
+    tool_name: str | None = None,
+) -> list[MessageToolReturnCapture]:
+    """Return tool returns extracted from PydanticAI message history."""
+
+    captures: list[MessageToolReturnCapture] = []
+    for message in messages:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if not isinstance(part, ToolReturnPart):
+                continue
+            if tool_name is not None and part.tool_name != tool_name:
+                continue
+            captures.append(
+                MessageToolReturnCapture(
+                    kind="message_tool_return",
+                    tool_name=part.tool_name,
+                    tool_call_id=part.tool_call_id,
+                    content=_coerce_json_value(part.content),
+                    outcome=part.outcome,
                 )
             )
     return captures
