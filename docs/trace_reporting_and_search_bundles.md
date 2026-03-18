@@ -111,6 +111,10 @@ On wide screens, the search agent page now uses three distinct surfaces:
 - main search workbench
 - always-open chat sidebar
 
+`run_search_graph` results stay grouped per query in the chat transcript.
+Each query section keeps a visible summary header, can be collapsed/expanded, and uses an internal
+scroll region when expanded so long result lists do not consume the full transcript height.
+
 Bundle proposals render in the main workbench, outside the chat transcript.
 Each bundle is collapsed by default and shows its title, total, item count, and summary metadata.
 The bundle explanation is fully visible in the summary card; longer explanations become scrollable with an
