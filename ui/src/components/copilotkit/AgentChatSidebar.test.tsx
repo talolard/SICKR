@@ -33,11 +33,11 @@ vi.mock("@copilotkit/react-ui", () => ({
 }));
 
 describe("AgentChatSidebar", () => {
-  it("renders CopilotKit inline chat errors inside the inline chat pane", () => {
+  it("renders the richer inline chat pane around CopilotKit chat", () => {
     render(<AgentChatSidebar />);
 
     expect(screen.getByText("Chat")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-copilot-chat")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-copilot-chat")).toHaveClass("agent-chat-pane");
     expect(screen.getByText("This request failed.")).toBeInTheDocument();
     expect(screen.getByText("Model request failed.")).toBeInTheDocument();
     expect(screen.getByText("Operation: agent_run_failed")).toBeInTheDocument();

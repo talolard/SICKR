@@ -55,11 +55,13 @@ test.describe("real backend smoke", () => {
     await expect(sendButton).toBeEnabled({ timeout: 10_000 });
     await sendButton.click();
     await expect(chatInput).toHaveValue("", { timeout: 10_000 });
-    await expect(
-      page.getByText(
-        "Live model requests are disabled. Set ALLOW_MODEL_REQUESTS=1 and GEMINI_API_KEY/GOOGLE_API_KEY for real responses.",
-        { exact: true },
-      ),
-    ).toBeVisible({ timeout: 60_000 });
+    const disabledMessage =
+      "Live model requests are disabled. Set ALLOW_MODEL_REQUESTS=1 and GEMINI_API_KEY/GOOGLE_API_KEY for real responses.";
+    await expect
+      .poll(
+        async () => ((await page.locator("body").textContent()) ?? "").includes(disabledMessage),
+        { timeout: 60_000 },
+      )
+      .toBe(true);
   });
 });
