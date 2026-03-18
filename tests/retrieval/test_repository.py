@@ -49,7 +49,8 @@ def _seed_products(engine: Engine) -> None:
                 source_updated_at
             ) VALUES
                 (
-                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One', 'Desk One Compact Workstation', 'Desk', 'Work desk',
+                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One',
+                    'Desk One Compact Workstation', 'Desk', 'Work desk',
                     'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
                     4.0, 10, 'none', true, 'https://example.com/1', now()
                 ),
@@ -133,7 +134,9 @@ def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Pat
     assert results[0].canonical_product_key == "1-DE"
 
 
-def test_read_product_by_key_preserves_family_name_and_exposes_display_title(tmp_path: Path) -> None:
+def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
+    tmp_path: Path,
+) -> None:
     engine = create_duckdb_engine(str(tmp_path / "retrieval_test_3.duckdb"))
     _setup_schema(engine)
     _seed_products(engine)
