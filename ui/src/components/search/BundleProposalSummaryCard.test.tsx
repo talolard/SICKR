@@ -20,6 +20,7 @@ const proposal: BundleProposal = {
     {
       item_id: "chair-1",
       product_name: "Chair One",
+      product_url: null,
       description_text: "Desk chair",
       price_eur: 79.99,
       quantity: 2,
