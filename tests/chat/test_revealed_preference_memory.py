@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ikea_agent.chat.agents.shared import _preference_instruction_text
+from ikea_agent.chat.agents.state import CommonAgentState
 from ikea_agent.chat.revealed_preference_memory import format_preference_context
 from ikea_agent.shared.types import RevealedPreferenceMemory
 from ikea_agent.tools.preferences import PreferenceNoteInput, note_to_memory_input
@@ -53,3 +55,12 @@ def test_format_preference_context_renders_thread_context_block() -> None:
     assert "Thread-scoped revealed preferences" in instruction
     assert "- constraint: User has toddlers, keep things elevated." in instruction
     assert "- fact: User cannot drill into the walls." in instruction
+
+
+def test_preference_instruction_text_distinguishes_durable_facts_from_search_intent() -> None:
+    instruction = _preference_instruction_text(CommonAgentState())
+
+    assert "Dogs shed heavily" in instruction
+    assert "Dogs bark easily" in instruction
+    assert "User loves pink" in instruction
+    assert "Looking for a couch, table, or lamp is part of the current search" in instruction

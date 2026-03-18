@@ -166,6 +166,17 @@ export function SearchBundlePanel({
                               <div className="min-w-0">
                                 <h4 className="text-sm font-semibold text-gray-900">{item.product_name}</h4>
                                 <p className="text-[11px] text-gray-500">{item.item_id}</p>
+                                {item.product_url ? (
+                                  <a
+                                    aria-label={`Open product page for ${item.product_name}`}
+                                    className="mt-1 inline-flex text-xs font-medium text-pink-700 underline underline-offset-2 hover:text-pink-800"
+                                    href={item.product_url}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    Open product page
+                                  </a>
+                                ) : null}
                               </div>
                               <div className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2">
                                 <dl className="grid grid-cols-3 gap-3 text-left text-xs text-gray-600">

@@ -69,6 +69,7 @@ def test_search_agent_state_parses_bundle_proposals_into_typed_models() -> None:
                     {
                         "item_id": "chair-1",
                         "product_name": "Chair One",
+                        "product_url": "https://www.ikea.com/de/de/p/chair-one-12345678/",
                         "description_text": "Desk chair",
                         "price_eur": 79.99,
                         "quantity": 1,
@@ -92,6 +93,10 @@ def test_search_agent_state_parses_bundle_proposals_into_typed_models() -> None:
 
     assert state.bundle_proposals[0].bundle_id == "bundle-1"
     assert state.bundle_proposals[0].items[0].product_name == "Chair One"
+    assert (
+        state.bundle_proposals[0].items[0].product_url
+        == "https://www.ikea.com/de/de/p/chair-one-12345678/"
+    )
     assert state.bundle_proposals[0].validations[0].kind == "pricing_complete"
 
 

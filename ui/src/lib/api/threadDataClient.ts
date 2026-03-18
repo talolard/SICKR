@@ -24,6 +24,15 @@ export type AssetListItem = {
   created_at: string | null;
 };
 
+export type KnownFactItem = {
+  memory_id: string;
+  kind: "constraint" | "fact" | "preference";
+  summary: string;
+  source_message_text: string;
+  updated_at: string;
+  run_id: string | null;
+};
+
 export type AnalysisFeedbackKind = "confirm" | "reject" | "uncertain";
 
 export type AnalysisFeedbackCreateRequest = {
@@ -76,6 +85,10 @@ export async function listThreadAssets(threadId: string): Promise<AssetListItem[
 
 export async function listThreadBundleProposals(threadId: string): Promise<BundleProposal[]> {
   return await readJson<BundleProposal[]>(`/api/thread-data/threads/${threadId}/bundle-proposals`);
+}
+
+export async function listThreadKnownFacts(threadId: string): Promise<KnownFactItem[]> {
+  return await readJson<KnownFactItem[]>(`/api/thread-data/threads/${threadId}/known-facts`);
 }
 
 export async function createAnalysisFeedback({

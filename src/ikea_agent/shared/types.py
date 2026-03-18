@@ -110,6 +110,7 @@ class RetrievalResult:
         return ShortRetrievalResult(
             product_id=self.canonical_product_key,
             product_name=self.product_name,
+            url=self.url,
             product_type=self.product_type,
             description_text=self.description_text,
             main_category=self.main_category,
@@ -136,6 +137,7 @@ class ShortRetrievalResult:
     depth_cm: float | None
     height_cm: float | None
     price_eur: float | None
+    url: str | None = None
     image_urls: tuple[str, ...] = ()
 
 
@@ -243,22 +245,13 @@ class BundleProposalLineItem(BaseModel):
 
     item_id: str
     product_name: str
+    product_url: str | None = None
     description_text: str | None
     price_eur: float | None
     quantity: int = Field(ge=1)
     line_total_eur: float | None
     reason: str
     image_urls: list[str] = Field(default_factory=list)
-
-
-class ToolFailureResult(BaseModel):
-    """Structured tool failure payload that the UI can render without aborting a run."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal["error"] = "error"
-    message: str
-    reason: str | None = None
 
 
 class ToolFailureResult(BaseModel):

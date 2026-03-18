@@ -164,6 +164,7 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
                 BundleProposalLineItem(
                     item_id="chair-1",
                     product_name="Chair One",
+                    product_url="https://www.ikea.com/de/de/p/chair-one-12345678/",
                     description_text="Desk chair",
                     price_eur=79.99,
                     quantity=2,
@@ -206,10 +207,12 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
     assert row.thread_id == "thread-search-order"
     assert row.title == "Desk starter bundle"
     assert parsed_items[0]["item_id"] == "chair-1"
+    assert parsed_items[0]["product_url"] == "https://www.ikea.com/de/de/p/chair-one-12345678/"
     assert parsed_validations[1]["kind"] == "budget_max_eur"
     assert listed[0].bundle_id == "bundle-1"
     assert listed[0].items[0].line_total_eur == 159.98
     assert listed[0].items[0].image_urls == []
+    assert listed[0].items[0].product_url == "https://www.ikea.com/de/de/p/chair-one-12345678/"
 
 
 def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) -> None:
@@ -225,6 +228,7 @@ def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) 
             BundleProposalLineItem(
                 item_id="chair-1",
                 product_name="Desk chair",
+                product_url="https://www.ikea.com/de/de/p/chair-one-12345678/",
                 description_text="Supportive chair",
                 price_eur=99.0,
                 quantity=1,
@@ -252,6 +256,7 @@ def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) 
             BundleProposalLineItem(
                 item_id="chair-2",
                 product_name="Guest chair",
+                product_url="https://www.ikea.com/de/de/p/chair-two-87654321/",
                 description_text=None,
                 price_eur=49.0,
                 quantity=2,

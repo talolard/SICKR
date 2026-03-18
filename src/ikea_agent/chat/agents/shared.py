@@ -97,8 +97,22 @@ def _preference_instruction_text(state: CommonAgentState) -> str:
             "short summary."
         ),
         (
-            "Use that tool for compact notes such as `user_has_toddlers` with "
-            "summary `User has toddlers, keep things elevated.`"
+            "Durable facts are stable household context such as ongoing safety "
+            "constraints, persistent annoyances, or repeat tastes that remain "
+            "relevant across requests."
+        ),
+        (
+            "Examples include notes like `User has a toddler, keep things elevated`, "
+            "`Dogs shed heavily`, `Dogs bark easily`, or `User loves pink`."
+        ),
+        (
+            "Do not store the current shopping request itself as a durable fact. "
+            "Looking for a couch, table, or lamp is part of the current search "
+            "unless the user clearly states it as an enduring preference."
+        ),
+        (
+            "Use the tool for compact durable notes such as `user_has_toddlers` "
+            "with summary `User has toddlers, keep things elevated.`"
         ),
     ]
     if context_block is not None:

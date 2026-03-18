@@ -21,6 +21,7 @@ describe("BundleProposalToolRenderer", () => {
             {
               item_id: "lamp-1",
               product_name: "Portable lamp",
+              product_url: null,
               description_text: "Desk lamp",
               price_eur: 17.99,
               quantity: 2,
@@ -55,6 +56,7 @@ describe("BundleProposalToolRenderer", () => {
             {
               item_id: "lamp-1",
               product_name: "Portable lamp",
+              product_url: null,
               description_text: "Desk lamp",
               price_eur: 17.99,
               quantity: 2,

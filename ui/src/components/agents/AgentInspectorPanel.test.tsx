@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
+import type { KnownFactItem } from "@/lib/api/threadDataClient";
 import type { AgentMetadata } from "@/lib/agents";
 
 const metadata: AgentMetadata = {
@@ -13,18 +14,70 @@ const metadata: AgentMetadata = {
   notes: "Runtime note here.",
 };
 
-describe("AgentInspectorPanel", () => {
-  it("renders metadata when provided", () => {
-    render(<AgentInspectorPanel error="" metadata={metadata} />);
+const knownFacts: KnownFactItem[] = [
+  {
+    memory_id: "rmem-1",
+    kind: "constraint",
+    summary: "User has toddlers, keep things elevated.",
+    source_message_text: "We have a toddler at home.",
+    updated_at: "2026-03-18T12:00:00Z",
+    run_id: "run-1",
+  },
+];
 
-    expect(screen.getByText("Agent composition")).toBeInTheDocument();
-    expect(screen.getByText("Collect room constraints.")).toBeInTheDocument();
+describe("AgentInspectorPanel", () => {
+  it("renders known facts and metadata details when provided", () => {
+    render(
+      <AgentInspectorPanel
+        error=""
+        isLoadingKnownFacts={false}
+        knownFacts={knownFacts}
+        metadata={metadata}
+      />,
+    );
+
+    expect(screen.getByText("Known facts")).toBeInTheDocument();
+    expect(screen.getByText("User has toddlers, keep things elevated.")).toBeInTheDocument();
     expect(screen.getByText("render_floor_plan")).toBeInTheDocument();
     expect(screen.getByText("Runtime note here.")).toBeInTheDocument();
   });
 
+  it("renders an empty known-facts state", () => {
+    render(
+      <AgentInspectorPanel
+        error=""
+        isLoadingKnownFacts={false}
+        knownFacts={[]}
+        metadata={metadata}
+      />,
+    );
+
+    expect(screen.getByText(/Known facts will appear here/i)).toBeInTheDocument();
+  });
+
+  it("keeps known facts visible while metadata is still loading", () => {
+    render(
+      <AgentInspectorPanel
+        error=""
+        isLoadingKnownFacts={false}
+        knownFacts={knownFacts}
+        metadata={null}
+      />,
+    );
+
+    expect(screen.getByText("User has toddlers, keep things elevated.")).toBeInTheDocument();
+    expect(screen.getByText("Loading agent metadata...")).toBeInTheDocument();
+  });
+
   it("renders error state", () => {
-    render(<AgentInspectorPanel error="Failed" metadata={null} />);
+    render(
+      <AgentInspectorPanel
+        error="Failed"
+        isLoadingKnownFacts={false}
+        knownFacts={[]}
+        metadata={null}
+      />,
+    );
 
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
