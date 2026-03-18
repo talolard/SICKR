@@ -4,7 +4,10 @@ import { useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
-import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
+import {
+  ProductResultsToolRenderer,
+  type QueryDisplayMetadata,
+} from "@/components/tooling/ProductResultsToolRenderer";
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 import { parseSearchResultGroups } from "@/lib/productResults";
@@ -44,6 +47,21 @@ const searchGraphParametersSchema = z.object({
   ),
 });
 
+function buildQueryDisplayMetadata(
+  parameters: z.infer<typeof searchGraphParametersSchema>,
+): QueryDisplayMetadata[] {
+  return parameters.queries.map((query, index) => ({
+    queryId: query.query_id,
+    title:
+      typeof query.purpose === "string" && query.purpose.trim().length > 0
+        ? query.purpose.trim()
+        : /^query-\d+$/u.test(query.query_id)
+          ? `Query ${index + 1}`
+          : query.query_id.replace(/[_-]+/gu, " ").trim() || `Query ${index + 1}`,
+    queryText: query.semantic_query,
+  }));
+}
+
 export function useCatalogToolRenderers({
   onFloorPlanRendered,
   onBundleProposed,
@@ -81,7 +99,10 @@ export function useCatalogToolRenderers({
       }
       return (
         <ToolCard>
-          <ProductResultsToolRenderer groups={groups} />
+          <ProductResultsToolRenderer
+            groups={groups}
+            queryMetadata={buildQueryDisplayMetadata(parameters)}
+          />
         </ToolCard>
       );
     },
