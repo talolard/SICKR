@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { useEffect } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { vi } from "vitest";
 
 import AgentChatPage from "./page";
