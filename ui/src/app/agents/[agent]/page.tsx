@@ -19,6 +19,8 @@ import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import type { AttachmentRef } from "@/lib/attachments";
 import {
   listThreadBundleProposals,
+  listThreadKnownFacts,
+  type KnownFactItem,
   ThreadDataRequestError,
 } from "@/lib/api/threadDataClient";
 import {
@@ -85,6 +87,9 @@ export default function AgentChatPage(): ReactElement {
   const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
   const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [isLoadingBundleProposals, setIsLoadingBundleProposals] = useState<boolean>(false);
+  const [knownFacts, setKnownFacts] = useState<KnownFactItem[]>([]);
+  const [knownFactsError, setKnownFactsError] = useState<string | null>(null);
+  const [isLoadingKnownFacts, setIsLoadingKnownFacts] = useState<boolean>(false);
   const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -111,6 +116,54 @@ export default function AgentChatPage(): ReactElement {
         setError(message);
       });
   }, [currentAgent]);
+
+  useEffect(() => {
+    let active = true;
+    if (!threadId) {
+      startTransition(() => {
+        setKnownFacts([]);
+        setKnownFactsError(null);
+        setIsLoadingKnownFacts(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    startTransition(() => {
+      setKnownFacts([]);
+      setKnownFactsError(null);
+      setIsLoadingKnownFacts(true);
+    });
+    void listThreadKnownFacts(threadId)
+      .then((persistedKnownFacts) => {
+        if (!active) {
+          return;
+        }
+        setKnownFacts(persistedKnownFacts);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) {
+          return;
+        }
+        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
+          return;
+        }
+        setKnownFactsError(
+          fetchError instanceof Error ? fetchError.message : "Failed to load known facts.",
+        );
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setIsLoadingKnownFacts(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
 
   useEffect(() => {
     let active = true;
@@ -280,7 +333,13 @@ export default function AgentChatPage(): ReactElement {
             : "mx-auto grid max-w-[1700px] grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]"
         }
       >
-        <AgentInspectorPanel error={error} metadata={metadata} />
+        <AgentInspectorPanel
+          error={error}
+          isLoadingKnownFacts={isLoadingKnownFacts}
+          knownFacts={knownFacts}
+          knownFactsError={knownFactsError}
+          metadata={metadata}
+        />
         <section className="flex min-h-[70vh] min-w-0 flex-col gap-3 rounded border border-gray-200 bg-white p-3">
           <header className="flex flex-col gap-1">
             <h2 className="text-lg font-semibold text-gray-900">{currentAgent}</h2>

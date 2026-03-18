@@ -42,6 +42,7 @@ ProposeBundleFunc = Callable[
 @dataclass(frozen=True, slots=True)
 class _CatalogStub:
     price_eur: float | None
+    product_url: str | None = None
 
     def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
         return RetrievalResult(
@@ -57,7 +58,7 @@ class _CatalogStub:
             depth_cm=50.0,
             height_cm=90.0,
             price_eur=self.price_eur,
-            url=None,
+            url=self.product_url,
             semantic_score=0.9,
             filter_pass_reasons=("ok",),
             rank_explanation="score",
@@ -137,13 +138,14 @@ class _SearchPipelineSpy:
 def _run_context(
     *,
     price_eur: float | None,
+    product_url: str | None = None,
     image_urls: tuple[str, ...] = (),
 ) -> RunContext[SearchAgentDeps]:
     deps = SearchAgentDeps(
         runtime=cast(
             "ChatRuntime",
             _RuntimeStub(
-                catalog_repository=_CatalogStub(price_eur=price_eur),
+                catalog_repository=_CatalogStub(price_eur=price_eur, product_url=product_url),
                 product_image_catalog=_ProductImageCatalogStub(image_urls=image_urls),
             ),
         ),
@@ -231,6 +233,7 @@ def test_run_search_graph_forwards_one_batched_query_list() -> None:
 def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure() -> None:
     ctx = _run_context(
         price_eur=20.0,
+        product_url="https://www.ikea.com/de/de/p/chair-1/",
         image_urls=("/static/product-images/chair-1", "/static/product-images/chair-1/2"),
     )
     _ground_item(ctx, item_id="chair-1")
@@ -257,6 +260,7 @@ def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure
     assert result.bundle_total_eur == 40.0
     assert result.items[0].line_total_eur == 40.0
     assert result.items[0].description_text == "Useful chair"
+    assert result.items[0].product_url == "https://www.ikea.com/de/de/p/chair-1/"
     assert result.items[0].image_urls == [
         "/static/product-images/chair-1",
         "/static/product-images/chair-1/2",

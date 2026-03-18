@@ -8,6 +8,7 @@ from ikea_agent.chat_app.thread_api_models import (
     AnalysisFeedbackCreateRequest,
     AnalysisFeedbackItem,
     AssetListItem,
+    KnownFactItem,
     ThreadDetailItem,
 )
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
@@ -36,6 +37,10 @@ def _register_thread_data_routes(
     )
     async def list_thread_bundle_proposals(thread_id: str) -> list[BundleProposalToolResult]:
         return thread_query_repository.list_bundle_proposals(thread_id=thread_id)
+
+    @app.get("/api/threads/{thread_id}/known-facts", response_model=list[KnownFactItem])
+    async def list_thread_known_facts(thread_id: str) -> list[KnownFactItem]:
+        return thread_query_repository.list_known_facts(thread_id=thread_id)
 
     @app.post(
         "/api/threads/{thread_id}/analyses/{analysis_id}/feedback",

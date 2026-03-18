@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ikea_agent.shared.types import RevealedPreferenceKind
+
 
 class ThreadDetailItem(BaseModel):
     """Thread detail including aggregate child counts."""
@@ -33,6 +35,17 @@ class AssetListItem(BaseModel):
     storage_path: str
     size_bytes: int
     created_at: str | None
+
+
+class KnownFactItem(BaseModel):
+    """One thread-scoped durable fact or preference for UI display."""
+
+    memory_id: str
+    kind: RevealedPreferenceKind
+    summary: str
+    source_message_text: str
+    updated_at: str
+    run_id: str | None
 
 
 class AnalysisFeedbackCreateRequest(BaseModel):

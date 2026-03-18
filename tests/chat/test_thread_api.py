@@ -15,6 +15,7 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
+    RevealedPreferenceRecord,
     SearchRunRecord,
     ThreadRecord,
     ensure_persistence_schema,
@@ -157,6 +158,20 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 created_at=now,
             )
         )
+        session.add(
+            RevealedPreferenceRecord(
+                revealed_preference_id="rmem-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                signal_key="agent_note",
+                kind="constraint",
+                value="user_has_toddlers",
+                summary="User has toddlers, keep things elevated.",
+                source_message_text="We have a toddler at home.",
+                created_at=now,
+                updated_at=now,
+            )
+        )
         session.commit()
 
 
@@ -168,6 +183,7 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     detail = repository.get_thread(thread_id="thread-api")
     assets = repository.list_assets(thread_id="thread-api")
     bundles = repository.list_bundle_proposals(thread_id="thread-api")
+    known_facts = repository.list_known_facts(thread_id="thread-api")
 
     assert detail is not None
     assert detail.thread_id == "thread-api"
@@ -186,6 +202,10 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert bundles[0].items[0].item_id == "prod-1"
     assert bundles[0].items[0].image_urls == []
     assert bundles[0].validations[0].kind == "budget_max_eur"
+
+    assert len(known_facts) == 1
+    assert known_facts[0].kind == "constraint"
+    assert known_facts[0].summary == "User has toddlers, keep things elevated."
 
 
 def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ const proposal = {
     {
       item_id: "chair-1",
       product_name: "Chair One",
+      product_url: "https://www.ikea.com/de/de/p/chair-one-12345678/",
       description_text: "Desk chair",
       price_eur: 79.99,
       quantity: 2,
@@ -32,6 +33,7 @@ const proposal = {
     {
       item_id: "lamp-1",
       product_name: "Lamp One",
+      product_url: null,
       description_text: "Task lamp",
       price_eur: 29.99,
       quantity: 1,
@@ -95,6 +97,10 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByTestId("bundle-items-bundle-1")).toHaveClass("max-h-96", "overflow-y-auto");
     expect(screen.getByTestId("bundle-item-bundle-1-chair-1-button")).toBeInTheDocument();
     expect(screen.getByTestId("bundle-item-bundle-1-lamp-1-placeholder")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open product page for Chair One" })).toHaveAttribute(
+      "href",
+      "https://www.ikea.com/de/de/p/chair-one-12345678/",
+    );
   });
 
   it("opens the bundle item gallery popover", async () => {

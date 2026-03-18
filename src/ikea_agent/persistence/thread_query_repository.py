@@ -14,6 +14,7 @@ from sqlalchemy.sql import Select
 from ikea_agent.chat_app.thread_api_models import (
     AnalysisFeedbackItem,
     AssetListItem,
+    KnownFactItem,
     ThreadDetailItem,
 )
 from ikea_agent.persistence.models import (
@@ -23,6 +24,7 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
+    RevealedPreferenceRecord,
     SearchRunRecord,
     ThreadRecord,
 )
@@ -30,9 +32,18 @@ from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
     BundleValidationResult,
+    RevealedPreferenceKind,
 )
 
 AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
+
+
+def _parse_revealed_preference_kind(raw_kind: str) -> RevealedPreferenceKind:
+    """Validate persisted revealed-preference kinds before building API payloads."""
+
+    if raw_kind in ("constraint", "fact", "preference"):
+        return raw_kind
+    raise ValueError(f"Unknown revealed preference kind: {raw_kind}")
 
 
 class ThreadQueryRepository:
@@ -169,6 +180,34 @@ class ThreadQueryRepository:
                 ),
                 validations=_as_bundle_validations(item.validations_json),
                 created_at=str(item.created_at) if item.created_at is not None else "",
+                run_id=str(item.run_id) if item.run_id is not None else None,
+            )
+            for item in rows
+        ]
+
+    def list_known_facts(self, *, thread_id: str) -> list[KnownFactItem]:
+        """Return durable revealed facts/preferences for one thread."""
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    RevealedPreferenceRecord.revealed_preference_id,
+                    RevealedPreferenceRecord.kind,
+                    RevealedPreferenceRecord.summary,
+                    RevealedPreferenceRecord.source_message_text,
+                    cast(RevealedPreferenceRecord.updated_at, String),
+                    RevealedPreferenceRecord.run_id,
+                )
+                .where(RevealedPreferenceRecord.thread_id == thread_id)
+                .order_by(RevealedPreferenceRecord.updated_at.desc())
+            ).all()
+        return [
+            KnownFactItem(
+                memory_id=str(item.revealed_preference_id),
+                kind=_parse_revealed_preference_kind(str(item.kind)),
+                summary=str(item.summary),
+                source_message_text=str(item.source_message_text),
+                updated_at=str(item.updated_at) if item.updated_at is not None else "",
                 run_id=str(item.run_id) if item.run_id is not None else None,
             )
             for item in rows

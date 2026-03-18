@@ -11,6 +11,7 @@ export const bundleValidationSchema = z.object({
 export const bundleProposalItemSchema = z.object({
   item_id: z.string(),
   product_name: z.string(),
+  product_url: z.string().nullable().default(null),
   description_text: z.string().nullable(),
   price_eur: z.number().nullable(),
   quantity: z.number(),

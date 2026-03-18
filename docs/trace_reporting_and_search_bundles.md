@@ -107,9 +107,9 @@ The backend hydrates product metadata, computes totals, and runs richer bundle v
 
 On wide screens, the search agent page now uses three distinct surfaces:
 
-- agent inspector
+- known-facts inspector
 - main search workbench
-- chat sidebar
+- always-open chat sidebar
 
 Bundle proposals render in the main workbench, outside the chat transcript.
 Each bundle is collapsed by default and shows its title, total, item count, and summary metadata.
@@ -121,7 +121,7 @@ Expanding a bundle reveals:
 - budget cap context
 - a bounded scroll area for line items
 - a grouped per-item pricing summary (`unit`, `qty`, `total`) before the rationale and description
-- the per-item rationale (`reason`) and backend-hydrated description
+- the per-item rationale (`reason`), backend-hydrated description, and product-page link when available
 - explicit pending-price markers when totals are incomplete
 
 The in-chat renderer now reuses the same summary-card treatment so the user can click directly from the
