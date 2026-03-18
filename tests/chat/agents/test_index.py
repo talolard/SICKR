@@ -26,7 +26,7 @@ def test_describe_agent_returns_prompt_and_tools() -> None:
     metadata = describe_agent("floor_plan_intake")
 
     assert metadata["name"] == "floor_plan_intake"
-    assert "floor-plan intake specialist" in metadata["prompt_markdown"]
+    assert "floor-plan intake specialist" in metadata["prompt_markdown"].lower()
     assert "render_floor_plan" in metadata["tools"]
 
 
@@ -38,7 +38,7 @@ def test_get_agent_raises_for_unknown() -> None:
 def test_build_agent_ag_ui_agent_uses_prompt_instructions() -> None:
     agent = build_agent_ag_ui_agent("floor_plan_intake")
 
-    instructions = "\n".join(str(item) for item in agent._instructions)
+    instructions = "\n".join(str(item) for item in agent._instructions).lower()
     assert "floor-plan intake specialist" in instructions
 
 

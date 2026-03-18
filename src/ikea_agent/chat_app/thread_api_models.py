@@ -30,6 +30,7 @@ class AssetListItem(BaseModel):
     run_id: str | None
     created_by_tool: str | None
     kind: str
+    display_label: str | None = None
     mime_type: str
     file_name: str | None
     storage_path: str

@@ -4,19 +4,13 @@ import { vi } from "vitest";
 import { AgentChatSidebar } from "./AgentChatSidebar";
 
 vi.mock("@copilotkit/react-ui", () => ({
-  CopilotSidebar: ({
-    Button,
-    Header,
-    clickOutsideToClose,
-    defaultOpen,
-    hitEscapeToClose,
+  CopilotChat: ({
+    className,
+    children,
     renderError,
   }: {
-    Button?: () => React.ReactNode;
-    Header?: () => React.ReactNode;
-    clickOutsideToClose?: boolean;
-    defaultOpen?: boolean;
-    hitEscapeToClose?: boolean;
+    className?: string;
+    children?: React.ReactNode;
     renderError: (error: {
       message: string;
       operation?: string;
@@ -25,12 +19,8 @@ vi.mock("@copilotkit/react-ui", () => ({
       onRetry?: () => void;
     }) => React.ReactNode;
   }) => (
-    <div data-testid="mock-copilot-sidebar">
-      <div data-testid="mock-sidebar-open">{String(defaultOpen)}</div>
-      <div data-testid="mock-sidebar-click-close">{String(clickOutsideToClose)}</div>
-      <div data-testid="mock-sidebar-escape-close">{String(hitEscapeToClose)}</div>
-      <div data-testid="mock-sidebar-button">{Button ? String(Button() === null) : "missing"}</div>
-      <div data-testid="mock-sidebar-header">{Header ? Header() : "missing"}</div>
+    <div className={className} data-testid="mock-copilot-chat">
+      {children}
       {renderError({
         message: "Model request failed.",
         operation: "agent_run_failed",
@@ -43,15 +33,11 @@ vi.mock("@copilotkit/react-ui", () => ({
 }));
 
 describe("AgentChatSidebar", () => {
-  it("renders CopilotKit inline chat errors inside the sidebar", () => {
+  it("renders CopilotKit inline chat errors inside the inline chat pane", () => {
     render(<AgentChatSidebar />);
 
-    expect(screen.getByTestId("mock-copilot-sidebar")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-sidebar-open")).toHaveTextContent("true");
-    expect(screen.getByTestId("mock-sidebar-click-close")).toHaveTextContent("false");
-    expect(screen.getByTestId("mock-sidebar-escape-close")).toHaveTextContent("false");
-    expect(screen.getByTestId("mock-sidebar-button")).toHaveTextContent("true");
     expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-copilot-chat")).toBeInTheDocument();
     expect(screen.getByText("This request failed.")).toBeInTheDocument();
     expect(screen.getByText("Model request failed.")).toBeInTheDocument();
     expect(screen.getByText("Operation: agent_run_failed")).toBeInTheDocument();
