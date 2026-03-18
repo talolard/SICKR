@@ -9,6 +9,7 @@ import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 type AgentImageAttachmentPanelProps = {
   threadId: string | null;
   onReadyAttachmentsChange: (attachments: AttachmentRef[]) => void;
+  helperText?: string;
 };
 
 function attachmentErrorMessage(status: number, body: string): string {
@@ -21,6 +22,7 @@ function attachmentErrorMessage(status: number, body: string): string {
 export function AgentImageAttachmentPanel({
   threadId,
   onReadyAttachmentsChange,
+  helperText = "Uploaded images are added to image-analysis tool context for this thread.",
 }: AgentImageAttachmentPanelProps): ReactElement {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentFilesRef = useRef<Record<string, File>>({});
@@ -136,7 +138,7 @@ export function AgentImageAttachmentPanel({
         onRetryAttachment={handleRetryAttachment}
       />
       <p className="mt-1 text-xs text-gray-600">
-        Uploaded images are added to image-analysis tool context for this thread.
+        {helperText}
       </p>
     </section>
   );

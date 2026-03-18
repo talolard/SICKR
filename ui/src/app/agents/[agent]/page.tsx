@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import { useAgent } from "@copilotkit/react-core/v2";
+import { useCopilotMessagesContext } from "@copilotkit/react-core";
 
 import { useThreadSession } from "@/app/CopilotKitProviders";
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
@@ -36,6 +37,7 @@ import {
   loadFloorPlanPreview,
   saveFloorPlanPreview,
 } from "@/lib/floorPlanPreviewStore";
+import { loadThreadSnapshot, saveThreadSnapshot } from "@/lib/threadStore";
 import {
   fetchAgentMetadata,
   fetchAgents,
@@ -78,6 +80,7 @@ export default function AgentChatPage(): ReactElement {
   const { agentKey, agentName, threadId, threadIds, warning, selectThread, createThread, clearWarning } =
     useThreadSession();
   const { agent } = useAgent({ agentId: agentKey });
+  const { messages, setMessages } = useCopilotMessagesContext();
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const [error, setError] = useState<string>("");
@@ -236,7 +239,9 @@ export default function AgentChatPage(): ReactElement {
     if (!threadId) {
       return;
     }
-    const attachmentsForAgent = currentAgent === "image_analysis" ? imageAttachments : [];
+    const supportsImageAttachments =
+      currentAgent === "image_analysis" || currentAgent === "floor_plan_intake";
+    const attachmentsForAgent = supportsImageAttachments ? imageAttachments : [];
     const previousState =
       typeof agent.state === "object" && agent.state !== null
         ? (agent.state as Record<string, unknown>)
@@ -249,6 +254,36 @@ export default function AgentChatPage(): ReactElement {
       bundle_proposals: currentAgent === "search" ? bundleProposals : [],
     });
   }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    const snapshot = loadThreadSnapshot(threadId, agentKey);
+    setMessages((snapshot?.copilotMessages ?? []) as typeof messages);
+  }, [agentKey, setMessages, threadId]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    const previousSnapshot = loadThreadSnapshot(threadId, agentKey);
+    const nextSnapshot = {
+      threadId,
+      prompt: previousSnapshot?.prompt ?? "",
+      assistantText: previousSnapshot?.assistantText ?? "",
+      toolCallsById: previousSnapshot?.toolCallsById ?? {},
+      attachments: previousSnapshot?.attachments ?? [],
+      copilotMessages: messages,
+      ...(previousSnapshot?.messages
+        ? { messages: previousSnapshot.messages }
+        : {}),
+    };
+    saveThreadSnapshot(
+      nextSnapshot,
+      agentKey,
+    );
+  }, [agentKey, messages, threadId]);
 
   const persistedFloorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
     if (!threadId) {
@@ -271,6 +306,9 @@ export default function AgentChatPage(): ReactElement {
     return agents.find((item) => item.name === currentAgent) ?? null;
   }, [currentAgent, agents]);
   const isSearchAgent = currentAgent === "search";
+  const isFloorPlanAgent = currentAgent === "floor_plan_intake";
+  const supportsImageAttachments =
+    currentAgent === "image_analysis" || currentAgent === "floor_plan_intake";
 
   const toolRenderers = (
     <CopilotToolRenderers
@@ -386,15 +424,6 @@ export default function AgentChatPage(): ReactElement {
               </div>
             ) : null}
             {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
-            {currentAgent === "search" ? null : (
-              <LazyFloorPlanPreviewPanel preview={floorPlanPreview} />
-            )}
-            {currentAgent === "image_analysis" ? (
-              <AgentImageAttachmentPanel
-                onReadyAttachmentsChange={setImageAttachments}
-                threadId={threadId}
-              />
-            ) : null}
           </header>
           {isSearchAgent ? (
             <SearchBundlePanel
@@ -404,9 +433,34 @@ export default function AgentChatPage(): ReactElement {
               proposals={bundleProposals}
             />
           ) : (
-            <div className="flex flex-1 flex-col gap-3">
-              {toolRenderers}
-              <AgentChatSidebar />
+            <div
+              className={
+                isFloorPlanAgent
+                  ? "grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)]"
+                  : "flex flex-1 flex-col gap-3"
+              }
+            >
+              <div className="flex min-h-0 min-w-0 flex-col gap-3">
+                {toolRenderers}
+                {currentAgent === "search" ? null : (
+                  <LazyFloorPlanPreviewPanel preview={floorPlanPreview} />
+                )}
+                {supportsImageAttachments ? (
+                  <AgentImageAttachmentPanel
+                    onReadyAttachmentsChange={setImageAttachments}
+                    threadId={threadId}
+                    {...(currentAgent === "floor_plan_intake"
+                      ? {
+                          helperText:
+                            "Uploaded images are added to floor-plan intake context for this thread.",
+                        }
+                      : {})}
+                  />
+                ) : null}
+              </div>
+              <div className="min-h-0 min-w-0">
+                <AgentChatSidebar />
+              </div>
             </div>
           )}
           {traceCaptureEnabled && threadId ? (

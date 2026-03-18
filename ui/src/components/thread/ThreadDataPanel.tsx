@@ -73,7 +73,7 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
       <ul className="list-disc pl-4">
         {assets.slice(0, 3).map((asset) => (
           <li key={asset.asset_id}>
-            {asset.kind} · {asset.file_name ?? asset.asset_id}
+            {asset.display_label ?? asset.file_name ?? asset.asset_id}
           </li>
         ))}
       </ul>

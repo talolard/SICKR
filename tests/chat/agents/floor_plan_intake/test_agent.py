@@ -33,7 +33,7 @@ class _RenderFloorPlanStub:
 def test_floor_plan_intake_agent_loads_prompt_instructions() -> None:
     agent = build_floor_plan_intake_agent(explicit_model="gemini-2.0-flash")
 
-    instructions = "\n".join(str(item) for item in agent._instructions)
+    instructions = "\n".join(str(item) for item in agent._instructions).lower()
     assert "floor-plan intake specialist" in instructions
     assert "render_floor_plan" in instructions
 
