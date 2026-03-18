@@ -151,4 +151,24 @@ describe("parseProductResults", () => {
       },
     ]);
   });
+
+  it("prefers display_title when the runtime emits enriched catalog metadata", () => {
+    const parsed = parseProductResults([
+      {
+        product_id: "30582542-DE",
+        product_name: "FEJKA",
+        display_title: "FEJKA Kuenstliche Topfpflanze Drinnen Draussen Monstera",
+      },
+    ]);
+
+    expect(parsed).toEqual([
+      {
+        id: "30582542-DE",
+        name: "FEJKA Kuenstliche Topfpflanze Drinnen Draussen Monstera",
+        descriptionText: null,
+        priceEur: null,
+        imageUrls: [],
+      },
+    ]);
+  });
 });

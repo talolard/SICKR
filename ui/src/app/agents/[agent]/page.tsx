@@ -2,48 +2,33 @@
 
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type { ReactElement } from "react";
 import { useAgent } from "@copilotkit/react-core/v2";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";
 
 import { useThreadSession } from "@/app/CopilotKitProviders";
-import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
 import { AgentImageAttachmentPanel } from "@/components/attachments/AgentImageAttachmentPanel";
 import { AgentChatSidebar } from "@/components/copilotkit/AgentChatSidebar";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
-import { AppNavBanner } from "@/components/navigation/AppNavBanner";
-import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
-import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
-import { SaveTraceButton } from "@/components/trace/SaveTraceButton";
-import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import type { AttachmentRef } from "@/lib/attachments";
+
 import {
-  listThreadBundleProposals,
-  listThreadKnownFacts,
-  type KnownFactItem,
-  ThreadDataRequestError,
-} from "@/lib/api/threadDataClient";
+  InvalidAgentPathView,
+  SharedAgentPageShell,
+  UnknownAgentView,
+} from "./agentPageShell";
 import {
-  appendBundleProposal,
-  loadBundleProposals,
-  mergeBundleProposals,
-  replaceBundleProposals,
-  type BundleProposal,
-} from "@/lib/bundleProposalsStore";
-import { startFeedbackCapture } from "@/lib/feedbackCapture";
-import {
-  type FloorPlanPreviewState,
-  loadFloorPlanPreview,
-  saveFloorPlanPreview,
-} from "@/lib/floorPlanPreviewStore";
-import { loadThreadSnapshot, saveThreadSnapshot } from "@/lib/threadStore";
-import {
-  fetchAgentMetadata,
-  fetchAgents,
-  type AgentItem,
-  type AgentMetadata,
-} from "@/lib/agents";
+  isFloorPlanAgent,
+  isSearchAgent,
+  supportsImageAttachments,
+  useAgentMetadataState,
+  useCopilotAgentStateSync,
+  useFloorPlanPreviewState,
+  useKnownFactsState,
+  useSearchBundleState,
+  useThreadSnapshotSync,
+} from "./agentPageHooks";
 
 const LazyFloorPlanPreviewPanel = dynamic(
   () =>
@@ -63,16 +48,6 @@ const LazyFloorPlanPreviewPanel = dynamic(
 
 const traceCaptureEnabled = process.env.NEXT_PUBLIC_TRACE_CAPTURE_ENABLED === "1";
 
-function resolveAttachmentUri(uri: string): string {
-  if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
-    return uri;
-  }
-  if (uri.startsWith("/attachments/")) {
-    return uri;
-  }
-  return `/attachments/${uri.replace(/^\/+/, "")}`;
-}
-
 export default function AgentChatPage(): ReactElement {
   const params = useParams<{ agent: string }>();
   const router = useRouter();
@@ -81,408 +56,110 @@ export default function AgentChatPage(): ReactElement {
     useThreadSession();
   const { agent } = useAgent({ agentId: agentKey });
   const { messages, setMessages } = useCopilotMessagesContext();
-  const [agents, setAgents] = useState<AgentItem[]>([]);
-  const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
-  const [error, setError] = useState<string>("");
-  const [activeFloorPlanPreview, setActiveFloorPlanPreview] = useState<FloorPlanPreviewState | null>(null);
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
-  const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
-  const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
-  const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
-  const [isLoadingBundleProposals, setIsLoadingBundleProposals] = useState<boolean>(false);
-  const [knownFacts, setKnownFacts] = useState<KnownFactItem[]>([]);
-  const [knownFactsError, setKnownFactsError] = useState<string | null>(null);
-  const [isLoadingKnownFacts, setIsLoadingKnownFacts] = useState<boolean>(false);
   const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
+  const { agents, metadata, error } = useAgentMetadataState(currentAgent);
+  const { knownFacts, knownFactsError, isLoadingKnownFacts } = useKnownFactsState(threadId);
+  const {
+    activeBundleId,
+    bundleProposalError,
+    bundleProposals,
+    isLoadingBundleProposals,
+    setActiveBundleId,
+    addBundleProposal,
+  } = useSearchBundleState(currentAgent, threadId);
+  const { floorPlanPreview, saveRenderedFloorPlan } = useFloorPlanPreviewState(threadId);
+  const searchAgent = isSearchAgent(currentAgent);
+  const floorPlanAgent = isFloorPlanAgent(currentAgent);
+  const imageAttachmentSupport = supportsImageAttachments(currentAgent);
 
-  useEffect(() => {
-    startFeedbackCapture();
-  }, []);
-
-  useEffect(() => {
-    void fetchAgents()
-      .then((items) => setAgents(items))
-      .catch((fetchError: unknown) => {
-        const message = fetchError instanceof Error ? fetchError.message : "Failed to load agents.";
-        setError(message);
-      });
-  }, []);
-
-  useEffect(() => {
-    void fetchAgentMetadata(currentAgent)
-      .then((payload) => {
-        setMetadata(payload);
-        setError("");
-      })
-      .catch((fetchError: unknown) => {
-        const message = fetchError instanceof Error ? fetchError.message : "Failed to load agent metadata.";
-        setError(message);
-      });
-  }, [currentAgent]);
-
-  useEffect(() => {
-    let active = true;
-    if (!threadId) {
-      startTransition(() => {
-        setKnownFacts([]);
-        setKnownFactsError(null);
-        setIsLoadingKnownFacts(false);
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    startTransition(() => {
-      setKnownFacts([]);
-      setKnownFactsError(null);
-      setIsLoadingKnownFacts(true);
-    });
-    void listThreadKnownFacts(threadId)
-      .then((persistedKnownFacts) => {
-        if (!active) {
-          return;
-        }
-        setKnownFacts(persistedKnownFacts);
-      })
-      .catch((fetchError: unknown) => {
-        if (!active) {
-          return;
-        }
-        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
-          return;
-        }
-        setKnownFactsError(
-          fetchError instanceof Error ? fetchError.message : "Failed to load known facts.",
-        );
-      })
-      .finally(() => {
-        if (!active) {
-          return;
-        }
-        setIsLoadingKnownFacts(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [threadId]);
-
-  useEffect(() => {
-    let active = true;
-    if (!threadId) {
-      startTransition(() => {
-        setActiveBundleId(null);
-        setBundleProposals([]);
-        setBundleProposalError(null);
-        setIsLoadingBundleProposals(false);
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    if (currentAgent !== "search") {
-      startTransition(() => {
-        setActiveBundleId(null);
-        setBundleProposals([]);
-        setBundleProposalError(null);
-        setIsLoadingBundleProposals(false);
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    const localProposals = loadBundleProposals(threadId);
-    startTransition(() => {
-      setActiveBundleId(null);
-      setBundleProposals(localProposals);
-      setBundleProposalError(null);
-      setIsLoadingBundleProposals(true);
-    });
-    void listThreadBundleProposals(threadId)
-      .then((persistedProposals) => {
-        if (!active) {
-          return;
-        }
-        setBundleProposals(
-          replaceBundleProposals(threadId, mergeBundleProposals(persistedProposals, localProposals)),
-        );
-      })
-      .catch((fetchError: unknown) => {
-        if (!active) {
-          return;
-        }
-        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
-          return;
-        }
-        setBundleProposalError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Failed to load saved bundle proposals.",
-        );
-      })
-      .finally(() => {
-        if (!active) {
-          return;
-        }
-        setIsLoadingBundleProposals(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [currentAgent, threadId]);
-
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
-    const supportsImageAttachments =
-      currentAgent === "image_analysis" || currentAgent === "floor_plan_intake";
-    const attachmentsForAgent = supportsImageAttachments ? imageAttachments : [];
-    const previousState =
-      typeof agent.state === "object" && agent.state !== null
-        ? (agent.state as Record<string, unknown>)
-        : {};
-    agent.setState({
-      ...previousState,
-      session_id: threadId,
-      thread_id: threadId,
-      attachments: attachmentsForAgent,
-      bundle_proposals: currentAgent === "search" ? bundleProposals : [],
-    });
-  }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
-
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
-    const snapshot = loadThreadSnapshot(threadId, agentKey);
-    setMessages((snapshot?.copilotMessages ?? []) as typeof messages);
-  }, [agentKey, setMessages, threadId]);
-
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
-    const previousSnapshot = loadThreadSnapshot(threadId, agentKey);
-    const nextSnapshot = {
-      threadId,
-      prompt: previousSnapshot?.prompt ?? "",
-      assistantText: previousSnapshot?.assistantText ?? "",
-      toolCallsById: previousSnapshot?.toolCallsById ?? {},
-      attachments: previousSnapshot?.attachments ?? [],
-      copilotMessages: messages,
-      ...(previousSnapshot?.messages
-        ? { messages: previousSnapshot.messages }
-        : {}),
-    };
-    saveThreadSnapshot(
-      nextSnapshot,
-      agentKey,
-    );
-  }, [agentKey, messages, threadId]);
-
-  const persistedFloorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
-    if (!threadId) {
-      return null;
-    }
-    return loadFloorPlanPreview(threadId);
-  }, [threadId]);
-
-  const floorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
-    if (!threadId) {
-      return null;
-    }
-    if (activeFloorPlanPreview?.threadId === threadId) {
-      return activeFloorPlanPreview;
-    }
-    return persistedFloorPlanPreview;
-  }, [activeFloorPlanPreview, persistedFloorPlanPreview, threadId]);
-
-  const selected = useMemo(() => {
-    return agents.find((item) => item.name === currentAgent) ?? null;
-  }, [currentAgent, agents]);
-  const isSearchAgent = currentAgent === "search";
-  const isFloorPlanAgent = currentAgent === "floor_plan_intake";
-  const supportsImageAttachments =
-    currentAgent === "image_analysis" || currentAgent === "floor_plan_intake";
+  useCopilotAgentStateSync({
+    agent,
+    currentAgent,
+    threadId,
+    imageAttachments,
+    bundleProposals,
+  });
+  useThreadSnapshotSync({
+    agentKey,
+    threadId,
+    messages: messages as unknown[],
+    replaceMessages: (nextMessages) => {
+      setMessages(nextMessages as typeof messages);
+    },
+  });
 
   const toolRenderers = (
     <CopilotToolRenderers
       onBundleSelected={setActiveBundleId}
-      onBundleProposed={(proposal) => {
-        setActiveBundleId(proposal.bundle_id);
-        if (!threadId) {
-          setBundleProposals((current) => mergeBundleProposals([proposal], current));
-          return;
-        }
-        setBundleProposalError(null);
-        setBundleProposals(appendBundleProposal(threadId, proposal));
-      }}
-      onFloorPlanRendered={(snapshot) => {
-        const resolvedImages = snapshot.images.map((image) => ({
-          ...image,
-          uri: resolveAttachmentUri(image.uri),
-        }));
-        const nextSnapshot: FloorPlanPreviewState = {
-          ...snapshot,
-          threadId: threadId ?? "pending",
-          images: resolvedImages,
-        };
-        setActiveFloorPlanPreview(nextSnapshot);
-        if (threadId) {
-          saveFloorPlanPreview(nextSnapshot);
-        }
-      }}
+      threadId={threadId}
+      onBundleProposed={addBundleProposal}
+      onFloorPlanRendered={saveRenderedFloorPlan}
     />
   );
 
   if (agentName === null) {
-    return (
-      <main className="min-h-screen bg-white p-6">
-        <p className="text-sm text-red-700">Invalid agent path.</p>
-      </main>
-    );
+    return <InvalidAgentPathView />;
   }
 
-  if (selected === null && agents.length > 0) {
+  if (!agents.some((item) => item.name === currentAgent) && agents.length > 0) {
     return (
-      <main className="min-h-screen bg-white p-6">
-        <p className="text-sm text-red-700">
-          Unknown agent `{currentAgent}`.
-          <button className="ml-2 underline" onClick={() => router.push("/")} type="button">
-            Return home
-          </button>
-        </p>
-      </main>
+      <UnknownAgentView
+        currentAgent={currentAgent}
+        onReturnHome={() => {
+          router.push("/");
+        }}
+      />
     );
   }
 
   return (
-    <main className="min-h-screen bg-white">
-      <AppNavBanner currentAgentName={currentAgent} agents={agents} />
-      <section
-        className={
-          isSearchAgent
-            ? "mx-auto grid max-w-[1900px] grid-cols-1 gap-4 p-6 xl:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)_minmax(320px,360px)]"
-            : "mx-auto grid max-w-[1700px] grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]"
-        }
-      >
-        <AgentInspectorPanel
-          error={error}
-          isLoadingKnownFacts={isLoadingKnownFacts}
-          knownFacts={knownFacts}
-          knownFactsError={knownFactsError}
-          metadata={metadata}
-        />
-        <section className="flex min-h-[70vh] min-w-0 flex-col gap-3 rounded border border-gray-200 bg-white p-3">
-          <header className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-gray-900">{currentAgent}</h2>
-            <p className="text-sm text-gray-600">{selected?.description ?? "Agent chat and tool-call stream."}</p>
-            <div className="mt-2 flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-xs text-gray-600">
-                Thread
-                <select
-                  className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900"
-                  disabled={!threadId}
-                  onChange={(event) => {
-                    selectThread(event.target.value);
-                  }}
-                  value={threadId ?? ""}
-                >
-                  {(threadId && !threadIds.includes(threadId) ? [threadId, ...threadIds] : threadIds).map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-50"
-                onClick={createThread}
-                type="button"
-              >
-                New thread
-              </button>
-              {traceCaptureEnabled && threadId ? (
-                <SaveTraceButton
-                  onClick={() => {
-                    setIsTraceDialogOpen(true);
-                  }}
-                />
-              ) : null}
-            </div>
-            {warning ? (
-              <div className="mt-1 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                <span>{warning}</span>
-                <button className="underline" onClick={clearWarning} type="button">
-                  Dismiss
-                </button>
-              </div>
-            ) : null}
-            {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
-          </header>
-          {isSearchAgent ? (
-            <SearchBundlePanel
-              activeBundleId={activeBundleId}
-              error={bundleProposalError}
-              isLoading={isLoadingBundleProposals}
-              proposals={bundleProposals}
-            />
-          ) : (
-            <div
-              className={
-                isFloorPlanAgent
-                  ? "grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)]"
-                  : "flex flex-1 flex-col gap-3"
+    <SharedAgentPageShell
+      currentAgent={currentAgent}
+      agents={agents}
+      metadata={metadata}
+      error={error}
+      knownFacts={knownFacts}
+      knownFactsError={knownFactsError}
+      isLoadingKnownFacts={isLoadingKnownFacts}
+      threadId={threadId}
+      threadIds={threadIds}
+      warning={warning}
+      onSelectThread={selectThread}
+      onCreateThread={createThread}
+      onDismissWarning={clearWarning}
+      isSearchAgent={searchAgent}
+      isFloorPlanAgent={floorPlanAgent}
+      supportsImageAttachments={imageAttachmentSupport}
+      activeBundleId={activeBundleId}
+      bundleProposalError={bundleProposalError}
+      bundleProposals={bundleProposals}
+      isLoadingBundleProposals={isLoadingBundleProposals}
+      toolRenderers={toolRenderers}
+      previewPanel={
+        !searchAgent ? <LazyFloorPlanPreviewPanel preview={floorPlanPreview} /> : null
+      }
+      attachmentPanel={
+        <AgentImageAttachmentPanel
+          onReadyAttachmentsChange={setImageAttachments}
+          threadId={threadId}
+          {...(floorPlanAgent
+            ? {
+                helperText:
+                  "Uploaded images are added to floor-plan intake context for this thread.",
               }
-            >
-              <div className="flex min-h-0 min-w-0 flex-col gap-3">
-                {toolRenderers}
-                {currentAgent === "search" ? null : (
-                  <LazyFloorPlanPreviewPanel preview={floorPlanPreview} />
-                )}
-                {supportsImageAttachments ? (
-                  <AgentImageAttachmentPanel
-                    onReadyAttachmentsChange={setImageAttachments}
-                    threadId={threadId}
-                    {...(currentAgent === "floor_plan_intake"
-                      ? {
-                          helperText:
-                            "Uploaded images are added to floor-plan intake context for this thread.",
-                        }
-                      : {})}
-                  />
-                ) : null}
-              </div>
-              <div className="min-h-0 min-w-0">
-                <AgentChatSidebar />
-              </div>
-            </div>
-          )}
-          {traceCaptureEnabled && threadId ? (
-            <SaveTraceDialog
-              agentName={currentAgent}
-              onClose={() => {
-                setIsTraceDialogOpen(false);
-              }}
-              open={isTraceDialogOpen}
-              threadId={threadId}
-            />
-          ) : null}
-        </section>
-        {isSearchAgent ? (
-          <aside className="min-h-[70vh] min-w-0">
-            <div className="flex min-h-[70vh] min-w-0 flex-col rounded border border-gray-200 bg-white p-2">
-              {toolRenderers}
-              <AgentChatSidebar />
-            </div>
-          </aside>
-        ) : null}
-      </section>
-    </main>
+            : {})}
+        />
+      }
+      chatPanel={<AgentChatSidebar />}
+      isTraceCaptureEnabled={traceCaptureEnabled}
+      isTraceDialogOpen={isTraceDialogOpen}
+      onOpenTraceDialog={() => {
+        setIsTraceDialogOpen(true);
+      }}
+      onCloseTraceDialog={() => {
+        setIsTraceDialogOpen(false);
+      }}
+    />
   );
 }

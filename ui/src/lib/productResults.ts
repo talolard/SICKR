@@ -15,6 +15,7 @@ export type SearchResultGroup = {
 type ProductLike = {
   id?: unknown;
   name?: unknown;
+  display_title?: unknown;
   product_id?: unknown;
   product_name?: unknown;
   description_text?: unknown;
@@ -45,6 +46,8 @@ function parseProduct(item: unknown): Product | null {
   const nameCandidate =
     typeof candidate.name === "string"
       ? candidate.name
+      : typeof candidate.display_title === "string"
+        ? candidate.display_title
       : typeof candidate.product_name === "string"
         ? candidate.product_name
         : typeof candidate.description_text === "string"

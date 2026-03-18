@@ -15,6 +15,9 @@
 - Some rows have `none` strings for rating fields and optional text attributes.
 - Category text can drift by locale in non-Germany rows; retrieval is built over Germany-scoped canonical table.
 - Distinct descriptions per `product_id` are frequently high due localization and size variants.
+- `product_name` is often only a family/series label (for example `FEJKA`), so runtime
+  display should prefer the durable `products_canonical.display_title` enrichment when
+  present instead of deriving titles in the UI.
 
 ## Dimensions Format Families
 `products_canonical.dimensions_type` now classifies dimension strings into:

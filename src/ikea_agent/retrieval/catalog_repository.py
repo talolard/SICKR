@@ -66,7 +66,7 @@ class CatalogRepository:
 
         hydrated_results: list[RetrievalResult] = []
         for row in rows:
-            semantic_score = _float_or_none(row[13])
+            semantic_score = _float_or_none(row[14])
             if semantic_score is None:
                 continue
             hydrated_results.append(
@@ -87,6 +87,7 @@ class CatalogRepository:
                     semantic_score=semantic_score,
                     filter_pass_reasons=("structured_filters_passed",),
                     rank_explanation=f"milvus cosine score {semantic_score:.3f}",
+                    display_title=_str_or_none(row[13]),
                 )
             )
         return hydrated_results
@@ -156,7 +157,8 @@ class CatalogRepository:
                     c.depth_cm,
                     c.height_cm,
                     c.price_eur,
-                    c.url
+                    c.url,
+                    c.display_title
                 FROM app.products_canonical AS c
                 LEFT JOIN app.product_embeddings AS e
                   ON e.canonical_product_key = c.canonical_product_key
@@ -185,6 +187,7 @@ class CatalogRepository:
             semantic_score=0.0,
             filter_pass_reasons=("product_lookup",),
             rank_explanation="product lookup by canonical key",
+            display_title=_str_or_none(row[13]),
         )
 
 
@@ -265,7 +268,8 @@ def _hydration_query(sort_mode: str) -> str:
         "SELECT "
         "c.canonical_product_key, c.product_name, c.product_type, c.description_text, "
         "e.embedded_text, c.main_category, c.sub_category, c.dimensions_text, "
-        "c.width_cm, c.depth_cm, c.height_cm, c.price_eur, c.url, t.semantic_score "
+        "c.width_cm, c.depth_cm, c.height_cm, c.price_eur, c.url, c.display_title, "
+        "t.semantic_score "
         "FROM temp_candidate_scores AS t "
         "JOIN app.products_canonical AS c "
         "ON c.canonical_product_key = t.canonical_product_key "

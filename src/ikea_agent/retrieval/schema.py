@@ -28,6 +28,7 @@ products_canonical = Table(
     Column("unique_id", VARCHAR),
     Column("country", VARCHAR),
     Column("product_name", VARCHAR),
+    Column("display_title", VARCHAR),
     Column("product_type", VARCHAR),
     Column("description_text", VARCHAR),
     Column("main_category", VARCHAR),

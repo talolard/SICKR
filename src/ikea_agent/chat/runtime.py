@@ -19,6 +19,7 @@ from ikea_agent.retrieval.catalog_repository import (
     CatalogRepository,
     EmbeddingSnapshotRepository,
 )
+from ikea_agent.retrieval.display_titles import backfill_product_display_titles
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
 from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
@@ -177,6 +178,7 @@ def build_chat_runtime() -> ChatRuntime:
     sqlalchemy_engine = create_duckdb_engine(settings.duckdb_path)
     session_factory = create_session_factory(sqlalchemy_engine)
     ensure_runtime_schema(sqlalchemy_engine)
+    backfill_product_display_titles(sqlalchemy_engine)
     snapshot_repository = EmbeddingSnapshotRepository(sqlalchemy_engine)
 
     embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)

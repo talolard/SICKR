@@ -34,6 +34,10 @@ function validationLabel(kind: BundleProposal["validations"][number]["kind"]): s
   }
 }
 
+function bundleItemDisplayName(item: BundleProposal["items"][number]): string {
+  return item.display_title ?? item.product_name;
+}
+
 function BundleValidationList({ proposal }: { proposal: BundleProposal }): ReactElement | null {
   if (proposal.validations.length === 0) {
     return null;
@@ -158,17 +162,19 @@ export function SearchBundlePanel({
                         <div className="flex gap-3">
                           <ProductImageThumbnail
                             images={item.image_urls}
-                            productName={item.product_name}
+                            productName={bundleItemDisplayName(item)}
                             testIdPrefix={`bundle-item-${proposal.bundle_id}-${item.item_id}`}
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <h4 className="text-sm font-semibold text-gray-900">{item.product_name}</h4>
+                                <h4 className="text-sm font-semibold text-gray-900">
+                                  {bundleItemDisplayName(item)}
+                                </h4>
                                 <p className="text-[11px] text-gray-500">{item.item_id}</p>
                                 {item.product_url ? (
                                   <a
-                                    aria-label={`Open product page for ${item.product_name}`}
+                                    aria-label={`Open product page for ${bundleItemDisplayName(item)}`}
                                     className="mt-1 inline-flex text-xs font-medium text-pink-700 underline underline-offset-2 hover:text-pink-800"
                                     href={item.product_url}
                                     rel="noreferrer"

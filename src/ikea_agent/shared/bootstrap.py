@@ -14,3 +14,9 @@ def ensure_runtime_schema(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
     retrieval_metadata.create_all(engine, checkfirst=True)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE app.products_canonical ADD COLUMN IF NOT EXISTS display_title VARCHAR"
+            )
+        )
