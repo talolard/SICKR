@@ -32,6 +32,7 @@ from ikea_agent.shared.types import (
     BundleValidationResult,
     SearchBatchToolResult,
     SearchQueryInput,
+    ToolFailureResult,
 )
 
 logger = getLogger(__name__)
@@ -363,23 +364,46 @@ def _propose_bundle_with_services(
     return result
 
 
+def _build_tool_failure_result(
+    *,
+    message: str,
+    reason: str | None = None,
+) -> ToolFailureResult:
+    """Return a structured tool failure so the UI can render the error inline."""
+
+    return ToolFailureResult(message=message, reason=reason)
+
+
 def propose_bundle(
     ctx: RunContext[SearchAgentDeps],
     title: str,
     items: list[BundleProposalItemInput],
     notes: str | None = None,
     budget_cap_eur: float | None = None,
-) -> BundleProposalToolResult:
+) -> BundleProposalToolResult | ToolFailureResult:
     """Hydrate and append one optional bundle proposal for search UI rendering."""
 
-    return _propose_bundle_with_services(
-        ctx,
-        title,
-        items,
-        notes,
-        budget_cap_eur,
-        services=default_search_toolset_services(),
-    )
+    try:
+        return _propose_bundle_with_services(
+            ctx,
+            title,
+            items,
+            notes,
+            budget_cap_eur,
+            services=default_search_toolset_services(),
+        )
+    except ValueError as exc:
+        logger.info(
+            "bundle_proposal_rejected",
+            extra={
+                "reason": str(exc),
+                **telemetry_context(ctx.deps.state),
+            },
+        )
+        return _build_tool_failure_result(
+            message="Bundle proposal could not be built.",
+            reason=str(exc),
+        )
 
 
 def _list_room_3d_snapshot_context_with_services(
@@ -434,15 +458,28 @@ def build_search_toolset(
         items: list[BundleProposalItemInput],
         notes: str | None = None,
         budget_cap_eur: float | None = None,
-    ) -> BundleProposalToolResult:
-        return _propose_bundle_with_services(
-            ctx,
-            title,
-            items,
-            notes,
-            budget_cap_eur,
-            services=resolved_services,
-        )
+    ) -> BundleProposalToolResult | ToolFailureResult:
+        try:
+            return _propose_bundle_with_services(
+                ctx,
+                title,
+                items,
+                notes,
+                budget_cap_eur,
+                services=resolved_services,
+            )
+        except ValueError as exc:
+            logger.info(
+                "bundle_proposal_rejected",
+                extra={
+                    "reason": str(exc),
+                    **telemetry_context(ctx.deps.state),
+                },
+            )
+            return _build_tool_failure_result(
+                message="Bundle proposal could not be built.",
+                reason=str(exc),
+            )
 
     def list_room_3d_snapshot_context_tool(
         ctx: RunContext[SearchAgentDeps],

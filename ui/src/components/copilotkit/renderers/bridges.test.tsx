@@ -53,6 +53,28 @@ describe("BundleProposalBridge", () => {
     });
     expect(screen.getByText("Saved to bundles panel")).toBeInTheDocument();
   });
+
+  it("renders structured tool failures even when the tool never reaches complete", () => {
+    render(
+      <BundleProposalBridge
+        status="executing"
+        result={{
+          status: "error",
+          message: "Bundle proposal could not be built.",
+          reason:
+            "Bundle proposal requires grounded search results. Call `run_search_graph` first and only include returned products.",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Status: failed")).toBeInTheDocument();
+    expect(screen.getByText("Action: Retry with updated input.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Bundle proposal could not be built. (Bundle proposal requires grounded search results. Call `run_search_graph` first and only include returned products.)",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("FloorPlanRenderBridge", () => {
