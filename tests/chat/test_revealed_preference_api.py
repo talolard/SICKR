@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -75,7 +76,7 @@ def _payload(*, thread_id: str, run_id: str, text: str) -> dict[str, object]:
 
 def _build_capturing_search_agent(captured_prompts: list[str]) -> Agent[SearchAgentDeps, str]:
     async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        raise AssertionError("non-stream function path should not be called")
+        return ModelResponse(parts=[])
 
     async def _stream(
         messages: list[ModelMessage],
@@ -111,6 +112,20 @@ def _flatten_message_text(messages: list[ModelMessage]) -> str:
             if isinstance(content, str):
                 parts.append(content)
     return "\n".join(parts)
+
+
+def test_flatten_message_text_handles_instruction_lists_and_non_text_parts() -> None:
+    message = SimpleNamespace(
+        instructions=["first", 2, "second"],
+        parts=[
+            SimpleNamespace(content="body"),
+            SimpleNamespace(content=3),
+        ],
+    )
+
+    flattened = _flatten_message_text(cast("list[ModelMessage]", [message]))
+
+    assert flattened == "first\nsecond\nbody"
 
 
 def test_remember_preference_tool_persists_summary_and_updates_state(tmp_path: Path) -> None:

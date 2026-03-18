@@ -2,6 +2,7 @@
 project-includes = [
     "src/**/*.py",
     "tests/**/*.py",
+    "evals/**/*.py",
 ]
 
 # Keep excludes explicit and avoid accidental broadening via editor temp dirs.

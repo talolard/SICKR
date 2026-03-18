@@ -25,6 +25,7 @@ pnpm test:e2e:real
 - Next.js runtime route: `POST /api/copilotkit`
 - Python AG-UI backend URL is read from `PY_AG_UI_URL`.
 - Default backend URL: `http://localhost:8000/ag-ui/`
+- In local development, `/static/product-images/*` is rewritten through the Next dev server to the backend origin derived from `PY_AG_UI_URL`, so relative image URLs still load when UI and backend use different ports.
 
 ## Separate-process workflow
 

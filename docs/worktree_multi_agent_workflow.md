@@ -43,7 +43,7 @@ Canonical dataset under `data/parquet` remains shared read-only.
 1. Claim task/epic in beads (`bd update <id> --status in_progress --json`).
 2. Start worktree via `make agent-start ...`.
 3. Execute all related implementation in that worktree branch.
-4. Run `make tidy` before completion.
+4. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; run `make ui-test-e2e-real-ui-smoke` separately when the change touches runtime/UI behavior.
 5. Commit task-scoped changes.
 6. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
 7. Retire worktree after merge verification.

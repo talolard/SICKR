@@ -47,12 +47,10 @@ def test_configure_logfire_warns_and_continues_when_token_missing(
 
     def _fake_warning(
         _message: str,
-        *args: object,
-        **kwargs: object,
+        *_args: object,
+        **_kwargs: object,
     ) -> None:
         nonlocal warned
-        _ = args
-        _ = kwargs
         warned += 1
 
     monkeypatch.setattr(logfire_setup.logfire, "configure", _fake_configure)
@@ -84,11 +82,9 @@ def test_configure_logfire_does_not_warn_when_token_present(
 
     def _fake_warning(
         _message: str,
-        *args: object,
-        **kwargs: object,
+        *_args: object,
+        **_kwargs: object,
     ) -> None:
-        _ = args
-        _ = kwargs
         calls["warned"] += 1
 
     monkeypatch.setattr(logfire_setup.logfire, "configure", lambda **_kwargs: None)
@@ -111,11 +107,9 @@ def test_configure_logfire_does_not_warn_when_cli_credentials_exist(
 
     def _fake_warning(
         _message: str,
-        *args: object,
-        **kwargs: object,
+        *_args: object,
+        **_kwargs: object,
     ) -> None:
-        _ = args
-        _ = kwargs
         calls["warned"] += 1
 
     monkeypatch.setattr(logfire_setup.logfire, "configure", lambda **_kwargs: None)
@@ -150,6 +144,6 @@ def test_settings_accepts_app_logfire_token_alias(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("APP_LOGFIRE_TOKEN", "alias-value")
     monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
 
-    settings = AppSettings()
+    settings = AppSettings(_env_file=None)
 
     assert settings.logfire_token == os.getenv("APP_LOGFIRE_TOKEN")
