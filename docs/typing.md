@@ -2,7 +2,7 @@
 
 ## Defaults
 
-- Runtime code uses explicit dataclass-based types for retrieval and graph boundaries.
+- Runtime code uses explicit dataclass-based types for retrieval, agent, and tool boundaries.
 - Data access methods return typed domain objects, not preformatted strings.
 - New runtime SQL should be inline and local to typed repository functions.
 

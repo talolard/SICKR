@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from ikea_agent.chat.agents.state import CommonAgentState, SearchAgentState
+from ikea_agent.shared.types import (
+    SearchBatchToolResult,
+    SearchQueryToolResult,
+    ShortRetrievalResult,
+)
 
 
 def test_common_agent_state_defaults_are_session_ready() -> None:
@@ -88,3 +93,86 @@ def test_search_agent_state_parses_bundle_proposals_into_typed_models() -> None:
     assert state.bundle_proposals[0].bundle_id == "bundle-1"
     assert state.bundle_proposals[0].items[0].product_name == "Chair One"
     assert state.bundle_proposals[0].validations[0].kind == "pricing_complete"
+
+
+def test_search_agent_state_parses_grounded_products_into_typed_models() -> None:
+    state = SearchAgentState(
+        thread_id="thread-123",
+        grounded_products=[
+            {
+                "product_id": "chair-1",
+                "product_name": "Chair One",
+                "query_id": "desk",
+                "semantic_query": "small desk chair",
+            }
+        ],
+    )
+
+    assert state.grounded_products[0].product_id == "chair-1"
+    assert state.grounded_products[0].query_id == "desk"
+
+
+def test_search_agent_state_remembers_grounded_products_without_duplicates() -> None:
+    state = SearchAgentState(thread_id="thread-123")
+
+    state.remember_search_batch(
+        SearchBatchToolResult(
+            queries=[
+                SearchQueryToolResult(
+                    query_id="lighting",
+                    semantic_query="portable lamp",
+                    results=[
+                        ShortRetrievalResult(
+                            product_id="lamp-1",
+                            product_name="Lamp One",
+                            product_type="Lighting",
+                            description_text="Portable lamp",
+                            main_category="lighting",
+                            sub_category="portable_lamp",
+                            width_cm=None,
+                            depth_cm=None,
+                            height_cm=None,
+                            price_eur=19.99,
+                        )
+                    ],
+                    total_candidates=1,
+                    returned_count=1,
+                ),
+                SearchQueryToolResult(
+                    query_id="shelf",
+                    semantic_query="floating shelf",
+                    results=[
+                        ShortRetrievalResult(
+                            product_id="lamp-1",
+                            product_name="Lamp One",
+                            product_type="Lighting",
+                            description_text="Portable lamp",
+                            main_category="lighting",
+                            sub_category="portable_lamp",
+                            width_cm=None,
+                            depth_cm=None,
+                            height_cm=None,
+                            price_eur=19.99,
+                        ),
+                        ShortRetrievalResult(
+                            product_id="shelf-1",
+                            product_name="Shelf One",
+                            product_type="Storage",
+                            description_text="Floating shelf",
+                            main_category="storage",
+                            sub_category="wall_shelf",
+                            width_cm=None,
+                            depth_cm=None,
+                            height_cm=None,
+                            price_eur=24.99,
+                        ),
+                    ],
+                    total_candidates=2,
+                    returned_count=2,
+                ),
+            ]
+        )
+    )
+
+    assert [item.product_id for item in state.grounded_products] == ["lamp-1", "shelf-1"]
+    assert state.grounded_product_ids() == {"lamp-1", "shelf-1"}

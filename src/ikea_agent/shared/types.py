@@ -186,12 +186,24 @@ class SearchBatchToolResult:
     queries: list[SearchQueryToolResult]
 
 
+class GroundedSearchProduct(BaseModel):
+    """One product that has been grounded by a prior search result in this run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: str
+    product_name: str
+    query_id: str
+    semantic_query: str
+
+
 BundleValidationKind = Literal[
     "budget_max_eur",
     "pricing_complete",
     "duplicate_items",
 ]
 BundleValidationStatus = Literal["pass", "warn", "fail", "unknown"]
+RevealedPreferenceKind = Literal["constraint", "fact", "preference"]
 
 
 class BundleProposalItemInput(BaseModel):
@@ -246,6 +258,34 @@ class BundleProposalToolResult(BaseModel):
     validations: list[BundleValidationResult]
     created_at: str
     run_id: str | None
+
+
+class RevealedPreferenceMemory(BaseModel):
+    """Thread-scoped durable preference or constraint stored for later turns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    memory_id: str
+    signal_key: str
+    kind: RevealedPreferenceKind
+    value: str
+    summary: str
+    source_message_text: str
+    created_at: str
+    updated_at: str
+    run_id: str | None
+
+
+class RevealedPreferenceMemoryInput(BaseModel):
+    """Normalized memory item produced before repository persistence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_key: str
+    kind: RevealedPreferenceKind
+    value: str
+    summary: str
+    source_message_text: str
 
 
 @dataclass(frozen=True, slots=True)

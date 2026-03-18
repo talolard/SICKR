@@ -1,4 +1,4 @@
-"""Module runner for `python -m evals.search`."""
+"""Module runner for the canonical `python -m evals.search` entrypoint."""
 
 from evals.search.run import main
 

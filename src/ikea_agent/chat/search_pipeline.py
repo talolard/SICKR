@@ -1,4 +1,4 @@
-"""Plain search pipeline replacing pydantic-graph orchestration."""
+"""Plain batched search pipeline for retrieval, rerank, and diversification."""
 
 from __future__ import annotations
 
@@ -11,11 +11,9 @@ from ikea_agent.chat.runtime import ChatRuntime, embed_queries, search_candidate
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.retrieval.reranker import RerankedItem
 from ikea_agent.shared.types import (
-    RetrievalFilters,
     RetrievalRequest,
     RetrievalResult,
     SearchBatchToolResult,
-    SearchGraphToolResult,
     SearchQueryInput,
     SearchQueryToolResult,
     SearchResultDiversityWarning,
@@ -34,39 +32,6 @@ class QueryStageProfile:
     diversification_ms: float
     reranker_skipped: bool
     diversification_skipped: bool
-
-
-async def run_search_pipeline(
-    *,
-    runtime: ChatRuntime,
-    semantic_query: str,
-    limit: int = 20,
-    candidate_pool_limit: int | None = None,
-    filters: RetrievalFilters | None = None,
-    enable_diversification: bool = True,
-) -> SearchGraphToolResult:
-    """Run one query through the batched search pipeline for compatibility."""
-
-    output = await run_search_pipeline_batch(
-        runtime=runtime,
-        queries=[
-            SearchQueryInput(
-                query_id="query-1",
-                semantic_query=semantic_query,
-                limit=limit,
-                candidate_pool_limit=candidate_pool_limit,
-                filters=filters or RetrievalFilters(),
-                enable_diversification=enable_diversification,
-            )
-        ],
-    )
-    first_query = output.queries[0]
-    return SearchGraphToolResult(
-        results=first_query.results,
-        warning=first_query.warning,
-        total_candidates=first_query.total_candidates,
-        returned_count=first_query.returned_count,
-    )
 
 
 async def run_search_pipeline_batch(

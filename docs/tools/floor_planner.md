@@ -62,6 +62,20 @@ Then proceed with incremental placement updates via `changes`.
 - `render_floor_plan` stores linked `svg_asset_id` / `png_asset_id` so UI can query artifacts.
 - `export_floor_plan_scene_yaml` can restore latest persisted revision after process restart.
 
+## UI Integration Notes
+
+- Floor-plan preview updates are emitted in two paths:
+  - direct renderer callback wiring
+  - the `ikea-floorplan-rendered` browser event bridge consumed by `ui/src/app/page.tsx`
+- Shared bridge helpers live in `ui/src/lib/floorPlanPreviewEvents.ts`.
+- The event bridge exists so preview refresh stays stable across AG-UI replay and rerender timing.
+
+## 3D Snapshot Flow
+
+- The 3D tab exposes `Capture PNG` from the current camera perspective.
+- Snapshot uploads go through `/api/attachments`, then `/api/room-3d/snapshots`.
+- Agent-side retrieval of captured context is explicit via `list_room_3d_snapshot_context`.
+
 ## Sample Data
 Representative payloads and checks are in:
 - `tests/tools/test_floor_planner_models.py`

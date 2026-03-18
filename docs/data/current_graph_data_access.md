@@ -9,13 +9,18 @@ The active orchestration in `src/ikea_agent/chat/search_pipeline.py` runs:
 1. Build `RetrievalRequest` from user query + filters.
 2. Embed query text via runtime embedder (`chat/runtime.py`).
 3. Search Milvus Lite vectors and hydrate candidates from DuckDB.
-4. Rerank candidates.
+4. Rerank candidates with the configured backend.
 5. Apply MMR diversification.
 6. Return `SearchGraphToolResult` for tool/UI rendering.
 
+Default reranking is lexical token overlap. The optional transformer backend is
+explicitly opt-in via `RERANK_BACKEND=transformer` and requires local `torch`
+plus `transformers` dependencies; otherwise runtime construction fails fast and
+deployments should stay on the lexical backend.
+
 ## Retrieval Data Path
 
-`run_search_pipeline` uses runtime helpers in `chat/runtime.py`:
+`run_search_pipeline_batch` uses runtime helpers in `chat/runtime.py`:
 
 1. Embed query text through `pydantic_ai.Embedder`.
 2. Search Milvus Lite collection for nearest vectors.

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 from google.genai.types import ThinkingLevel
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.google import GoogleModelSettings, ThinkingConfigDict
 
 from ikea_agent.chat.agents.common import AgentPrompt
@@ -15,6 +17,7 @@ from ikea_agent.chat.agents.image_analysis.toolset import (
     ImageAnalysisToolsetServices,
     build_image_analysis_toolset,
 )
+from ikea_agent.chat.agents.shared import build_preference_instruction
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -23,6 +26,10 @@ DESCRIPTION = "Analyze uploaded room photos with object detection, depth, and se
 PROMPT_PATH = Path(__file__).with_name("prompt.md")
 PROMPT = AgentPrompt(PROMPT_PATH)
 NOTES = "Image-analysis focused agent with attachment-driven tool calls."
+PREFERENCE_INSTRUCTION: Callable[[RunContext[ImageAnalysisAgentDeps]], str] = cast(
+    "Callable[[RunContext[ImageAnalysisAgentDeps]], str]",
+    build_preference_instruction(),
+)
 
 
 def resolve_model_name(*, explicit_model: str | None = None) -> str:
@@ -65,7 +72,7 @@ def build_image_analysis_agent(
         deps_type=ImageAnalysisAgentDeps,
         output_type=str,
         name="agent_image_analysis",
-        instructions=PROMPT.instruction_text(),
+        instructions=[PROMPT.instruction_text(), PREFERENCE_INSTRUCTION],
         toolsets=[build_image_analysis_toolset(toolset_services)],
     )
 

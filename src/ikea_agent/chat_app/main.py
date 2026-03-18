@@ -2,478 +2,39 @@
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterable, Awaitable, Callable
-from dataclasses import asdict
-from logging import getLogger
 from pathlib import Path
-from typing import Protocol, cast
-from uuid import uuid4
+from typing import cast
 
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI
 from pydantic_ai import Agent
-from pydantic_ai.ag_ui import handle_ag_ui_request
 from starlette.types import ASGIApp
 
-from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
-from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.index import (
     AgentCatalogItem,
-    AgentDescription,
+    AnyAgentDeps,
     build_agent_ag_ui_agent,
-    describe_agent,
+    build_agent_deps,
     list_agent_catalog,
 )
-from ikea_agent.chat.agents.search.deps import SearchAgentDeps
-from ikea_agent.chat.agents.state import (
-    FloorPlanIntakeAgentState,
-    ImageAnalysisAgentState,
-    SearchAgentState,
-)
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
+from ikea_agent.chat_app.agui import _register_ag_ui_routes
 from ikea_agent.chat_app.attachments import AttachmentStore
-from ikea_agent.chat_app.thread_api_models import (
-    AnalysisFeedbackCreateRequest,
-    AnalysisFeedbackItem,
-    AssetListItem,
-    RecentTraceReportItem,
-    RecentTraceReportListResponse,
-    ThreadDetailItem,
-    TraceReportCreateRequest,
-    TraceReportCreateResponse,
+from ikea_agent.chat_app.routes import (
+    _build_attachment_store,
+    _register_agent_catalog_routes,
+    _register_attachment_routes,
+    _register_trace_routes,
 )
-from ikea_agent.chat_app.trace_reports import TraceReportInput, TraceReportWriter
+from ikea_agent.chat_app.thread_routes import _register_thread_data_routes
+from ikea_agent.chat_app.trace_reports import TraceReportWriter
 from ikea_agent.config import get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
-from ikea_agent.persistence.run_history_repository import (
-    RunHistoryRepository,
-    extract_last_user_prompt,
-)
+from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
-from ikea_agent.shared.types import BundleProposalToolResult
-from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
-
-ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-logger = getLogger(__name__)
-
-AnyAgentDeps = FloorPlanIntakeDeps | SearchAgentDeps | ImageAnalysisAgentDeps
-
-
-class _ArchivedMessagesResult(Protocol):
-    def all_messages_json(self) -> bytes: ...
-
-    def new_messages_json(self) -> bytes: ...
-
-
-def _iter_sse_blocks(raw_stream: bytes) -> list[str]:
-    decoded = raw_stream.decode("utf-8", errors="replace")
-    return [block for block in decoded.split("\n\n") if block.strip()]
-
-
-def _parse_sse_payload(raw_data: str) -> object:
-    if not raw_data:
-        return {}
-    try:
-        return json.loads(raw_data)
-    except json.JSONDecodeError:
-        return raw_data
-
-
-def _parse_sse_block(block: str) -> tuple[str | None, object]:
-    event_name: str | None = None
-    data_parts: list[str] = []
-    for line in block.splitlines():
-        if line.startswith("event: "):
-            event_name = line.removeprefix("event: ").strip()
-        elif line.startswith("data: "):
-            data_parts.append(line.removeprefix("data: "))
-    raw_data = "\n".join(data_parts).strip()
-    return event_name, _parse_sse_payload(raw_data)
-
-
-def _build_trace_entry(
-    *,
-    agent_name: str,
-    thread_id: str,
-    run_id: str,
-    index: int,
-    event_name: str | None,
-    parsed_data: object,
-) -> dict[str, object]:
-    event_type = event_name or "message"
-    timestamp: int | None = None
-    if isinstance(parsed_data, dict):
-        event_type = str(parsed_data.get("type") or event_type)
-        timestamp_obj = parsed_data.get("timestamp")
-        if isinstance(timestamp_obj, int):
-            timestamp = timestamp_obj
-    return {
-        "id": f"agent_{agent_name}:{index}",
-        "agentId": f"agent_{agent_name}",
-        "threadId": thread_id,
-        "runId": run_id,
-        "type": event_type,
-        "timestamp": timestamp,
-        "payload": parsed_data,
-    }
-
-
-def _serialize_agui_event_trace(
-    *,
-    raw_stream: bytes,
-    agent_name: str,
-    thread_id: str,
-    run_id: str,
-) -> str:
-    """Normalize one outbound AG-UI SSE stream into canonical JSON events."""
-
-    entries = [
-        _build_trace_entry(
-            agent_name=agent_name,
-            thread_id=thread_id,
-            run_id=run_id,
-            index=index,
-            event_name=event_name,
-            parsed_data=parsed_data,
-        )
-        for index, block in enumerate(_iter_sse_blocks(raw_stream), start=1)
-        for event_name, parsed_data in [_parse_sse_block(block)]
-    ]
-    return json.dumps(entries, ensure_ascii=True)
-
-
-def _build_attachment_store(
-    *,
-    root_dir: Path,
-    asset_repository: AssetRepository | None,
-) -> AttachmentStore:
-    return AttachmentStore(root_dir=root_dir, asset_repository=asset_repository)
-
-
-def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
-    @app.post("/attachments")
-    async def upload_attachment(request: Request) -> dict[str, object]:
-        """Upload one image and return a typed attachment reference."""
-
-        mime_type = request.headers.get("content-type", "")
-        if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
-            raise HTTPException(
-                status_code=415,
-                detail="Unsupported attachment type. Use png/jpeg/webp images.",
-            )
-
-        body = await request.body()
-        if not body:
-            raise HTTPException(status_code=400, detail="Attachment is empty.")
-        if len(body) > MAX_ATTACHMENT_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail="Attachment exceeds 10MB upload limit.",
-            )
-
-        stored = attachment_store.save_image_bytes(
-            content=body,
-            mime_type=mime_type,
-            filename=request.headers.get("x-filename"),
-            thread_id=request.headers.get("x-thread-id") or None,
-            run_id=request.headers.get("x-run-id") or None,
-            kind="user_upload",
-        )
-        return asdict(stored.ref)
-
-    @app.get("/attachments/{attachment_id}")
-    async def get_attachment(attachment_id: str) -> FileResponse:
-        """Serve one previously uploaded attachment by id."""
-
-        stored = attachment_store.resolve(attachment_id)
-        if stored is None:
-            raise HTTPException(status_code=404, detail="Attachment not found.")
-        return FileResponse(
-            path=stored.path,
-            media_type=stored.ref.mime_type,
-            filename=stored.ref.file_name,
-        )
-
-
-def _register_trace_routes(
-    app: FastAPI,
-    *,
-    trace_writer: TraceReportWriter,
-    beads_creator: BeadsTraceIssueCreator,
-    run_history_repository: RunHistoryRepository,
-) -> None:
-    @app.get("/api/traces/recent", response_model=RecentTraceReportListResponse)
-    async def list_recent_trace_reports(limit: int = 5) -> RecentTraceReportListResponse:
-        """Return recent saved trace bundles for diagnostics surfaces."""
-
-        recent = trace_writer.list_recent(limit=min(max(limit, 1), 20))
-        return RecentTraceReportListResponse(
-            traces=[
-                RecentTraceReportItem(
-                    trace_id=item.trace_id,
-                    title=item.title,
-                    created_at=item.created_at,
-                    thread_id=item.thread_id,
-                    agent_name=item.agent_name,
-                    directory=item.directory,
-                    markdown_path=item.markdown_path,
-                )
-                for item in recent
-            ]
-        )
-
-    @app.post("/api/traces", response_model=TraceReportCreateResponse)
-    async def create_trace_report(payload: TraceReportCreateRequest) -> TraceReportCreateResponse:
-        """Persist one current-thread trace report and create Beads triage work."""
-
-        normalized_title = payload.title.strip()
-        if not normalized_title:
-            raise HTTPException(status_code=422, detail="Trace title must not be blank.")
-
-        history = run_history_repository.list_thread_run_history(
-            thread_id=payload.thread_id,
-            agent_name=payload.agent_name,
-        )
-        if not history:
-            raise HTTPException(
-                status_code=404, detail="No archived runs found for that thread/agent."
-            )
-
-        result = trace_writer.write_bundle(
-            TraceReportInput(
-                title=normalized_title,
-                description=payload.description.strip() if payload.description else None,
-                page_url=payload.page_url,
-                thread_id=payload.thread_id,
-                agent_name=payload.agent_name,
-                user_agent=payload.user_agent,
-                console_log_json=payload.console_log if payload.include_console_log else None,
-                run_history=history,
-            )
-        )
-
-        try:
-            beads_result = beads_creator.create_trace_epic_and_task(
-                title=normalized_title,
-                description=payload.description.strip() if payload.description else None,
-                trace_directory=result.directory,
-                trace_json_path=result.trace_json_path,
-                thread_id=payload.thread_id,
-                agent_name=payload.agent_name,
-            )
-        except Exception:
-            logger.exception("trace_report_beads_create_failed")
-            return TraceReportCreateResponse(
-                trace_id=result.trace_id,
-                directory=result.directory,
-                trace_json_path=result.trace_json_path,
-                markdown_path=result.markdown_path,
-                status="saved_without_beads",
-            )
-
-        return TraceReportCreateResponse(
-            trace_id=result.trace_id,
-            directory=result.directory,
-            trace_json_path=result.trace_json_path,
-            markdown_path=result.markdown_path,
-            beads_epic_id=beads_result.epic_id,
-            beads_task_id=beads_result.task_id,
-            status="saved_and_linked",
-        )
-
-
-def _register_agent_catalog_routes(app: FastAPI) -> None:
-    @app.get("/api/agents")
-    async def list_agents() -> dict[str, list[AgentCatalogItem]]:
-        """Return all registered agents for UI navigation."""
-
-        return {"agents": list_agent_catalog()}
-
-    @app.get("/api/agents/{agent_name}/metadata")
-    async def get_agent_metadata(agent_name: str) -> AgentDescription:
-        """Return prompt and tool metadata for one agent."""
-
-        try:
-            return describe_agent(agent_name)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-def _register_thread_data_routes(
-    app: FastAPI,
-    *,
-    thread_query_repository: ThreadQueryRepository,
-) -> None:
-    @app.get("/api/threads/{thread_id}", response_model=ThreadDetailItem)
-    async def get_thread(thread_id: str) -> ThreadDetailItem:
-        item = thread_query_repository.get_thread(thread_id=thread_id)
-        if item is None:
-            raise HTTPException(status_code=404, detail="Thread not found.")
-        return item
-
-    @app.get("/api/threads/{thread_id}/assets", response_model=list[AssetListItem])
-    async def list_thread_assets(thread_id: str) -> list[AssetListItem]:
-        return thread_query_repository.list_assets(thread_id=thread_id)
-
-    @app.get(
-        "/api/threads/{thread_id}/bundle-proposals",
-        response_model=list[BundleProposalToolResult],
-    )
-    async def list_thread_bundle_proposals(thread_id: str) -> list[BundleProposalToolResult]:
-        return thread_query_repository.list_bundle_proposals(thread_id=thread_id)
-
-    @app.post(
-        "/api/threads/{thread_id}/analyses/{analysis_id}/feedback",
-        response_model=AnalysisFeedbackItem,
-    )
-    async def create_analysis_feedback(
-        thread_id: str,
-        analysis_id: str,
-        payload: AnalysisFeedbackCreateRequest,
-    ) -> AnalysisFeedbackItem:
-        created = thread_query_repository.create_analysis_feedback(
-            thread_id=thread_id,
-            analysis_id=analysis_id,
-            feedback_kind=payload.feedback_kind,
-            mask_ordinal=payload.mask_ordinal,
-            mask_label=payload.mask_label,
-            query_text=payload.query_text,
-            note=payload.note,
-            run_id=payload.run_id,
-        )
-        if created is None:
-            raise HTTPException(status_code=404, detail="Analysis not found.")
-        return created
-
-
-def _register_ag_ui_routes(  # noqa: C901
-    app: FastAPI,
-    *,
-    agents: dict[str, Agent[object, str]],
-    deps_by_agent: dict[str, AnyAgentDeps],
-    run_history_repository: RunHistoryRepository | None,
-) -> None:
-    async def _parse_and_record_run_context(
-        request: Request,
-        *,
-        agent_name: str,
-    ) -> tuple[bytes, str, str]:
-        body = await request.body()
-        run_id = f"agui-{uuid4().hex[:16]}"
-        thread_id = "anonymous-thread"
-        try:
-            payload = json.loads(body.decode("utf-8")) if body else {}
-            run_id = str(payload.get("run_id") or run_id)
-            thread_id = str(payload.get("thread_id") or thread_id)
-            parent_run_id = payload.get("parent_run_id")
-            parent_run_id_value = str(parent_run_id) if isinstance(parent_run_id, str) else None
-            message_payload = payload.get("messages")
-            messages = message_payload if isinstance(message_payload, list) else []
-            user_prompt_text = extract_last_user_prompt(
-                [item for item in messages if isinstance(item, dict)]
-            )
-            if run_history_repository is not None:
-                run_history_repository.record_run_start(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    agent_name=agent_name,
-                    parent_run_id=parent_run_id_value,
-                    user_prompt_text=user_prompt_text,
-                    agui_input_messages_json=json.dumps(messages),
-                )
-        except Exception:
-            # If request parsing fails, proceed with AG-UI normal error semantics.
-            logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
-        return body, run_id, thread_id
-
-    def _build_on_complete(run_id: str) -> Callable[[_ArchivedMessagesResult], Awaitable[None]]:
-        async def _on_complete(result: _ArchivedMessagesResult) -> None:
-            if run_history_repository is not None:
-                run_history_repository.record_run_complete(
-                    run_id=run_id,
-                    pydantic_all_messages_json=result.all_messages_json(),
-                    pydantic_new_messages_json=result.new_messages_json(),
-                )
-
-        return _on_complete
-
-    @app.post("/ag-ui/agents/{agent_name}")
-    @app.post("/ag-ui/agents/{agent_name}/")
-    async def run_agent_ag_ui(request: Request, agent_name: str) -> Response:
-        agent = agents.get(agent_name)
-        deps = deps_by_agent.get(agent_name)
-        if agent is None or deps is None:
-            raise HTTPException(status_code=404, detail=f"Unknown agent `{agent_name}`.")
-
-        _body, run_id, thread_id = await _parse_and_record_run_context(
-            request,
-            agent_name=agent_name,
-        )
-        deps.state.thread_id = thread_id
-        deps.state.run_id = run_id
-        on_complete = _build_on_complete(run_id)
-        try:
-            with deps.attachment_store.bind_context(
-                thread_id=deps.state.thread_id or "anonymous-thread",
-                run_id=deps.state.run_id,
-            ):
-                response = await handle_ag_ui_request(
-                    agent,
-                    request,
-                    deps=deps,
-                    on_complete=on_complete,
-                )
-                if (
-                    run_history_repository is None
-                    or not response.headers.get("content-type", "").startswith("text/event-stream")
-                    or not hasattr(response, "body_iterator")
-                ):
-                    return response
-
-                history_repository = run_history_repository
-                body_iterator = cast("AsyncIterable[bytes]", response.body_iterator)
-                captured_chunks: list[bytes] = []
-
-                async def _capture_body() -> AsyncIterable[bytes]:
-                    try:
-                        async for chunk in body_iterator:
-                            chunk_bytes = (
-                                chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8")
-                            )
-                            captured_chunks.append(chunk_bytes)
-                            yield chunk
-                    finally:
-                        history_repository.record_run_event_trace(
-                            run_id=run_id,
-                            agui_event_trace_json=_serialize_agui_event_trace(
-                                raw_stream=b"".join(captured_chunks),
-                                agent_name=agent_name,
-                                thread_id=thread_id,
-                                run_id=run_id,
-                            ),
-                        )
-
-                headers = {
-                    key: value
-                    for key, value in response.headers.items()
-                    if key.lower() != "content-length"
-                }
-                return StreamingResponse(
-                    _capture_body(),
-                    status_code=response.status_code,
-                    headers=headers,
-                    media_type=response.media_type,
-                    background=response.background,
-                )
-        except Exception as exc:
-            if run_history_repository is not None:
-                run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
-            raise
 
 
 def _build_agents(catalog: list[AgentCatalogItem]) -> dict[str, Agent[object, str]]:
@@ -490,34 +51,14 @@ def _build_deps_by_agent(
 ) -> dict[str, AnyAgentDeps]:
     """Build typed deps per agent name."""
 
-    deps_by_agent: dict[str, AnyAgentDeps] = {}
-    for item in catalog:
-        name = item["name"]
-        if name == "floor_plan_intake":
-            deps_by_agent[name] = FloorPlanIntakeDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                floor_plan_scene_store=FloorPlanSceneStore(),
-                state=FloorPlanIntakeAgentState(),
-            )
-            continue
-        if name == "search":
-            deps_by_agent[name] = SearchAgentDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                state=SearchAgentState(),
-            )
-            continue
-        if name == "image_analysis":
-            deps_by_agent[name] = ImageAnalysisAgentDeps(
-                runtime=runtime,
-                attachment_store=attachment_store,
-                state=ImageAnalysisAgentState(),
-            )
-            continue
-        msg = f"No deps builder configured for agent `{name}`."
-        raise RuntimeError(msg)
-    return deps_by_agent
+    return {
+        item["name"]: build_agent_deps(
+            item["name"],
+            runtime=runtime,
+            attachment_store=attachment_store,
+        )
+        for item in catalog
+    }
 
 
 def _build_web_apps(
@@ -571,6 +112,11 @@ def create_app(
         if hasattr(chat_runtime, "session_factory")
         else None
     )
+    revealed_preference_repository = (
+        RevealedPreferenceRepository(chat_runtime.session_factory)
+        if hasattr(chat_runtime, "session_factory")
+        else None
+    )
     thread_query_repository = (
         ThreadQueryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -611,6 +157,7 @@ def create_app(
             agents=agents,
             deps_by_agent=deps_by_agent,
             run_history_repository=run_history_repository,
+            revealed_preference_repository=revealed_preference_repository,
         )
 
     if mount_web_ui:

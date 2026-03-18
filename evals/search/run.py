@@ -1,4 +1,7 @@
-"""CLI entrypoint for live search-agent evals."""
+"""CLI entrypoint for live search-agent evals.
+
+The canonical command is `uv run python -m evals.search`.
+"""
 
 from __future__ import annotations
 

@@ -7,9 +7,14 @@ from typing import cast
 import pytest
 
 from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat.search_pipeline import run_search_pipeline, run_search_pipeline_batch
+from ikea_agent.chat.search_pipeline import run_search_pipeline_batch
 from ikea_agent.retrieval.reranker import RerankedItem
-from ikea_agent.shared.types import RetrievalFilters, RetrievalResult, SearchQueryInput
+from ikea_agent.shared.types import (
+    RetrievalFilters,
+    RetrievalResult,
+    SearchQueryInput,
+    SearchQueryToolResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,32 @@ def _runtime() -> _RuntimeStub:
     )
 
 
+def _run_single_query_batch(
+    *,
+    runtime: _RuntimeStub,
+    semantic_query: str,
+    limit: int = 20,
+    candidate_pool_limit: int | None = None,
+    filters: RetrievalFilters | None = None,
+    enable_diversification: bool = True,
+) -> SearchQueryToolResult:
+    return asyncio.run(
+        run_search_pipeline_batch(
+            runtime=cast("ChatRuntime", runtime),
+            queries=[
+                SearchQueryInput(
+                    query_id="query-1",
+                    semantic_query=semantic_query,
+                    limit=limit,
+                    candidate_pool_limit=candidate_pool_limit,
+                    filters=filters or RetrievalFilters(),
+                    enable_diversification=enable_diversification,
+                )
+            ],
+        )
+    ).queries[0]
+
+
 def test_search_pipeline_returns_empty_matches_when_no_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,12 +167,10 @@ def test_search_pipeline_returns_empty_matches_when_no_results(
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
 
-    output = asyncio.run(
-        run_search_pipeline(
-            runtime=cast("ChatRuntime", runtime),
-            semantic_query="need a couch",
-            enable_diversification=False,
-        )
+    output = _run_single_query_batch(
+        runtime=runtime,
+        semantic_query="need a couch",
+        enable_diversification=False,
     )
 
     assert output.results == []
@@ -160,12 +189,10 @@ def test_search_pipeline_returns_ranked_results(
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
 
-    output = asyncio.run(
-        run_search_pipeline(
-            runtime=cast("ChatRuntime", runtime),
-            semantic_query="need a lamp",
-            enable_diversification=False,
-        )
+    output = _run_single_query_batch(
+        runtime=runtime,
+        semantic_query="need a lamp",
+        enable_diversification=False,
     )
 
     assert len(output.results) == 1
@@ -186,13 +213,11 @@ def test_search_pipeline_uses_candidate_pool_limit_override(
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
 
-    _ = asyncio.run(
-        run_search_pipeline(
-            runtime=cast("ChatRuntime", runtime),
-            semantic_query="need a lamp",
-            limit=20,
-            candidate_pool_limit=280,
-        )
+    _ = _run_single_query_batch(
+        runtime=runtime,
+        semantic_query="need a lamp",
+        limit=20,
+        candidate_pool_limit=280,
     )
 
     assert search_spy.result_limits == [280]

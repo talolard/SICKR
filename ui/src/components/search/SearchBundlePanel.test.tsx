@@ -1,7 +1,47 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import { SearchBundlePanel } from "./SearchBundlePanel";
+
+const longNotes = [
+  "Portable lighting for the hallway without drilling.",
+  "Use adhesive-friendly pieces and keep the explanation fully visible.",
+  "Make the summary easy to scan before opening the detailed items.",
+].join(" ");
+
+const proposal = {
+  bundle_id: "bundle-1",
+  title: "Desk setup",
+  notes: longNotes,
+  budget_cap_eur: 200,
+  items: [
+    {
+      item_id: "chair-1",
+      product_name: "Chair One",
+      description_text: "Desk chair",
+      price_eur: 79.99,
+      quantity: 2,
+      line_total_eur: 159.98,
+      reason: "Two matching chairs",
+    },
+  ],
+  bundle_total_eur: 159.98,
+  validations: [
+    {
+      kind: "pricing_complete" as const,
+      status: "pass" as const,
+      message: "All bundle items have prices, so the total is complete.",
+    },
+    {
+      kind: "duplicate_items" as const,
+      status: "warn" as const,
+      message: "Merged 1 repeated product entry into combined quantities.",
+    },
+  ],
+  created_at: "2026-03-11T11:00:00Z",
+  run_id: "run-1",
+};
 
 describe("SearchBundlePanel", () => {
   it("renders empty state when there are no proposals", () => {
@@ -12,87 +52,21 @@ describe("SearchBundlePanel", () => {
   });
 
   it("renders collapsed bundle summaries with totals by default", () => {
-    render(
-      <SearchBundlePanel
-        proposals={[
-          {
-            bundle_id: "bundle-1",
-            title: "Desk setup",
-            notes: "Balanced for reading and writing.",
-            budget_cap_eur: 200,
-            items: [
-              {
-                item_id: "chair-1",
-                product_name: "Chair One",
-                description_text: "Desk chair",
-                price_eur: 79.99,
-                quantity: 2,
-                line_total_eur: 159.98,
-                reason: "Two matching chairs",
-              },
-            ],
-            bundle_total_eur: 159.98,
-            validations: [
-              {
-                kind: "pricing_complete",
-                status: "pass",
-                message: "All bundle items have prices, so the total is complete.",
-              },
-            ],
-            created_at: "2026-03-11T11:00:00Z",
-            run_id: "run-1",
-          },
-        ]}
-      />,
-    );
+    render(<SearchBundlePanel proposals={[proposal]} />);
 
     expect(screen.getByText("Desk setup")).toBeInTheDocument();
     expect(screen.getByText("€159.98")).toBeInTheDocument();
     expect(screen.getByText("1 item")).toBeInTheDocument();
     expect(screen.queryByText("Two matching chairs")).not.toBeInTheDocument();
+    expect(screen.getByText("Scroll to read the full explanation.")).toBeInTheDocument();
+    expect(screen.getByTestId("bundle-summary-notes")).toHaveClass("overflow-y-auto");
+    expect(screen.getByRole("button", { name: /desk setup/i })).toHaveClass("cursor-pointer");
   });
 
-  it("reveals scrollable bundle details and rationale when expanded", async () => {
+  it("reveals pricing table details and rationale when expanded", async () => {
     const user = userEvent.setup();
 
-    render(
-      <SearchBundlePanel
-        proposals={[
-          {
-            bundle_id: "bundle-1",
-            title: "Desk setup",
-            notes: "Balanced for reading and writing.",
-            budget_cap_eur: 200,
-            items: [
-              {
-                item_id: "chair-1",
-                product_name: "Chair One",
-                description_text: "Desk chair",
-                price_eur: 79.99,
-                quantity: 2,
-                line_total_eur: 159.98,
-                reason: "Two matching chairs",
-              },
-            ],
-            bundle_total_eur: 159.98,
-            validations: [
-              {
-                kind: "pricing_complete",
-                status: "pass",
-                message: "All bundle items have prices, so the total is complete.",
-              },
-              {
-                kind: "duplicate_items",
-                status: "warn",
-                message: "Merged 1 repeated product entry into combined quantities.",
-              },
-            ],
-            created_at: "2026-03-11T11:00:00Z",
-            run_id: "run-1",
-          },
-        ]}
-      />,
-    );
+    render(<SearchBundlePanel proposals={[proposal]} />);
 
     await user.click(screen.getByRole("button", { name: /desk setup/i }));
 
@@ -101,6 +75,29 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByText("Chair One")).toBeInTheDocument();
     expect(screen.getByText(/Pricing:/)).toBeInTheDocument();
     expect(screen.getByText(/Duplicates:/)).toBeInTheDocument();
+    expect(screen.getByText("Unit")).toBeInTheDocument();
+    expect(screen.getByText("Qty")).toBeInTheDocument();
+    expect(screen.getAllByText("Total")).toHaveLength(2);
     expect(screen.getByTestId("bundle-items-bundle-1")).toHaveClass("max-h-96", "overflow-y-auto");
+  });
+
+  it("expands and highlights the active bundle when selected from chat", () => {
+    const scrollIntoView = vi.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+
+    render(<SearchBundlePanel activeBundleId="bundle-1" proposals={[proposal]} />);
+
+    expect(screen.getByText("Selected")).toBeInTheDocument();
+    expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest" });
+
+    window.requestAnimationFrame = originalRequestAnimationFrame;
+    window.HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   });
 });
