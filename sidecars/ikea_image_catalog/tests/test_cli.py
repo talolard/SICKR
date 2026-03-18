@@ -9,12 +9,16 @@ from PIL import Image
 import pytest
 
 from ikea_image_catalog.cli import (
+    _prior_discovery_files,
     _merge_catalog_rows,
     _prepare_download_stage,
     _run_scrapy_stage,
     _run_summary,
     _scrapy_response_status_counts,
+    _seen_source_page_urls,
+    main,
 )
+from ikea_image_catalog.jsonl_io import write_jsonl
 from ikea_image_catalog.models import DiscoveryRecord, DownloadRecord
 from ikea_image_catalog.paths import DEFAULT_OUTPUT_ROOT, local_image_path, resolve_output_root
 
@@ -185,3 +189,31 @@ def test_run_scrapy_stage_uses_live_src_tree(
     assert captured["cwd"].name == "ikea_image_catalog"
     assert captured["env"]["SCRAPY_SETTINGS_MODULE"] == "ikea_image_catalog.settings"
     assert str((captured["cwd"] / "src").resolve()) in captured["env"]["PYTHONPATH"].split(":")
+
+
+def test_seen_source_page_urls_excludes_current_run(tmp_path: Path) -> None:
+    completed_run = tmp_path / "runs" / "pilot-1000"
+    current_run = tmp_path / "runs" / "all-products-1"
+    write_jsonl(
+        completed_run / "discovered.jsonl",
+        [
+            {"source_page_url": "https://www.ikea.com/de/en/p/foo-1/"},
+            {"source_page_url": "https://www.ikea.com/us/en/p/bar-2/"},
+        ],
+    )
+    write_jsonl(
+        current_run / "discovered.jsonl",
+        [{"source_page_url": "https://www.ikea.com/fr/en/p/baz-3/"}],
+    )
+
+    files = _prior_discovery_files(tmp_path, exclude_run_id="all-products-1")
+    assert files == [completed_run / "discovered.jsonl"]
+    assert _seen_source_page_urls(tmp_path, exclude_run_id="all-products-1") == {
+        "https://www.ikea.com/de/en/p/foo-1/",
+        "https://www.ikea.com/us/en/p/bar-2/",
+    }
+
+
+def test_main_rejects_all_with_limit() -> None:
+    with pytest.raises(SystemExit):
+        main(["crawl", "--all", "--limit", "10"])
