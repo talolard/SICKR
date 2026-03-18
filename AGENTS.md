@@ -61,6 +61,14 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - Tool rendering and user-visible tool UX policy: [docs/subagent_tool_rendering_policy.md](docs/subagent_tool_rendering_policy.md)
 - CopilotKit and AG-UI backend protocol notes: [external_docs/pydantic_ai_ag_ui.md](external_docs/pydantic_ai_ag_ui.md)
 - UI integration spec: [spec/ui/pydanticai_copilotkit_integration.md](spec/ui/pydanticai_copilotkit_integration.md)
+- Effective patterns from the March 18 floor-plan fixes:
+  - prefer capability-based shared agent-shell logic over hard-coding one agent into shared flows
+  - use in-flow chat primitives for page content and reserve sidebar primitives for actual sidebar UX
+  - persist the rendered transcript state, not only the thread id, anywhere refresh rehydration matters
+  - put user-facing labels in typed backend metadata instead of deriving them ad hoc in React
+  - treat cold-start `make ui-test-e2e-real-ui-smoke` behavior as a product contract, not only a CI wrapper detail
+  - when a new eval suite is needed, copy the strongest existing repo eval architecture and change case content before changing framework shape
+- Retrospective details: [docs/archive/floor_plan_agent_fixes_retrospective_2026-03-18.md](docs/archive/floor_plan_agent_fixes_retrospective_2026-03-18.md)
 
 ## Data and logging
 
