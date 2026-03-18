@@ -5,50 +5,68 @@ include $(WORKTREE_ENV_FILE)
 endif
 
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
-	ui-install ui-dev ui-dev-mock ui-dev-real ui-test ui-test-e2e ui-test-e2e-real \
-	ui-test-e2e-real-ui-smoke dev-all dev-all-mock reset agent-start merge-list \
-	merge-list-all merge-list-failing merge-list-json merge-normalize
+	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
+	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
+	dev-all dev-all-mock reset agent-start merge-list merge-list-all \
+	merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
 PORT ?= $(or $(BACKEND_PORT),8000)
 UI_DIR ?= ui
 UI_PORT ?= 3000
+UI_NODE_MODULES ?= $(UI_DIR)/node_modules
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
+UV := env -u VIRTUAL_ENV uv
+UV_RUN := $(UV) run
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
 export DUCKDB_PATH MILVUS_LITE_URI ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
 
 deps:
-	uv sync --all-groups
+	$(UV) sync --all-groups
 
 lint:
-	uv run ruff check .
+	$(UV_RUN) ruff check .
 
 format:
-	uv run ruff format .
+	$(UV_RUN) ruff format .
 
 format-check:
-	uv run ruff format --check .
+	$(UV_RUN) ruff format --check .
 
 format-all: format
-	uv run ruff check --fix .
-	uv run ruff format --check .
-	uv run pyrefly check
+	$(UV_RUN) ruff check --fix .
+	$(UV_RUN) ruff format --check .
+	$(UV_RUN) pyrefly check
 
 typecheck:
-	uv run pyrefly check
+	$(UV_RUN) pyrefly check
 
 test:
-	uv run pytest
+	$(UV_RUN) pytest
 
 preflight:
 	./scripts/preflight.sh
 
 chat:
-	uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
+	$(UV_RUN) uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
 
 ui-install:
 	cd $(UI_DIR) && corepack enable && corepack prepare pnpm@10.6.3 --activate && pnpm install
+
+ui-ensure-install:
+	@if [ ! -d "$(UI_NODE_MODULES)" ]; then \
+		echo "UI dependencies are not installed in $(UI_DIR); bootstrapping them now."; \
+		$(MAKE) ui-install; \
+	fi
+
+ui-lint: ui-ensure-install
+	cd $(UI_DIR) && pnpm lint
+
+ui-typecheck: ui-ensure-install
+	cd $(UI_DIR) && pnpm typecheck
+
+ui-validate: ui-lint ui-typecheck ui-test
 
 ui-dev:
 	cd $(UI_DIR) && pnpm dev --port $(UI_PORT)
@@ -59,7 +77,7 @@ ui-dev-mock:
 ui-dev-real:
 	cd $(UI_DIR) && NEXT_PUBLIC_USE_MOCK_AGENT=0 PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm dev --port $(UI_PORT)
 
-ui-test:
+ui-test: ui-ensure-install
 	cd $(UI_DIR) && pnpm test
 
 ui-test-e2e:
@@ -145,6 +163,7 @@ merge-normalize:
 
 # One command before commit.
 tidy: format
-	uv run ruff check --fix .
-	uv run pyrefly check
-	uv run pytest
+	$(UV_RUN) ruff check --fix .
+	$(UV_RUN) pyrefly check
+	$(UV_RUN) pytest
+	$(MAKE) ui-validate
