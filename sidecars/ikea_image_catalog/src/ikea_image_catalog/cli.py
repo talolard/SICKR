@@ -315,9 +315,7 @@ def _crawl_setting_args(
     if concurrent_requests is not None:
         setting_args.append(("CONCURRENT_REQUESTS", str(concurrent_requests)))
     if concurrent_requests_per_domain is not None:
-        setting_args.append(
-            ("CONCURRENT_REQUESTS_PER_DOMAIN", str(concurrent_requests_per_domain))
-        )
+        setting_args.append(("CONCURRENT_REQUESTS_PER_DOMAIN", str(concurrent_requests_per_domain)))
     if autothrottle_target_concurrency is not None:
         setting_args.append(
             ("AUTOTHROTTLE_TARGET_CONCURRENCY", str(autothrottle_target_concurrency))
