@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import replace
 from typing import TypeVar
 
-from pydantic_evals.evaluators import Evaluator, EvaluatorContext, LLMJudge
+from pydantic_evals.evaluators import Evaluator, EvaluatorContext, EvaluatorOutput, LLMJudge
 
 from evals.base.capture import extract_logfire_tool_call_captures
-from evals.base.types import ToolCallJudgeOutput
+from evals.base.types import ToolCallCapture, ToolCallJudgeOutput
 
 InputsT = TypeVar("InputsT")
 OutputT = TypeVar("OutputT")
@@ -35,12 +34,25 @@ class LogfireToolCallLLMJudge(Evaluator[InputsT, OutputT, MetadataT]):
     async def evaluate(
         self,
         ctx: EvaluatorContext[InputsT, OutputT, MetadataT],
-    ) -> object:
+    ) -> EvaluatorOutput:
         """Evaluate one case using tool calls extracted from the span tree."""
 
+        tool_calls: list[ToolCallCapture] = list(
+            extract_logfire_tool_call_captures(ctx.span_tree, tool_name=self.tool_name)
+        )
         synthetic_output = ToolCallJudgeOutput(
-            tool_calls=extract_logfire_tool_call_captures(ctx.span_tree, tool_name=self.tool_name),
+            tool_calls=tool_calls,
             final_output=ctx.output,
         )
-        synthetic_ctx = replace(ctx, output=synthetic_output)
+        synthetic_ctx = EvaluatorContext[InputsT, ToolCallJudgeOutput, MetadataT](
+            name=ctx.name,
+            inputs=ctx.inputs,
+            metadata=ctx.metadata,
+            expected_output=None,
+            output=synthetic_output,
+            duration=ctx.duration,
+            _span_tree=ctx._span_tree,
+            attributes=ctx.attributes,
+            metrics=ctx.metrics,
+        )
         return await self.judge.evaluate_async(synthetic_ctx)

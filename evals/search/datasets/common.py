@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pydantic_evals import Case
-from pydantic_evals.evaluators import LLMJudge
+from pydantic_evals.evaluators import Evaluator, LLMJudge
 
 from evals.base import LogfireToolCallLLMJudge
 from evals.search.types import SearchEvalInput
@@ -62,7 +62,7 @@ or shows no bundle call despite bundle-stage expectations.
 """
 
 
-def build_bundle_case_evaluators() -> tuple[object, ...]:
+def build_bundle_case_evaluators() -> tuple[Evaluator[SearchEvalInput, str, None], ...]:
     """Return the extra evaluators used only for bundle-stage scenarios."""
 
     return (
@@ -97,7 +97,7 @@ def build_case(
 ) -> Case[SearchEvalInput, str, None]:
     """Build one search eval case with optional bundle-stage expectations."""
 
-    case_evaluators: tuple[object, ...] = ()
+    case_evaluators: tuple[Evaluator[SearchEvalInput, str, None], ...] = ()
     if bundle_attrs:
         case_evaluators = build_bundle_case_evaluators()
     return Case(
