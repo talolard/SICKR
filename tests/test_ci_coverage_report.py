@@ -163,6 +163,7 @@ diff --git a/ui/src/components/Demo.tsx b/ui/src/components/Demo.tsx
     baseline_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "backend_source": {"percent": 70.0},
                 "backend_tests": {"percent": 100.0},
                 "frontend_source": {"percent": 60.0},
@@ -200,6 +201,8 @@ diff --git a/ui/src/components/Demo.tsx b/ui/src/components/Demo.tsx
     report = json.loads(report_path.read_text(encoding="utf-8"))
 
     assert report["backend_source"]["percent"] == pytest.approx(66.6666666667)
+    assert report["schema_version"] == 2
+    assert report["baseline_comparable"] is True
     assert report["backend_source"]["regressed"] is True
     assert report["backend_source"]["delta_points"] == pytest.approx(-3.3333333333)
     assert report["backend_tests"]["percent"] == 100.0
@@ -258,6 +261,7 @@ def test_ci_coverage_report_handles_missing_baseline_and_non_code_diff(tmp_path:
     report = json.loads(report_path.read_text(encoding="utf-8"))
 
     assert report["baseline_available"] is False
+    assert report["baseline_comparable"] is False
     assert report["total_regressed"] is False
     assert report["patch"]["applicable"] is False
     assert "Default-branch baseline unavailable" in summary_path.read_text(encoding="utf-8")
@@ -277,6 +281,7 @@ def test_ci_coverage_report_can_fail_on_thresholds_and_regressions(tmp_path: Pat
     baseline_path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "backend_source": {"percent": 80.0},
                 "backend_tests": {"percent": 100.0},
                 "frontend_source": {"percent": 80.0},
@@ -327,3 +332,55 @@ def test_ci_coverage_report_can_fail_on_thresholds_and_regressions(tmp_path: Pat
         check=False,
     )
     assert regression_result.returncode == 3
+
+
+def test_ci_coverage_report_skips_regression_for_incompatible_baseline(
+    tmp_path: Path,
+) -> None:
+    backend_json = tmp_path / "backend.json"
+    _write_backend_fixture(tmp_path, backend_json)
+
+    frontend_summary = tmp_path / "coverage-summary.json"
+    frontend_lcov = tmp_path / "lcov.info"
+    _write_frontend_fixture(tmp_path, frontend_summary, frontend_lcov)
+
+    summary_path = tmp_path / "summary.md"
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "frontend_source": {"percent": 99.0},
+                "backend_source": {"percent": 99.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_script(
+        [
+            "--backend-json",
+            str(backend_json),
+            "--frontend-summary",
+            str(frontend_summary),
+            "--frontend-lcov",
+            str(frontend_lcov),
+            "--repo-root",
+            str(tmp_path),
+            "--baseline",
+            str(baseline_path),
+            "--summary-md",
+            str(summary_path),
+            "--report-json",
+            str(report_path),
+            "--fail-on-regression",
+        ],
+        check=False,
+    )
+
+    assert result.returncode == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["baseline_available"] is True
+    assert report["baseline_comparable"] is False
+    assert report["total_regressed"] is False
+    assert "older coverage schema" in summary_path.read_text(encoding="utf-8")

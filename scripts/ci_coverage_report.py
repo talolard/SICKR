@@ -36,6 +36,7 @@ _FRONTEND_TEST_IMPORT_PATTERN = re.compile(
 _FRONTEND_TEST_FILE_PATTERNS = ("ui/src/**/*.test.ts", "ui/src/**/*.test.tsx")
 _FRONTEND_TEST_HELPER_PATTERNS = ("ui/src/test/**/*.ts", "ui/src/test/**/*.tsx")
 _FRONTEND_TEST_SETUP_NAMES = {"setup.ts", "setup.tsx"}
+_REPORT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -86,12 +87,14 @@ class PatchCoverage:
 class CoverageReport:
     """Full coverage report, including thresholds and baseline deltas."""
 
+    schema_version: int
     backend_source: CoverageSurface
     backend_tests: CoverageSurface
     frontend_source: CoverageSurface
     frontend_tests: CoverageSurface
     patch: PatchCoverage
     baseline_available: bool
+    baseline_comparable: bool
     total_regressed: bool
     threshold_failed: bool
 
@@ -490,6 +493,14 @@ def _read_baseline_percent(baseline_payload: dict[str, Any] | None, key: str) ->
     return float(percent) if percent is not None else None
 
 
+def _baseline_is_comparable(baseline_payload: dict[str, Any] | None) -> bool:
+    """Return whether a saved baseline was produced by the same measurement schema."""
+
+    if baseline_payload is None:
+        return False
+    return baseline_payload.get("schema_version") == _REPORT_SCHEMA_VERSION
+
+
 def _apply_baseline(
     surface_key: str, current: CoverageSurface, baseline_percent: float | None
 ) -> CoverageSurface:
@@ -591,25 +602,28 @@ def generate_report(
     if baseline_path is not None and baseline_path.exists():
         baseline_payload = json.loads(baseline_path.read_text())
 
+    baseline_comparable = _baseline_is_comparable(baseline_payload)
+    comparable_baseline = baseline_payload if baseline_comparable else None
+
     backend_source = _apply_baseline(
         "backend_source",
         backend_surfaces["backend_source"],
-        _read_baseline_percent(baseline_payload, "backend_source"),
+        _read_baseline_percent(comparable_baseline, "backend_source"),
     )
     backend_tests = _apply_baseline(
         "backend_tests",
         backend_surfaces["backend_tests"],
-        _read_baseline_percent(baseline_payload, "backend_tests"),
+        _read_baseline_percent(comparable_baseline, "backend_tests"),
     )
     frontend_source = _apply_baseline(
         "frontend_source",
         frontend_surfaces["frontend_source"],
-        _read_baseline_percent(baseline_payload, "frontend_source"),
+        _read_baseline_percent(comparable_baseline, "frontend_source"),
     )
     frontend_tests = _apply_baseline(
         "frontend_tests",
         frontend_surfaces["frontend_tests"],
-        _read_baseline_percent(baseline_payload, "frontend_tests"),
+        _read_baseline_percent(comparable_baseline, "frontend_tests"),
     )
 
     patch = PatchCoverage(
@@ -628,13 +642,15 @@ def generate_report(
 
     surfaces = (backend_source, backend_tests, frontend_source, frontend_tests)
     return CoverageReport(
+        schema_version=_REPORT_SCHEMA_VERSION,
         backend_source=backend_source,
         backend_tests=backend_tests,
         frontend_source=frontend_source,
         frontend_tests=frontend_tests,
         patch=patch,
         baseline_available=baseline_payload is not None,
-        total_regressed=any(surface.regressed for surface in surfaces),
+        baseline_comparable=baseline_comparable,
+        total_regressed=baseline_comparable and any(surface.regressed for surface in surfaces),
         threshold_failed=any(surface.threshold_failed for surface in surfaces),
     )
 
@@ -710,6 +726,14 @@ def render_markdown(report: CoverageReport) -> str:
                 "",
                 "Default-branch baseline unavailable. Thresholds were checked, but "
                 "regression comparison was skipped for this run.",
+            ]
+        )
+    elif not report.baseline_comparable:
+        lines.extend(
+            [
+                "",
+                "Default-branch baseline used an older coverage schema. Thresholds were "
+                "checked, but regression comparison was skipped for this run.",
             ]
         )
 
