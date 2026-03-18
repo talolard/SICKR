@@ -23,8 +23,11 @@ uv run --project sidecars/ikea_image_catalog \
 
 Optional:
 
+- `--all` to crawl all remaining product pages instead of a sampled limit
 - `--country Germany --country USA` to constrain the sample
 - `--output-root /some/other/path` to override the default shared output root
+- `--concurrent-requests 16 --concurrent-requests-per-domain 8 --autothrottle-target-concurrency 4` to increase parallelism modestly
+- `--no-skip-seen-pages` to force a re-crawl of product-page URLs already present in prior discovery outputs
 
 ## Output Root
 
@@ -34,6 +37,11 @@ Default output root:
 
 This is intentionally shared across worktrees so pilot runs and downloaded
 master images live in one stable location.
+
+By default, new crawl runs read prior `runs/*/discovered.jsonl` files under this
+root and skip source page URLs that have already been discovered. The shared
+`images/masters/` directory also acts as the download cache, so previously
+downloaded canonical assets are not fetched again.
 
 ## Files Produced
 

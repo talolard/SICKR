@@ -88,6 +88,29 @@ def _write_seeds(paths: RunPaths, seeds: list[ProductSeed]) -> None:
     write_jsonl(paths.seeds_jsonl, [seed.to_dict() for seed in seeds])
 
 
+def _prior_discovery_files(output_root: Path, *, exclude_run_id: str) -> list[Path]:
+    """Return discovery files from prior runs that can seed incremental skipping."""
+
+    run_roots = sorted((output_root / "runs").glob("*"))
+    return [
+        run_root / "discovered.jsonl"
+        for run_root in run_roots
+        if run_root.name != exclude_run_id and (run_root / "discovered.jsonl").exists()
+    ]
+
+
+def _seen_source_page_urls(output_root: Path, *, exclude_run_id: str) -> set[str]:
+    """Load previously discovered source page URLs from prior runs."""
+
+    seen_urls: set[str] = set()
+    for discovery_file in _prior_discovery_files(output_root, exclude_run_id=exclude_run_id):
+        for row in read_jsonl(discovery_file):
+            source_page_url = row.get("source_page_url")
+            if isinstance(source_page_url, str):
+                seen_urls.add(source_page_url)
+    return seen_urls
+
+
 def _cached_download_record(
     *, crawl_run_id: str, image_asset_key: str, canonical_image_url: str, path: Path
 ) -> DownloadRecord:
@@ -280,7 +303,34 @@ def _run_summary(
     }
 
 
-def _run_discovery(paths: RunPaths, crawl_run_id: str) -> None:
+def _crawl_setting_args(
+    *,
+    concurrent_requests: int | None,
+    concurrent_requests_per_domain: int | None,
+    autothrottle_target_concurrency: float | None,
+) -> list[tuple[str, str]]:
+    """Translate optional crawl overrides into Scrapy `-s` settings."""
+
+    setting_args: list[tuple[str, str]] = []
+    if concurrent_requests is not None:
+        setting_args.append(("CONCURRENT_REQUESTS", str(concurrent_requests)))
+    if concurrent_requests_per_domain is not None:
+        setting_args.append(
+            ("CONCURRENT_REQUESTS_PER_DOMAIN", str(concurrent_requests_per_domain))
+        )
+    if autothrottle_target_concurrency is not None:
+        setting_args.append(
+            ("AUTOTHROTTLE_TARGET_CONCURRENCY", str(autothrottle_target_concurrency))
+        )
+    return setting_args
+
+
+def _run_discovery(
+    paths: RunPaths,
+    crawl_run_id: str,
+    *,
+    crawl_setting_args: Sequence[tuple[str, str]],
+) -> None:
     _run_scrapy_stage(
         spider_name="product_image_discovery",
         feed_path=paths.discovered_jsonl,
@@ -290,10 +340,11 @@ def _run_discovery(paths: RunPaths, crawl_run_id: str) -> None:
             ("seeds_file", str(paths.seeds_jsonl)),
             ("crawl_run_id", crawl_run_id),
         ],
+        setting_args=crawl_setting_args,
     )
 
 
-def _run_download(paths: RunPaths) -> None:
+def _run_download(paths: RunPaths, *, crawl_setting_args: Sequence[tuple[str, str]]) -> None:
     _run_scrapy_stage(
         spider_name="product_image_download",
         feed_path=paths.downloads_jsonl,
@@ -301,6 +352,7 @@ def _run_download(paths: RunPaths) -> None:
         stats_path=paths.download_stats_json,
         spider_args=[("manifest_file", str(paths.download_manifest_jsonl))],
         setting_args=[
+            *crawl_setting_args,
             ("FILES_STORE", str(paths.output_root / "images")),
             ("FILES_EXPIRES", "3650"),
         ],
@@ -308,14 +360,35 @@ def _run_download(paths: RunPaths) -> None:
 
 
 def _run_crawl(
-    *, limit: int, run_id: str, output_root_override: str | None, countries: Sequence[str] | None
+    *,
+    limit: int | None,
+    run_id: str,
+    output_root_override: str | None,
+    countries: Sequence[str] | None,
+    skip_seen_pages: bool,
+    concurrent_requests: int | None,
+    concurrent_requests_per_domain: int | None,
+    autothrottle_target_concurrency: float | None,
 ) -> RunPaths:
     repo_root = _repo_root()
     output_root = resolve_output_root(output_root_override)
     paths = build_run_paths(output_root, run_id)
-    seeds = load_product_seeds(repo_root=repo_root, limit=limit, countries=countries)
+    seen_source_page_urls = (
+        _seen_source_page_urls(output_root, exclude_run_id=run_id) if skip_seen_pages else set()
+    )
+    seeds = load_product_seeds(
+        repo_root=repo_root,
+        limit=limit,
+        countries=countries,
+        skip_source_page_urls=seen_source_page_urls,
+    )
     _write_seeds(paths, seeds)
-    _run_discovery(paths, run_id)
+    crawl_setting_args = _crawl_setting_args(
+        concurrent_requests=concurrent_requests,
+        concurrent_requests_per_domain=concurrent_requests_per_domain,
+        autothrottle_target_concurrency=autothrottle_target_concurrency,
+    )
+    _run_discovery(paths, run_id, crawl_setting_args=crawl_setting_args)
     discovery_records = [
         DiscoveryRecord.from_dict(row) for row in read_jsonl(paths.discovered_jsonl)
     ]
@@ -323,7 +396,7 @@ def _run_crawl(
     cached_records, manifest_rows = _prepare_download_stage(paths, discovery_records)
     if manifest_rows:
         write_jsonl(paths.download_manifest_jsonl, [row.to_dict() for row in manifest_rows])
-        _run_download(paths)
+        _run_download(paths, crawl_setting_args=crawl_setting_args)
         new_download_records = [
             DownloadRecord.from_dict(row) for row in read_jsonl(paths.downloads_jsonl)
         ]
@@ -365,10 +438,19 @@ def build_parser() -> argparse.ArgumentParser:
     crawl_parser = subparsers.add_parser(
         "crawl", help="Run discovery and download for one sampled batch"
     )
-    crawl_parser.add_argument("--limit", type=int, default=1000)
+    crawl_parser.add_argument("--limit", type=int)
+    crawl_parser.add_argument("--all", action="store_true")
     crawl_parser.add_argument("--run-id", default=f"crawl-{_now_compact()}")
     crawl_parser.add_argument("--output-root")
     crawl_parser.add_argument("--country", action="append", dest="countries")
+    crawl_parser.add_argument("--concurrent-requests", type=int)
+    crawl_parser.add_argument("--concurrent-requests-per-domain", type=int)
+    crawl_parser.add_argument("--autothrottle-target-concurrency", type=float)
+    crawl_parser.add_argument(
+        "--skip-seen-pages",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
 
     return parser
 
@@ -379,11 +461,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     arguments = parser.parse_args(argv)
     if arguments.command == "crawl":
+        if arguments.all and arguments.limit is not None:
+            parser.error("--all cannot be combined with an explicit --limit")
+        limit: int | None = None if arguments.all else (arguments.limit or 1000)
         paths = _run_crawl(
-            limit=arguments.limit,
+            limit=limit,
             run_id=arguments.run_id,
             output_root_override=arguments.output_root,
             countries=arguments.countries,
+            skip_seen_pages=arguments.skip_seen_pages,
+            concurrent_requests=arguments.concurrent_requests,
+            concurrent_requests_per_domain=arguments.concurrent_requests_per_domain,
+            autothrottle_target_concurrency=arguments.autothrottle_target_concurrency,
         )
         print(
             json.dumps(

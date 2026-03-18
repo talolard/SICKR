@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -17,12 +18,13 @@ CANONICAL_PRODUCTS_PATH = "data/parquet/products_canonical/country=Germany/data_
 def load_product_seeds(
     *,
     repo_root: Path,
-    limit: int,
+    limit: int | None,
     countries: Sequence[str] | None = None,
+    skip_source_page_urls: Collection[str] = (),
 ) -> list[ProductSeed]:
-    """Read a deterministic sample of product-page inputs from repo parquet data."""
+    """Read a deterministic set of product-page inputs from repo parquet data."""
 
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         msg = f"limit must be positive, got {limit}"
         raise ValueError(msg)
 
@@ -43,8 +45,9 @@ def load_product_seeds(
         FROM read_parquet('{raw_glob}')
         WHERE {where_sql}
         ORDER BY md5(country || '|' || trim(url))
-        LIMIT {limit}
     """
+    if not skip_source_page_urls and limit is not None:
+        query += f"\nLIMIT {limit}"
 
     product_key_lookup: dict[str, str] = {}
     if canonical_path.exists():
@@ -61,15 +64,21 @@ def load_product_seeds(
                 continue
             product_key_lookup[str(product_id)] = str(canonical_product_key)
 
-    rows = duckdb.sql(query).fetchall()
-    return [
-        ProductSeed(
-            product_id=str(product_id),
-            repo_canonical_product_key=product_key_lookup.get(str(product_id)),
-            product_name=str(product_name),
-            country=str(country),
-            source_page_url=str(source_page_url),
-            page_fetch_url=build_page_fetch_url(str(source_page_url)),
+    seeds: list[ProductSeed] = []
+    for product_id, product_name, country, source_page_url in duckdb.sql(query).fetchall():
+        normalized_source_page_url = str(source_page_url)
+        if normalized_source_page_url in skip_source_page_urls:
+            continue
+        seeds.append(
+            ProductSeed(
+                product_id=str(product_id),
+                repo_canonical_product_key=product_key_lookup.get(str(product_id)),
+                product_name=str(product_name),
+                country=str(country),
+                source_page_url=normalized_source_page_url,
+                page_fetch_url=build_page_fetch_url(normalized_source_page_url),
+            )
         )
-        for product_id, product_name, country, source_page_url in rows
-    ]
+        if limit is not None and len(seeds) >= limit:
+            break
+    return seeds
