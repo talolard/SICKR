@@ -1,0 +1,150 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { vi } from "vitest";
+
+import { CopilotKitProviders, useThreadSession } from "./CopilotKitProviders";
+
+const {
+  usePathnameMock,
+  randomUuidMock,
+} = vi.hoisted(() => ({
+  usePathnameMock: vi.fn<() => string>(() => "/agents/search"),
+  randomUuidMock: vi.fn<() => string>(() => "12345678-1234-1234-1234-123456789abc"),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: usePathnameMock,
+}));
+
+vi.mock("@copilotkit/react-core", () => ({
+  CopilotKit: ({
+    agent,
+    children,
+    runtimeUrl,
+    threadId,
+  }: {
+    agent: string;
+    children: ReactElement;
+    runtimeUrl: string;
+    threadId?: string;
+  }): ReactElement => (
+    <div
+      data-agent={agent}
+      data-runtime-url={runtimeUrl}
+      data-testid="copilotkit-root"
+      data-thread-id={threadId ?? ""}
+    >
+      {children}
+    </div>
+  ),
+}));
+
+function ThreadSessionConsumer(): ReactElement {
+  const { agentKey, threadId, threadIds, warning, createThread, selectThread } = useThreadSession();
+
+  return (
+    <div>
+      <p data-testid="agent-key">{agentKey}</p>
+      <p data-testid="thread-id">{threadId ?? "none"}</p>
+      <p data-testid="thread-ids">{threadIds.join(",")}</p>
+      <p data-testid="warning">{warning ?? "none"}</p>
+      <button onClick={createThread} type="button">
+        Create thread
+      </button>
+      <button
+        onClick={() => {
+          selectThread("archived-thread");
+        }}
+        type="button"
+      >
+        Select archived thread
+      </button>
+    </div>
+  );
+}
+
+describe("CopilotKitProviders", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/agents/search");
+    usePathnameMock.mockReturnValue("/agents/search");
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(randomUuidMock);
+  });
+
+  it("bootstraps the active thread from the URL and exposes it through the session context", async () => {
+    window.history.replaceState({}, "", "/agents/search?thread=url-thread");
+    window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "stored-thread");
+
+    render(
+      <CopilotKitProviders>
+        <ThreadSessionConsumer />
+      </CopilotKitProviders>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("url-thread");
+    });
+
+    expect(screen.getByTestId("agent-key")).toHaveTextContent("agent_search");
+    expect(screen.getByTestId("thread-ids")).toHaveTextContent("url-thread");
+    expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-agent", "agent_search");
+    expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-thread-id", "url-thread");
+  });
+
+  it("creates a new thread, updates storage, and rewrites the thread URL param", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <CopilotKitProviders>
+        <ThreadSessionConsumer />
+      </CopilotKitProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create thread" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("agent_search-12345678");
+    });
+
+    expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
+      "agent_search-12345678",
+    );
+    expect(window.sessionStorage.getItem("copilotkit_ui_resumable_thread_ids_tmp_agent_search")).toContain(
+      "agent_search-12345678",
+    );
+    expect(window.location.search).toContain("thread=agent_search-12345678");
+  });
+
+  it("falls back to a new resumable thread when selecting an unavailable backend thread", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "copilotkit_ui_thread_ids_agent_search",
+      JSON.stringify(["current-thread", "archived-thread"]),
+    );
+    window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "current-thread");
+    window.sessionStorage.setItem(
+      "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
+      JSON.stringify(["current-thread"]),
+    );
+    randomUuidMock.mockReturnValueOnce("abcdef12-1234-1234-1234-123456789abc");
+
+    render(
+      <CopilotKitProviders>
+        <ThreadSessionConsumer />
+      </CopilotKitProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select archived thread" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("agent_search-abcdef12");
+    });
+
+    expect(screen.getByTestId("warning")).toHaveTextContent("archived-thread is not available");
+    expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
+      "agent_search-abcdef12",
+    );
+  });
+});

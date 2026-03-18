@@ -99,6 +99,7 @@ class RetrievalResult:
     semantic_score: float
     filter_pass_reasons: tuple[str, ...]
     rank_explanation: str
+    display_title: str | None = None
 
     def to_short_result(
         self,
@@ -110,6 +111,7 @@ class RetrievalResult:
         return ShortRetrievalResult(
             product_id=self.canonical_product_key,
             product_name=self.product_name,
+            display_title=self.display_title,
             url=self.url,
             product_type=self.product_type,
             description_text=self.description_text,
@@ -138,6 +140,7 @@ class ShortRetrievalResult:
     height_cm: float | None
     price_eur: float | None
     url: str | None = None
+    display_title: str | None = None
     image_urls: tuple[str, ...] = ()
 
 
@@ -235,6 +238,7 @@ class BundleProposalLineItem(BaseModel):
 
     item_id: str
     product_name: str
+    display_title: str | None = None
     product_url: str | None = None
     description_text: str | None
     price_eur: float | None

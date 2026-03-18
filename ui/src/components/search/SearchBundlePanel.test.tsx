@@ -19,6 +19,7 @@ const proposal = {
     {
       item_id: "chair-1",
       product_name: "Chair One",
+      display_title: "Chair One Ergonomic Desk Chair",
       product_url: "https://www.ikea.com/de/de/p/chair-one-12345678/",
       description_text: "Desk chair",
       price_eur: 79.99,
@@ -88,7 +89,7 @@ describe("SearchBundlePanel", () => {
 
     expect(screen.getAllByText("Why it is in the bundle")).toHaveLength(2);
     expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
-    expect(screen.getByText("Chair One")).toBeInTheDocument();
+    expect(screen.getByText("Chair One Ergonomic Desk Chair")).toBeInTheDocument();
     expect(screen.getByText(/Pricing:/)).toBeInTheDocument();
     expect(screen.getByText(/Duplicates:/)).toBeInTheDocument();
     expect(screen.getAllByText("Unit")).toHaveLength(2);
@@ -97,7 +98,9 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByTestId("bundle-items-bundle-1")).toHaveClass("max-h-96", "overflow-y-auto");
     expect(screen.getByTestId("bundle-item-bundle-1-chair-1-button")).toBeInTheDocument();
     expect(screen.getByTestId("bundle-item-bundle-1-lamp-1-placeholder")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open product page for Chair One" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "Open product page for Chair One Ergonomic Desk Chair" }),
+    ).toHaveAttribute(
       "href",
       "https://www.ikea.com/de/de/p/chair-one-12345678/",
     );

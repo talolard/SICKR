@@ -1,0 +1,362 @@
+"use client";
+
+import { startTransition, useEffect, useMemo, useState } from "react";
+
+import type { AttachmentRef } from "@/lib/attachments";
+import {
+  listThreadBundleProposals,
+  listThreadKnownFacts,
+  type KnownFactItem,
+  ThreadDataRequestError,
+} from "@/lib/api/threadDataClient";
+import {
+  appendBundleProposal,
+  loadBundleProposals,
+  mergeBundleProposals,
+  replaceBundleProposals,
+  type BundleProposal,
+} from "@/lib/bundleProposalsStore";
+import { startFeedbackCapture } from "@/lib/feedbackCapture";
+import {
+  type FloorPlanPreviewState,
+  loadFloorPlanPreview,
+  saveFloorPlanPreview,
+} from "@/lib/floorPlanPreviewStore";
+import {
+  loadThreadSnapshot,
+  saveThreadSnapshot,
+  type ThreadSnapshot,
+} from "@/lib/threadStore";
+import {
+  fetchAgentMetadata,
+  fetchAgents,
+  type AgentItem,
+  type AgentMetadata,
+} from "@/lib/agents";
+
+export type AgentMetadataState = {
+  agents: AgentItem[];
+  metadata: AgentMetadata | null;
+  error: string;
+};
+
+export type KnownFactsState = {
+  knownFacts: KnownFactItem[];
+  knownFactsError: string | null;
+  isLoadingKnownFacts: boolean;
+};
+
+export type SearchBundleState = {
+  activeBundleId: string | null;
+  bundleProposals: BundleProposal[];
+  bundleProposalError: string | null;
+  isLoadingBundleProposals: boolean;
+  setActiveBundleId: (bundleId: string | null) => void;
+  addBundleProposal: (proposal: BundleProposal) => void;
+};
+
+export type CopilotAgentStateBridge = {
+  state: unknown;
+  setState: (state: Record<string, unknown>) => void;
+};
+
+export function isSearchAgent(currentAgent: string): boolean {
+  return currentAgent === "search";
+}
+
+export function isFloorPlanAgent(currentAgent: string): boolean {
+  return currentAgent === "floor_plan_intake";
+}
+
+export function supportsImageAttachments(currentAgent: string): boolean {
+  return currentAgent === "image_analysis" || currentAgent === "floor_plan_intake";
+}
+
+export function resolveAttachmentUri(uri: string): string {
+  if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) {
+    return uri;
+  }
+  if (uri.startsWith("/attachments/")) {
+    return uri;
+  }
+  return `/attachments/${uri.replace(/^\/+/, "")}`;
+}
+
+export function useAgentMetadataState(currentAgent: string): AgentMetadataState {
+  const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    startFeedbackCapture();
+  }, []);
+
+  useEffect(() => {
+    void fetchAgents()
+      .then((items) => setAgents(items))
+      .catch((fetchError: unknown) => {
+        const message = fetchError instanceof Error ? fetchError.message : "Failed to load agents.";
+        setError(message);
+      });
+  }, []);
+
+  useEffect(() => {
+    void fetchAgentMetadata(currentAgent)
+      .then((payload) => {
+        setMetadata(payload);
+        setError("");
+      })
+      .catch((fetchError: unknown) => {
+        const message = fetchError instanceof Error ? fetchError.message : "Failed to load agent metadata.";
+        setError(message);
+      });
+  }, [currentAgent]);
+
+  return { agents, metadata, error };
+}
+
+export function useKnownFactsState(threadId: string | null): KnownFactsState {
+  const [knownFacts, setKnownFacts] = useState<KnownFactItem[]>([]);
+  const [knownFactsError, setKnownFactsError] = useState<string | null>(null);
+  const [isLoadingKnownFacts, setIsLoadingKnownFacts] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!threadId) {
+      startTransition(() => {
+        setKnownFacts([]);
+        setKnownFactsError(null);
+        setIsLoadingKnownFacts(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    startTransition(() => {
+      setKnownFacts([]);
+      setKnownFactsError(null);
+      setIsLoadingKnownFacts(true);
+    });
+    void listThreadKnownFacts(threadId)
+      .then((persistedKnownFacts) => {
+        if (!active) {
+          return;
+        }
+        setKnownFacts(persistedKnownFacts);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) {
+          return;
+        }
+        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
+          return;
+        }
+        setKnownFactsError(
+          fetchError instanceof Error ? fetchError.message : "Failed to load known facts.",
+        );
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setIsLoadingKnownFacts(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [threadId]);
+
+  return { knownFacts, knownFactsError, isLoadingKnownFacts };
+}
+
+export function useSearchBundleState(
+  currentAgent: string,
+  threadId: string | null,
+): SearchBundleState {
+  const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
+  const [bundleProposalError, setBundleProposalError] = useState<string | null>(null);
+  const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
+  const [isLoadingBundleProposals, setIsLoadingBundleProposals] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!threadId || !isSearchAgent(currentAgent)) {
+      startTransition(() => {
+        setActiveBundleId(null);
+        setBundleProposals([]);
+        setBundleProposalError(null);
+        setIsLoadingBundleProposals(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    const localProposals = loadBundleProposals(threadId);
+    startTransition(() => {
+      setActiveBundleId(null);
+      setBundleProposals(localProposals);
+      setBundleProposalError(null);
+      setIsLoadingBundleProposals(true);
+    });
+    void listThreadBundleProposals(threadId)
+      .then((persistedProposals) => {
+        if (!active) {
+          return;
+        }
+        setBundleProposals(
+          replaceBundleProposals(threadId, mergeBundleProposals(persistedProposals, localProposals)),
+        );
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) {
+          return;
+        }
+        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
+          return;
+        }
+        setBundleProposalError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Failed to load saved bundle proposals.",
+        );
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setIsLoadingBundleProposals(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentAgent, threadId]);
+
+  const addBundleProposal = (proposal: BundleProposal): void => {
+    setActiveBundleId(proposal.bundle_id);
+    if (!threadId) {
+      setBundleProposals((current) => mergeBundleProposals([proposal], current));
+      return;
+    }
+    setBundleProposalError(null);
+    setBundleProposals(appendBundleProposal(threadId, proposal));
+  };
+
+  return {
+    activeBundleId,
+    bundleProposalError,
+    bundleProposals,
+    isLoadingBundleProposals,
+    setActiveBundleId,
+    addBundleProposal,
+  };
+}
+
+export function useCopilotAgentStateSync(params: {
+  agent: CopilotAgentStateBridge;
+  currentAgent: string;
+  threadId: string | null;
+  imageAttachments: AttachmentRef[];
+  bundleProposals: BundleProposal[];
+}): void {
+  const { agent, currentAgent, threadId, imageAttachments, bundleProposals } = params;
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    const attachmentsForAgent = supportsImageAttachments(currentAgent) ? imageAttachments : [];
+    const previousState =
+      typeof agent.state === "object" && agent.state !== null
+        ? (agent.state as Record<string, unknown>)
+        : {};
+    agent.setState({
+      ...previousState,
+      session_id: threadId,
+      thread_id: threadId,
+      attachments: attachmentsForAgent,
+      bundle_proposals: isSearchAgent(currentAgent) ? bundleProposals : [],
+    });
+  }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
+}
+
+export function useThreadSnapshotSync(params: {
+  agentKey: string;
+  threadId: string | null;
+  messages: unknown[];
+  replaceMessages: (messages: unknown[]) => void;
+}): void {
+  const { agentKey, threadId, messages, replaceMessages } = params;
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    const snapshot = loadThreadSnapshot(threadId, agentKey);
+    replaceMessages(snapshot?.copilotMessages ?? []);
+  }, [agentKey, replaceMessages, threadId]);
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+    const previousSnapshot = loadThreadSnapshot(threadId, agentKey);
+    const nextSnapshot: ThreadSnapshot = {
+      threadId,
+      prompt: previousSnapshot?.prompt ?? "",
+      assistantText: previousSnapshot?.assistantText ?? "",
+      toolCallsById: previousSnapshot?.toolCallsById ?? {},
+      attachments: previousSnapshot?.attachments ?? [],
+      copilotMessages: messages,
+      ...(previousSnapshot?.messages ? { messages: previousSnapshot.messages } : {}),
+    };
+    saveThreadSnapshot(nextSnapshot, agentKey);
+  }, [agentKey, messages, threadId]);
+}
+
+export function useFloorPlanPreviewState(threadId: string | null): {
+  floorPlanPreview: FloorPlanPreviewState | null;
+  saveRenderedFloorPlan: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
+} {
+  const [activeFloorPlanPreview, setActiveFloorPlanPreview] = useState<FloorPlanPreviewState | null>(
+    null,
+  );
+
+  const persistedFloorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
+    if (!threadId) {
+      return null;
+    }
+    return loadFloorPlanPreview(threadId);
+  }, [threadId]);
+
+  const floorPlanPreview = useMemo((): FloorPlanPreviewState | null => {
+    if (!threadId) {
+      return null;
+    }
+    if (activeFloorPlanPreview?.threadId === threadId) {
+      return activeFloorPlanPreview;
+    }
+    return persistedFloorPlanPreview;
+  }, [activeFloorPlanPreview, persistedFloorPlanPreview, threadId]);
+
+  const saveRenderedFloorPlan = (snapshot: Omit<FloorPlanPreviewState, "threadId">): void => {
+    const resolvedImages = snapshot.images.map((image) => ({
+      ...image,
+      uri: resolveAttachmentUri(image.uri),
+    }));
+    const nextSnapshot: FloorPlanPreviewState = {
+      ...snapshot,
+      threadId: threadId ?? "pending",
+      images: resolvedImages,
+    };
+    setActiveFloorPlanPreview(nextSnapshot);
+    if (threadId) {
+      saveFloorPlanPreview(nextSnapshot);
+    }
+  };
+
+  return { floorPlanPreview, saveRenderedFloorPlan };
+}

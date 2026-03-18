@@ -30,6 +30,7 @@ def _seed_products(engine: Engine) -> None:
                 unique_id,
                 country,
                 product_name,
+                display_title,
                 product_type,
                 description_text,
                 main_category,
@@ -48,12 +49,12 @@ def _seed_products(engine: Engine) -> None:
                 source_updated_at
             ) VALUES
                 (
-                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One', 'Desk', 'Work desk',
+                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One', 'Desk One Compact Workstation', 'Desk', 'Work desk',
                     'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
                     4.0, 10, 'none', true, 'https://example.com/1', now()
                 ),
                 (
-                    '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', 'Desk', 'Compact desk',
+                    '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', null, 'Desk', 'Compact desk',
                     'tables-desks', 'desks', '100x50x74 cm', 100, 50, 74, 80, 'EUR',
                     4.5, 20, 'none', true, 'https://example.com/2', now()
                 )
@@ -105,6 +106,7 @@ def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> N
     assert len(results) == 1
     assert results[0].canonical_product_key == "1-DE"
     assert results[0].embedding_text == "line1\nline2"
+    assert results[0].display_title == "Desk One Compact Workstation"
 
 
 def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Path) -> None:
@@ -129,3 +131,17 @@ def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Pat
 
     assert len(results) == 1
     assert results[0].canonical_product_key == "1-DE"
+
+
+def test_read_product_by_key_preserves_family_name_and_exposes_display_title(tmp_path: Path) -> None:
+    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_3.duckdb"))
+    _setup_schema(engine)
+    _seed_products(engine)
+
+    repository = CatalogRepository(engine)
+
+    product = repository.read_product_by_key(product_key="1-DE")
+
+    assert product is not None
+    assert product.product_name == "Desk One"
+    assert product.display_title == "Desk One Compact Workstation"

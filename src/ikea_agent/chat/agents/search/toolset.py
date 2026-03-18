@@ -159,6 +159,7 @@ def _hydrate_bundle_items(
             BundleProposalLineItem(
                 item_id=item.item_id,
                 product_name=product.product_name,
+                display_title=product.display_title,
                 product_url=product.url,
                 description_text=product.description_text,
                 price_eur=product.price_eur,
