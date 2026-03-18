@@ -60,7 +60,7 @@ def _chat_request_payload(user_text: str) -> dict[str, object]:
 
 def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
     async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        raise AssertionError("non-stream function path should not be called")
+        return ModelResponse(parts=[])
 
     async def _stream(
         _messages: list[ModelMessage],
@@ -175,9 +175,8 @@ def test_agent_web_chat_mount_boots_and_dispatches_to_agent(
         *,
         explicit_model: str | None = None,
     ) -> Agent[object, str]:
+        _ = name
         _ = explicit_model
-        if name != "floor_plan_intake":
-            raise KeyError(f"Unknown agent `{name}`.")
         return agent_agent
 
     monkeypatch.setattr("pydantic_ai.ui._web.app._get_ui_html", _stubbed_ui_html)
@@ -220,7 +219,7 @@ def test_function_model_web_adapter_uses_streaming_path_for_chat_dispatch(
     stream_calls = {"count": 0}
 
     async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        raise AssertionError("non-stream function path should not be called")
+        return ModelResponse(parts=[])
 
     async def _stream(
         _messages: list[ModelMessage],

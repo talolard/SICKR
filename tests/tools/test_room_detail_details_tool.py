@@ -238,9 +238,10 @@ def test_room_detail_service_raises_clean_error_when_extractor_fails(
     store = AttachmentStore(tmp_path / "attachments")
     payload = _store_attachment(store)
 
-    def _build_extractor(*, use_native_output: bool, **_: object) -> _FakeAgent:
-        if use_native_output:
-            return _FakeAgent(error=RuntimeError("structured output parse failed"))
+    def _build_extractor(*, use_native_output: bool, **kwargs: object) -> _FakeAgent:
+        del kwargs
+        _use_native_output = use_native_output
+        assert isinstance(_use_native_output, bool)
         return _FakeAgent(error=RuntimeError("structured output parse failed"))
 
     monkeypatch.setattr(

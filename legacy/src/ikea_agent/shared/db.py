@@ -1,4 +1,4 @@
-"""DuckDB helpers shared by pipeline modules."""
+"""DuckDB helpers retained only for legacy reference scripts."""
 
 from __future__ import annotations
 

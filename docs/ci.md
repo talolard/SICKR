@@ -12,7 +12,7 @@ Trigger behavior:
 Active jobs:
 - `backend`: Ruff + Pyrefly + Pytest (JUnit + coverage + annotations)
 - `frontend-unit`: ESLint + TypeScript + Vitest (JUnit + coverage + annotations)
-- `coverage`: GitHub-native backend/frontend coverage comparison against the latest default-branch baseline
+- `coverage`: four-surface coverage gate plus comparison against the latest default-branch baseline
 - `e2e-mock`: Playwright against mock route (JUnit + report artifact)
 - `ci-summary`: one at-a-glance rollup of all CI lanes plus coverage numbers
 
@@ -38,16 +38,23 @@ Checks emit annotations in GitHub UI for:
 Current gating behavior:
 - ESLint is blocking (`--max-warnings=0`).
 - TypeScript and all test lanes are blocking.
-- `Coverage (backend + frontend)` is blocking when backend or frontend total coverage regresses relative to the latest default-branch baseline.
+- `Coverage (backend + frontend)` is blocking when any staged absolute threshold fails.
+- `Coverage (backend + frontend)` is also blocking when measured source coverage regresses relative to the latest default-branch baseline.
 - `CI Summary` is informational; it summarizes lane status and coverage numbers but does not gate merges on its own.
 
 ## Local Equivalent
 
 `make tidy` is the closest local approximation of the blocking unit-level CI lanes. It runs:
-- backend Ruff autofix + Pyrefly + Pytest
-- frontend ESLint + TypeScript + Vitest
+- backend Ruff autofix + Pyrefly + coverage-enabled Pytest
+- frontend ESLint + TypeScript + coverage-enabled Vitest
+- staged local coverage enforcement via `make coverage`
 
-It does not run coverage reporting, GitHub annotations, or Playwright E2E lanes. Use `make ui-test-e2e-real-ui-smoke` separately when the change affects runtime/UI behavior.
+Useful local commands:
+- `make backend-coverage`
+- `make frontend-coverage`
+- `make coverage`
+
+`make tidy` does not run GitHub annotations or Playwright E2E lanes. Use `make ui-test-e2e-real-ui-smoke` separately when the change affects runtime/UI behavior.
 
 ## Coverage Reporting
 
@@ -61,11 +68,13 @@ Current artifacts:
 Default-branch baseline flow:
 - A successful `push` run on `main` uploads a `coverage-baseline` artifact from the `coverage` job.
 - Pull request runs locate the latest successful baseline artifact from `main`.
-- The `coverage` job compares current backend/frontend totals against that baseline inside GitHub Actions.
+- The `coverage` job compares current backend/frontend source totals against that baseline inside GitHub Actions.
 
 Pull request coverage signals:
-- Backend total coverage
-- Frontend total coverage
+- Backend source coverage
+- Backend test execution coverage
+- Frontend source coverage
+- Frontend test execution coverage
 - Patch coverage on changed executable lines in measured files
 - Regression status versus the latest default-branch baseline
 
@@ -73,6 +82,26 @@ Authoritative PR surfaces:
 - `Coverage (backend + frontend)` check: canonical coverage gate and detailed coverage summary
 - `CI Summary` check: compact overview of all CI lanes, including whether optional real-backend e2e was skipped
 - Existing suite-level checks (`Backend Pytest`, `Frontend Vitest`, `E2E Playwright Mock`): detailed test failure reporting
+
+Stage A thresholds live in `scripts/coverage_thresholds.py` and are the single source of truth for local and CI enforcement.
+
+Current Stage A thresholds:
+- Backend source: `78%`
+- Backend tests: `100%`
+- Frontend source: `37%`
+- Frontend tests: `100%`
+
+Surface definitions:
+- Backend source: all files under `src/ikea_agent/**`
+- Frontend source: all files under `ui/src/**`
+- Backend tests: file-execution coverage for `tests/**/*.py`
+- Frontend tests: file-execution coverage for `ui/src/**/*.test.{ts,tsx}` plus helper modules under `ui/src/test/**`
+
+Important implementation detail:
+- Backend and frontend source coverage still come from `pytest-cov` and Vitest coverage reports.
+- Test surfaces are enforced as execution coverage rather than per-line coverage. This is intentional: the requirement is that every test module and helper is actually exercised, and Vitest hard-excludes `*.test.*` files from its built-in final coverage reports.
+- Hypothesis-based pytest tests count normally because they run inside the same measured pytest process.
+- `evals/**` and Playwright specs/helpers are excluded from the `100%` test-execution gate.
 
 ## No-Secrets / No-Paid-Calls Test Guard
 
