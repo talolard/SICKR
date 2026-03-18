@@ -25,6 +25,7 @@ const proposal: BundleProposal = {
       quantity: 2,
       line_total_eur: 159.98,
       reason: "Two matching chairs",
+      image_urls: [],
     },
   ],
   bundle_total_eur: 159.98,

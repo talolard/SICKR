@@ -69,4 +69,35 @@ describe("bundleProposalsStore", () => {
       "bundle-1",
     ]);
   });
+
+  it("backfills missing image_urls when loading persisted proposals", () => {
+    window.localStorage.setItem(
+      "copilotkit_ui_bundle_proposals_thread-1",
+      JSON.stringify([
+        {
+          bundle_id: "bundle-1",
+          title: "Persisted bundle",
+          notes: null,
+          budget_cap_eur: null,
+          items: [
+            {
+              item_id: "chair-1",
+              product_name: "Chair One",
+              description_text: null,
+              price_eur: 19.99,
+              quantity: 1,
+              line_total_eur: 19.99,
+              reason: "Seat",
+            },
+          ],
+          bundle_total_eur: 19.99,
+          validations: [],
+          created_at: "2026-03-11T10:00:00Z",
+          run_id: null,
+        },
+      ]),
+    );
+
+    expect(loadBundleProposals(threadId)[0]?.items[0]?.image_urls).toEqual([]);
+  });
 });

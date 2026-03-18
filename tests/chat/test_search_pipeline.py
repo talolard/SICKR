@@ -41,6 +41,15 @@ class _CatalogStub:
         return {}
 
 
+@dataclass(frozen=True, slots=True)
+class _ProductImageCatalogStub:
+    image_urls: tuple[str, ...] = ()
+
+    def image_urls_for_canonical_key(self, *, canonical_product_key: str) -> tuple[str, ...]:
+        _ = canonical_product_key
+        return self.image_urls
+
+
 @dataclass(slots=True)
 class _RerankerSpy:
     calls: list[tuple[str, int]] = field(default_factory=list)
@@ -63,6 +72,7 @@ class _RuntimeStub:
     settings: _SettingsStub
     reranker: _RerankerSpy
     catalog_repository: _CatalogStub
+    product_image_catalog: _ProductImageCatalogStub
 
 
 @dataclass(slots=True)
@@ -128,6 +138,7 @@ def _runtime() -> _RuntimeStub:
         settings=_SettingsStub(),
         reranker=_RerankerSpy(),
         catalog_repository=_CatalogStub(),
+        product_image_catalog=_ProductImageCatalogStub(image_urls=("/static/product-images/1",)),
     )
 
 
@@ -199,6 +210,7 @@ def test_search_pipeline_returns_ranked_results(
     assert output.results[0].product_id == "1-DE"
     assert output.results[0].product_name == "Lamp"
     assert output.results[0].product_type == "Lamp"
+    assert output.results[0].image_urls == ("/static/product-images/1",)
     assert output.total_candidates == 1
     assert search_spy.result_limits == [200]
 

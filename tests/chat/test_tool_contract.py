@@ -32,4 +32,5 @@ def test_short_retrieval_result_contract_shape_is_stable() -> None:
         "depth_cm",
         "height_cm",
         "price_eur",
+        "image_urls",
     ]

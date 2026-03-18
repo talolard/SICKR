@@ -19,6 +19,7 @@ from ikea_agent.chat.agents.index import (
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.agui import _register_ag_ui_routes
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.product_image_routes import _register_product_image_routes
 from ikea_agent.chat_app.routes import (
     _build_attachment_store,
     _register_agent_catalog_routes,
@@ -135,6 +136,12 @@ def create_app(
         _register_thread_data_routes(
             app,
             thread_query_repository=thread_query_repository,
+        )
+    product_image_catalog = getattr(chat_runtime, "product_image_catalog", None)
+    if product_image_catalog is not None:
+        _register_product_image_routes(
+            app,
+            product_image_catalog=product_image_catalog,
         )
 
     catalog = list_agent_catalog()

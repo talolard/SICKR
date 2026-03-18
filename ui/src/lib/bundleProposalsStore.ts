@@ -16,6 +16,7 @@ export const bundleProposalItemSchema = z.object({
   quantity: z.number(),
   line_total_eur: z.number().nullable(),
   reason: z.string(),
+  image_urls: z.array(z.string()).default([]),
 });
 
 export const bundleProposalSchema = z.object({

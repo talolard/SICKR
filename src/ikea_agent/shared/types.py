@@ -100,7 +100,11 @@ class RetrievalResult:
     filter_pass_reasons: tuple[str, ...]
     rank_explanation: str
 
-    def to_short_result(self) -> ShortRetrievalResult:
+    def to_short_result(
+        self,
+        *,
+        image_urls: tuple[str, ...] = (),
+    ) -> ShortRetrievalResult:
         """Project retrieval payload into tool-safe short result shape."""
 
         return ShortRetrievalResult(
@@ -114,6 +118,7 @@ class RetrievalResult:
             depth_cm=self.depth_cm,
             height_cm=self.height_cm,
             price_eur=self.price_eur,
+            image_urls=image_urls,
         )
 
 
@@ -131,6 +136,7 @@ class ShortRetrievalResult:
     depth_cm: float | None
     height_cm: float | None
     price_eur: float | None
+    image_urls: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +248,7 @@ class BundleProposalLineItem(BaseModel):
     quantity: int = Field(ge=1)
     line_total_eur: float | None
     reason: str
+    image_urls: list[str] = Field(default_factory=list)
 
 
 class BundleProposalToolResult(BaseModel):

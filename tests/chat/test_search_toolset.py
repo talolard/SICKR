@@ -65,8 +65,18 @@ class _CatalogStub:
 
 
 @dataclass(frozen=True, slots=True)
+class _ProductImageCatalogStub:
+    image_urls: tuple[str, ...] = ()
+
+    def image_urls_for_canonical_key(self, *, canonical_product_key: str) -> tuple[str, ...]:
+        _ = canonical_product_key
+        return self.image_urls
+
+
+@dataclass(frozen=True, slots=True)
 class _RuntimeStub:
     catalog_repository: _CatalogStub
+    product_image_catalog: _ProductImageCatalogStub
 
 
 @dataclass(slots=True)
@@ -124,10 +134,18 @@ class _SearchPipelineSpy:
         )
 
 
-def _run_context(*, price_eur: float | None) -> RunContext[SearchAgentDeps]:
+def _run_context(
+    *,
+    price_eur: float | None,
+    image_urls: tuple[str, ...] = (),
+) -> RunContext[SearchAgentDeps]:
     deps = SearchAgentDeps(
         runtime=cast(
-            "ChatRuntime", _RuntimeStub(catalog_repository=_CatalogStub(price_eur=price_eur))
+            "ChatRuntime",
+            _RuntimeStub(
+                catalog_repository=_CatalogStub(price_eur=price_eur),
+                product_image_catalog=_ProductImageCatalogStub(image_urls=image_urls),
+            ),
         ),
         attachment_store=cast("AttachmentStore", object()),
         state=SearchAgentState(thread_id="thread-1", run_id="run-1"),
@@ -211,7 +229,10 @@ def test_run_search_graph_forwards_one_batched_query_list() -> None:
 
 
 def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure() -> None:
-    ctx = _run_context(price_eur=20.0)
+    ctx = _run_context(
+        price_eur=20.0,
+        image_urls=("/static/product-images/chair-1", "/static/product-images/chair-1/2"),
+    )
     _ground_item(ctx, item_id="chair-1")
     pipeline_spy = _SearchPipelineSpy()
     repository_spy = _SearchRepositorySpy()
@@ -235,6 +256,10 @@ def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure
     assert result.bundle_total_eur == 40.0
     assert result.items[0].line_total_eur == 40.0
     assert result.items[0].description_text == "Useful chair"
+    assert result.items[0].image_urls == [
+        "/static/product-images/chair-1",
+        "/static/product-images/chair-1/2",
+    ]
     assert [validation.kind for validation in result.validations] == [
         "pricing_complete",
         "duplicate_items",
