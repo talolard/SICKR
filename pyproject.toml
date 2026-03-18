@@ -139,7 +139,7 @@ docstring-code-format = true
 quote-style = "double"
 
 [tool.coverage.run]
-source = ["src/ikea_agent"]
+source = ["src/ikea_agent", "tests"]
 branch = true
 
 [tool.coverage.report]

@@ -314,3 +314,33 @@ def test_search_pipeline_batch_rejects_empty_query_list() -> None:
                 queries=[],
             )
         )
+
+
+def test_search_pipeline_diversification_uses_reranker_and_neighbor_similarities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _runtime()
+    search_spy = _SearchCandidatesSpy(
+        responses=[[_sample_result(product_id="1-DE"), _sample_result(product_id="2-DE")]]
+    )
+    embed_spy = _EmbedQueriesSpy()
+
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+
+    output = asyncio.run(
+        run_search_pipeline_batch(
+            runtime=cast("ChatRuntime", runtime),
+            queries=[
+                SearchQueryInput(
+                    query_id="lighting",
+                    semantic_query="desk lamp",
+                    enable_diversification=True,
+                )
+            ],
+        )
+    )
+
+    assert runtime.reranker.calls == [("desk lamp", 2)]
+    assert runtime.catalog_repository.neighbor_similarity_calls == [["1-DE", "2-DE"]]
+    assert [result.product_id for result in output.queries[0].results] == ["1-DE", "2-DE"]

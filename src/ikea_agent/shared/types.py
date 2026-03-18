@@ -153,16 +153,6 @@ class SearchResultDiversityWarning:
 
 
 @dataclass(frozen=True, slots=True)
-class SearchGraphToolResult:
-    """Structured output returned by `run_search_graph` for agent consumption."""
-
-    results: list[ShortRetrievalResult]
-    total_candidates: int
-    returned_count: int
-    warning: SearchResultDiversityWarning | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class SearchQueryInput:
     """One query object consumed by the batched search tool."""
 
@@ -318,11 +308,3 @@ class AttachmentRef:
     width: int | None
     height: int | None
     file_name: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ImageToolOutput:
-    """Typed image payload returned by image-producing tools."""
-
-    caption: str
-    images: list[AttachmentRef]

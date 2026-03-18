@@ -1,5 +1,8 @@
 # ikea_agent
 
+[![PR CI](https://github.com/talolard/SICKR/actions/workflows/pr-ci.yml/badge.svg)](https://github.com/talolard/SICKR/actions/workflows/pr-ci.yml)
+![Coverage Gates](https://img.shields.io/badge/coverage%20gates-stage%20A%20source%20%2B%20100%25%20tests-brightgreen)
+
 Typed IKEA assistant runtime and UI integration project built around:
 
 - `pydantic-ai` agents + typed toolsets for chat orchestration and tool execution

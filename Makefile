@@ -5,6 +5,7 @@ include $(WORKTREE_ENV_FILE)
 endif
 
 .PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
+	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
 	dev-all dev-all-mock reset agent-start merge-list merge-list-all \
@@ -18,6 +19,14 @@ UI_NODE_MODULES ?= $(UI_DIR)/node_modules
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
+COVERAGE_DIR ?= .tmp_untracked/coverage
+BACKEND_COVERAGE_JSON ?= $(COVERAGE_DIR)/backend-coverage.json
+BACKEND_COVERAGE_XML ?= $(COVERAGE_DIR)/backend-coverage.xml
+FRONTEND_COVERAGE_DIR ?= $(UI_DIR)/coverage
+FRONTEND_COVERAGE_SUMMARY ?= $(FRONTEND_COVERAGE_DIR)/coverage-summary.json
+FRONTEND_COVERAGE_LCOV ?= $(FRONTEND_COVERAGE_DIR)/lcov.info
+COVERAGE_SUMMARY_MD ?= $(COVERAGE_DIR)/summary.md
+COVERAGE_REPORT_JSON ?= $(COVERAGE_DIR)/report.json
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
 export DUCKDB_PATH MILVUS_LITE_URI ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
@@ -45,6 +54,15 @@ typecheck:
 test:
 	$(UV_RUN) pytest
 
+backend-coverage:
+	mkdir -p $(COVERAGE_DIR)
+	$(UV_RUN) pytest \
+		--cov=src/ikea_agent \
+		--cov=tests \
+		--cov-report=term-missing \
+		--cov-report=xml:$(BACKEND_COVERAGE_XML) \
+		--cov-report=json:$(BACKEND_COVERAGE_JSON)
+
 preflight:
 	./scripts/preflight.sh
 
@@ -66,7 +84,24 @@ ui-lint: ui-ensure-install
 ui-typecheck: ui-ensure-install
 	cd $(UI_DIR) && pnpm typecheck
 
-ui-validate: ui-lint ui-typecheck ui-test
+frontend-coverage: ui-ensure-install
+	cd $(UI_DIR) && rm -rf coverage && pnpm exec vitest run --coverage
+
+coverage-clean:
+	rm -rf $(COVERAGE_DIR) $(FRONTEND_COVERAGE_DIR)
+
+coverage: backend-coverage frontend-coverage
+	mkdir -p $(COVERAGE_DIR)
+	$(UV_RUN) python scripts/ci_coverage_report.py \
+		--backend-json $(BACKEND_COVERAGE_JSON) \
+		--frontend-summary $(FRONTEND_COVERAGE_SUMMARY) \
+		--frontend-lcov $(FRONTEND_COVERAGE_LCOV) \
+		--repo-root "$$(pwd)" \
+		--summary-md $(COVERAGE_SUMMARY_MD) \
+		--report-json $(COVERAGE_REPORT_JSON) \
+		--fail-on-thresholds
+
+ui-validate: ui-lint ui-typecheck frontend-coverage
 
 ui-dev:
 	cd $(UI_DIR) && pnpm dev --port $(UI_PORT)
@@ -165,5 +200,6 @@ merge-normalize:
 tidy: format
 	$(UV_RUN) ruff check --fix .
 	$(UV_RUN) pyrefly check
-	$(UV_RUN) pytest
-	$(MAKE) ui-validate
+	$(MAKE) ui-lint
+	$(MAKE) ui-typecheck
+	$(MAKE) coverage

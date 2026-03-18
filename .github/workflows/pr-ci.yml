@@ -51,6 +51,7 @@ jobs:
           uv run pytest \
             --junitxml=artifacts/pytest-junit.xml \
             --cov=src/ikea_agent \
+            --cov=tests \
             --cov-report=xml:artifacts/backend-coverage.xml \
             --cov-report=json:artifacts/backend-coverage.json
           exit_code=$?
@@ -221,8 +222,10 @@ jobs:
     if: ${{ needs.backend.result == 'success' && needs['frontend-unit'].result == 'success' }}
     runs-on: ubuntu-latest
     outputs:
-      backend_percent: ${{ steps.export_report.outputs.backend_percent }}
-      frontend_percent: ${{ steps.export_report.outputs.frontend_percent }}
+      backend_source_percent: ${{ steps.export_report.outputs.backend_source_percent }}
+      backend_tests_percent: ${{ steps.export_report.outputs.backend_tests_percent }}
+      frontend_source_percent: ${{ steps.export_report.outputs.frontend_source_percent }}
+      frontend_tests_percent: ${{ steps.export_report.outputs.frontend_tests_percent }}
       patch_percent: ${{ steps.export_report.outputs.patch_percent }}
       baseline_available: ${{ steps.export_report.outputs.baseline_available }}
       total_regressed: ${{ steps.export_report.outputs.total_regressed }}
@@ -310,12 +313,14 @@ jobs:
             --repo-root "$PWD"
             --summary-md coverage-report/summary.md
             --report-json coverage-report/report.json
+            --fail-on-thresholds
           )
           if [ -f artifacts/changed.diff ]; then
             args+=(--diff artifacts/changed.diff)
           fi
           if [ -f artifacts/baseline/report.json ]; then
             args+=(--baseline artifacts/baseline/report.json)
+            args+=(--fail-on-regression)
           fi
           python3 scripts/ci_coverage_report.py "${args[@]}"
 
@@ -332,8 +337,10 @@ jobs:
           patch_value = "n/a" if patch_percent is None else f"{patch_percent:.2f}%"
 
           outputs = {
-              "backend_percent": f'{report["backend"]["percent"]:.2f}%',
-              "frontend_percent": f'{report["frontend"]["percent"]:.2f}%',
+              "backend_source_percent": f'{report["backend_source"]["percent"]:.2f}%',
+              "backend_tests_percent": f'{report["backend_tests"]["percent"]:.2f}%',
+              "frontend_source_percent": f'{report["frontend_source"]["percent"]:.2f}%',
+              "frontend_tests_percent": f'{report["frontend_tests"]["percent"]:.2f}%',
               "patch_percent": patch_value,
               "baseline_available": str(report["baseline_available"]).lower(),
               "total_regressed": str(report["total_regressed"]).lower(),
@@ -362,12 +369,6 @@ jobs:
           path: coverage-report/report.json
           retention-days: 30
           if-no-files-found: error
-
-      - name: Fail on coverage regression
-        if: ${{ steps.export_report.outputs.total_regressed == 'true' }}
-        run: |
-          echo "Coverage totals regressed compared to the latest default-branch baseline."
-          exit 1
 
   e2e-mock:
     name: E2E (Playwright mock)
@@ -514,8 +515,10 @@ jobs:
           BACKEND_RESULT: ${{ needs.backend.result }}
           FRONTEND_RESULT: ${{ needs['frontend-unit'].result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
-          COVERAGE_BACKEND: ${{ needs.coverage.outputs.backend_percent }}
-          COVERAGE_FRONTEND: ${{ needs.coverage.outputs.frontend_percent }}
+          COVERAGE_BACKEND_SOURCE: ${{ needs.coverage.outputs.backend_source_percent }}
+          COVERAGE_BACKEND_TESTS: ${{ needs.coverage.outputs.backend_tests_percent }}
+          COVERAGE_FRONTEND_SOURCE: ${{ needs.coverage.outputs.frontend_source_percent }}
+          COVERAGE_FRONTEND_TESTS: ${{ needs.coverage.outputs.frontend_tests_percent }}
           COVERAGE_PATCH: ${{ needs.coverage.outputs.patch_percent }}
           COVERAGE_BASELINE: ${{ needs.coverage.outputs.baseline_available }}
           E2E_MOCK_RESULT: ${{ needs['e2e-mock'].result }}
@@ -528,7 +531,7 @@ jobs:
           coverage_detail="not available"
 
           if [ "${COVERAGE_RESULT}" = "success" ] || [ "${COVERAGE_RESULT}" = "failure" ]; then
-            coverage_detail="backend ${COVERAGE_BACKEND}, frontend ${COVERAGE_FRONTEND}, patch ${COVERAGE_PATCH}"
+            coverage_detail="backend source ${COVERAGE_BACKEND_SOURCE}, backend tests ${COVERAGE_BACKEND_TESTS}, frontend source ${COVERAGE_FRONTEND_SOURCE}, frontend tests ${COVERAGE_FRONTEND_TESTS}, patch ${COVERAGE_PATCH}"
             if [ "${COVERAGE_BASELINE}" = "true" ]; then
               coverage_detail="${coverage_detail}; default-branch baseline compared"
             else

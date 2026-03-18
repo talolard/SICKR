@@ -25,7 +25,6 @@ from ikea_agent.retrieval.schema import (
     products_canonical,
 )
 from ikea_agent.shared.alembic_duckdb import DuckDBImpl
-from ikea_agent.shared.db import connect_db, run_sql_file
 from ikea_agent.shared.types import (
     BundleProposalItemInput,
     BundleProposalLineItem,
@@ -73,8 +72,6 @@ _ = (
     product_embeddings,
     product_embedding_neighbors,
     DuckDBImpl,
-    connect_db,
-    run_sql_file,
     RetrievalResult.filter_pass_reasons,
     RetrievalResult.rank_explanation,
     SearchQueryInput.purpose,
