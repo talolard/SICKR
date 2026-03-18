@@ -17,6 +17,7 @@ export type AssetListItem = {
   run_id: string | null;
   created_by_tool: string | null;
   kind: string;
+  display_label: string | null;
   mime_type: string;
   file_name: string | null;
   storage_path: string;

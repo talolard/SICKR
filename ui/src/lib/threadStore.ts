@@ -24,6 +24,7 @@ type ThreadSnapshot = {
   assistantText: string;
   toolCallsById: Record<string, ToolCallEntry>;
   attachments: PendingAttachment[];
+  copilotMessages?: unknown[];
   messages?: Array<{
     id: string;
     role: "user" | "assistant";

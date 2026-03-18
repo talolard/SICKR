@@ -46,6 +46,28 @@ def _parse_revealed_preference_kind(raw_kind: str) -> RevealedPreferenceKind:
     raise ValueError(f"Unknown revealed preference kind: {raw_kind}")
 
 
+def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, str]:
+    """Return readable display labels for floor-plan revision assets in one thread."""
+
+    rows = session.execute(
+        select(
+            FloorPlanRevisionRecord.revision,
+            FloorPlanRevisionRecord.svg_asset_id,
+            FloorPlanRevisionRecord.png_asset_id,
+        )
+        .where(FloorPlanRevisionRecord.thread_id == thread_id)
+        .order_by(FloorPlanRevisionRecord.revision.desc())
+    ).all()
+    labels: dict[str, str] = {}
+    for row in rows:
+        revision = int(row.revision)
+        if row.svg_asset_id is not None:
+            labels[str(row.svg_asset_id)] = f"Floor plan revision {revision} (SVG)"
+        if row.png_asset_id is not None:
+            labels[str(row.png_asset_id)] = f"Floor plan revision {revision} (PNG preview)"
+    return labels
+
+
 class ThreadQueryRepository:
     """Query and mutation helpers for thread data API routes."""
 
@@ -115,6 +137,7 @@ class ThreadQueryRepository:
         """Return thread-linked assets ordered by creation time descending."""
 
         with self._session_factory() as session:
+            floor_plan_labels = _floor_plan_asset_labels(session, thread_id=thread_id)
             rows = session.execute(
                 select(
                     AssetRecord.asset_id,
@@ -138,6 +161,7 @@ class ThreadQueryRepository:
                     str(item.created_by_tool) if item.created_by_tool is not None else None
                 ),
                 kind=str(item.kind),
+                display_label=floor_plan_labels.get(str(item.asset_id)),
                 mime_type=str(item.mime_type),
                 file_name=str(item.file_name) if item.file_name is not None else None,
                 storage_path=str(item.storage_path),

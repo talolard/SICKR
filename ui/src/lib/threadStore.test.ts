@@ -28,10 +28,19 @@ describe("threadStore", () => {
       assistantText: "world",
       toolCallsById: {},
       attachments: [],
+      copilotMessages: [
+        {
+          id: "msg-1",
+          createdAt: "2026-03-18T10:00:00Z",
+          content: "hello",
+          role: "user",
+        },
+      ],
     });
 
     expect(loadActiveThreadId()).toBe("thread-1");
     expect(loadThreadSnapshot("thread-1")?.assistantText).toBe("world");
+    expect(loadThreadSnapshot("thread-1")?.copilotMessages).toHaveLength(1);
   });
 
   it("upserts thread ids without duplicates", () => {

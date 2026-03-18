@@ -17,6 +17,10 @@ UI_DIR ?= ui
 UI_PORT ?= 3000
 UI_NODE_MODULES ?= $(UI_DIR)/node_modules
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
+DUCKDB_PATH ?= data/ikea.duckdb
+MILVUS_LITE_URI ?= data/milvus_lite.db
+ARTIFACT_ROOT_DIR ?= data/artifacts
+FEEDBACK_ROOT_DIR ?= comments
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
 COVERAGE_DIR ?= .tmp_untracked/coverage
@@ -125,17 +129,23 @@ ui-test-e2e-real-ui-smoke:
 	@set -eu; \
 	BACKEND_STARTED=0; \
 	BACKEND_PID=""; \
+	UI_STARTED=0; \
+	UI_PID=""; \
+	REPO_ROOT="$$(pwd)"; \
 	LOG_DIR="$${ARTIFACT_ROOT_DIR:-/tmp}"; \
-	LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-backend-$(PORT).log"; \
+	BACKEND_LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-backend-$(PORT).log"; \
+	UI_LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-ui-$(UI_PORT).log"; \
 	mkdir -p "$$LOG_DIR"; \
+	BACKEND_LOG_PATH="$$REPO_ROOT/$$BACKEND_LOG_PATH"; \
+	UI_LOG_PATH="$$REPO_ROOT/$$UI_LOG_PATH"; \
 	if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
 		echo "Backend already running at http://$(HOST):$(PORT)"; \
 	else \
 		echo "Backend not running; starting temporary backend on http://$(HOST):$(PORT)"; \
-		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >"$$LOG_PATH" 2>&1 & \
+		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >"$$BACKEND_LOG_PATH" 2>&1 & \
 		BACKEND_PID=$$!; \
 		BACKEND_STARTED=1; \
-		trap 'if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
+		trap 'if [ "$$UI_STARTED" -eq 1 ] && [ -n "$$UI_PID" ]; then kill "$$UI_PID" 2>/dev/null || true; wait "$$UI_PID" 2>/dev/null || true; fi; if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
 		i=0; \
 		while [ "$$i" -lt 60 ]; do \
 			if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
@@ -145,11 +155,32 @@ ui-test-e2e-real-ui-smoke:
 			sleep 1; \
 		done; \
 		if ! curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
-			echo "Backend did not become ready; see $$LOG_PATH"; \
+			echo "Backend did not become ready; see $$BACKEND_LOG_PATH"; \
 			exit 1; \
 		fi; \
 	fi; \
-	cd $(UI_DIR) && UI_PORT=$(UI_PORT) RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
+	if curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1; then \
+		echo "UI already running at http://$(HOST):$(UI_PORT)"; \
+	else \
+		echo "UI not running; starting temporary UI on http://$(HOST):$(UI_PORT)"; \
+		cd $(UI_DIR) && PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm dev --port $(UI_PORT) >"$$UI_LOG_PATH" 2>&1 & \
+		UI_PID=$$!; \
+		UI_STARTED=1; \
+		i=0; \
+		while [ "$$i" -lt 60 ]; do \
+			if curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1; then \
+				break; \
+			fi; \
+			i=$$((i + 1)); \
+			sleep 1; \
+		done; \
+		if ! curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1; then \
+			echo "UI did not become ready; see $$UI_LOG_PATH"; \
+			exit 1; \
+		fi; \
+	fi; \
+	curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1 || true; \
+	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PLAYWRIGHT_REUSE_EXISTING_SERVER=1 RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
 
 dev-all:
 	@set -e; \

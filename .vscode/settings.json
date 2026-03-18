@@ -25,6 +25,12 @@
     "uv_index": null
   },
   "files.exclude": {
+    ".hypothesis/": true,
+    ".beads/": true,
+    ".beads/config*":false,
+    ".logfire/": true,
+    "artifcats/": true,
+    "comments/": true,
     "**/.venv": true,
     "**/venv": true,
     "**/__pycache__": true,
@@ -37,7 +43,9 @@
     "**/htmlcov": true,
     "**/uv.lock": true
   },
+  
   "search.exclude": {
+    ".tmp_untracked/": true,
     "**/.venv": true,
     "**/venv": true,
     "**/__pycache__": true,
