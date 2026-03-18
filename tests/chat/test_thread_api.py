@@ -184,6 +184,7 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert len(bundles) == 1
     assert bundles[0].bundle_id == "bundle-api"
     assert bundles[0].items[0].item_id == "prod-1"
+    assert bundles[0].items[0].image_urls == []
     assert bundles[0].validations[0].kind == "budget_max_eur"
 
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from logging import getLogger
 from time import perf_counter
 
+from ikea_agent.chat.product_images import image_urls_for_runtime
 from ikea_agent.chat.runtime import ChatRuntime, embed_queries, search_candidates
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.retrieval.reranker import RerankedItem
@@ -121,6 +122,7 @@ def _execute_query_pipeline(
         selected_results = _select_top_ranked_results(
             reranked_items=reranked_items,
             limit=query.limit,
+            runtime=runtime,
         )
     else:
         top_candidate_items = reranked_items[
@@ -203,7 +205,10 @@ def _as_reranked_items(results: list[RetrievalResult]) -> list[RerankedItem]:
 
 
 def _select_top_ranked_results(
-    *, reranked_items: list[RerankedItem], limit: int
+    *,
+    reranked_items: list[RerankedItem],
+    limit: int,
+    runtime: ChatRuntime,
 ) -> list[ShortRetrievalResult]:
     if limit <= 0:
         return []
@@ -213,7 +218,14 @@ def _select_top_ranked_results(
         key = item.result.canonical_product_key
         if key in seen_keys:
             continue
-        selected_results.append(item.result.to_short_result())
+        selected_results.append(
+            item.result.to_short_result(
+                image_urls=image_urls_for_runtime(
+                    runtime=runtime,
+                    canonical_product_key=key,
+                )
+            )
+        )
         seen_keys.add(key)
         if len(selected_results) >= limit:
             break

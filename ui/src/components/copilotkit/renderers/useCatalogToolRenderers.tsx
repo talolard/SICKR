@@ -4,8 +4,10 @@ import { useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 
 import { ImageToolOutputRenderer } from "@/components/tooling/ImageToolOutputRenderer";
+import { ProductResultsToolRenderer } from "@/components/tooling/ProductResultsToolRenderer";
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
+import { parseSearchResultGroups } from "@/lib/productResults";
 import {
   extractToolFailureMessage,
   parseAttachmentList,
@@ -65,14 +67,22 @@ export function useCatalogToolRenderers({
           />
         );
       }
+      const groups = parseSearchResultGroups(parseResult(result));
+      if (!groups) {
+        return (
+          <DefaultToolCard
+            name="run_search_graph"
+            status="complete"
+            result={parseResult(result)}
+            args={parameters}
+            errorMessage={undefined}
+          />
+        );
+      }
       return (
-        <DefaultToolCard
-          name="run_search_graph"
-          status="complete"
-          result={parseResult(result)}
-          args={parameters}
-          errorMessage={undefined}
-        />
+        <ToolCard>
+          <ProductResultsToolRenderer groups={groups} />
+        </ToolCard>
       );
     },
   });
