@@ -19,6 +19,7 @@ Active runtime uses Milvus Lite collection:
 
 - Runtime schema migrations use Alembic + SQLAlchemy.
 - See [Runtime DB Migrations](migrations.md) for commands and environment overrides.
+- Local product-image serving and payload enrichment are documented in [Local Product Images](product_images.md).
 
 ## Data Lifecycle
 

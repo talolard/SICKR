@@ -21,6 +21,7 @@ from ikea_agent.chat.agents.shared import (
     search_repository,
     telemetry_context,
 )
+from ikea_agent.chat.product_images import image_urls_for_runtime
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat.search_pipeline import run_search_pipeline_batch
 from ikea_agent.persistence.room_3d_repository import Room3DRepository, Room3DSnapshotEntry
@@ -163,6 +164,12 @@ def _hydrate_bundle_items(
                 quantity=item.quantity,
                 line_total_eur=line_total,
                 reason=item.reason,
+                image_urls=list(
+                    image_urls_for_runtime(
+                        runtime=ctx.deps.runtime,
+                        canonical_product_key=item.item_id,
+                    )
+                ),
             )
         )
 

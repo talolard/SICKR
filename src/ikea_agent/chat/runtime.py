@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from logging import getLogger
+from pathlib import Path
 from typing import Literal, Protocol
 
 from pydantic_ai import Embedder
@@ -12,6 +13,7 @@ from pydantic_ai.embeddings import EmbeddingSettings
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from ikea_agent.chat.product_images import ProductImageCatalog
 from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.retrieval.catalog_repository import (
     CatalogRepository,
@@ -103,6 +105,7 @@ class ChatRuntime:
     milvus_service: MilvusAccessService
     catalog_repository: CatalogRepository
     reranker: Reranker
+    product_image_catalog: ProductImageCatalog
 
 
 async def embed_query(runtime: ChatRuntime, query_text: str) -> tuple[float, ...]:
@@ -199,4 +202,7 @@ def build_chat_runtime() -> ChatRuntime:
         milvus_service=milvus_service,
         catalog_repository=CatalogRepository(sqlalchemy_engine),
         reranker=get_reranker(backend, settings),
+        product_image_catalog=ProductImageCatalog.from_output_root(
+            output_root=Path(settings.ikea_image_catalog_root_dir)
+        ),
     )

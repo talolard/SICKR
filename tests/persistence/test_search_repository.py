@@ -209,6 +209,7 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
     assert parsed_validations[1]["kind"] == "budget_max_eur"
     assert listed[0].bundle_id == "bundle-1"
     assert listed[0].items[0].line_total_eur == 159.98
+    assert listed[0].items[0].image_urls == []
 
 
 def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) -> None:

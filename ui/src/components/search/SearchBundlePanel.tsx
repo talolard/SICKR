@@ -8,6 +8,7 @@ import {
   BundleProposalSummaryCard,
   formatBundlePrice,
 } from "@/components/search/BundleProposalSummaryCard";
+import { ProductImageThumbnail } from "@/components/catalog/ProductImageThumbnail";
 
 function validationTone(status: BundleProposal["validations"][number]["status"]): string {
   switch (status) {
@@ -154,48 +155,59 @@ export function SearchBundlePanel({
                         className="rounded-lg border border-gray-200 bg-gray-50 p-3"
                         key={`${proposal.bundle_id}-${item.item_id}`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-semibold text-gray-900">{item.product_name}</h4>
-                            <p className="text-[11px] text-gray-500">{item.item_id}</p>
-                          </div>
-                          <div className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2">
-                            <dl className="grid grid-cols-3 gap-3 text-left text-xs text-gray-600">
+                        <div className="flex gap-3">
+                          <ProductImageThumbnail
+                            images={item.image_urls}
+                            productName={item.product_name}
+                            testIdPrefix={`bundle-item-${proposal.bundle_id}-${item.item_id}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-semibold text-gray-900">{item.product_name}</h4>
+                                <p className="text-[11px] text-gray-500">{item.item_id}</p>
+                              </div>
+                              <div className="shrink-0 rounded-md border border-gray-200 bg-white px-3 py-2">
+                                <dl className="grid grid-cols-3 gap-3 text-left text-xs text-gray-600">
+                                  <div>
+                                    <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Unit</dt>
+                                    <dd className="mt-1 font-medium text-gray-900">
+                                      {item.price_eur === null
+                                        ? "Pending"
+                                        : formatBundlePrice(item.price_eur)}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Qty</dt>
+                                    <dd className="mt-1 font-medium text-gray-900">{item.quantity}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Total</dt>
+                                    <dd className="mt-1 font-medium text-gray-900">
+                                      {item.line_total_eur === null
+                                        ? "Pending"
+                                        : formatBundlePrice(item.line_total_eur)}
+                                    </dd>
+                                  </div>
+                                </dl>
+                              </div>
+                            </div>
+                            <dl className="mt-3 grid gap-3 md:grid-cols-2">
                               <div>
-                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Unit</dt>
-                                <dd className="mt-1 font-medium text-gray-900">
-                                  {item.price_eur === null ? "Pending" : formatBundlePrice(item.price_eur)}
-                                </dd>
+                                <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
+                                  Why it is in the bundle
+                                </dt>
+                                <dd className="mt-1 text-sm text-gray-700">{item.reason}</dd>
                               </div>
                               <div>
-                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Qty</dt>
-                                <dd className="mt-1 font-medium text-gray-900">{item.quantity}</dd>
-                              </div>
-                              <div>
-                                <dt className="font-medium uppercase tracking-[0.14em] text-gray-500">Total</dt>
-                                <dd className="mt-1 font-medium text-gray-900">
-                                  {item.line_total_eur === null
-                                    ? "Pending"
-                                    : formatBundlePrice(item.line_total_eur)}
-                                </dd>
+                                <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
+                                  Description
+                                </dt>
+                                <dd className="mt-1 text-sm text-gray-600">{item.description_text ?? "—"}</dd>
                               </div>
                             </dl>
                           </div>
                         </div>
-                        <dl className="mt-3 grid gap-3 md:grid-cols-2">
-                          <div>
-                            <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
-                              Why it is in the bundle
-                            </dt>
-                            <dd className="mt-1 text-sm text-gray-700">{item.reason}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
-                              Description
-                            </dt>
-                            <dd className="mt-1 text-sm text-gray-600">{item.description_text ?? "—"}</dd>
-                          </div>
-                        </dl>
                       </article>
                     ))}
                   </div>

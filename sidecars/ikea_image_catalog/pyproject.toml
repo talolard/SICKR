@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ikea-image-catalog"
+version = "0.1.0"
+description = "Scrapy sidecar for IKEA product image discovery and download."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "duckdb>=1.4.0",
+  "pillow>=11.3.0",
+  "scrapy>=2.13.3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ikea_image_catalog"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+ignore = ["C901", "D102", "S603", "S608"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN201", "D100", "D101", "D102", "D103", "INP001", "PLR2004", "S101"]
