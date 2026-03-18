@@ -83,11 +83,13 @@ flowchart LR
   - `make dev-all`
   - `make reset`
 - Backend tests: `make test`
+- UI lint: `make ui-lint`
+- UI typecheck: `make ui-typecheck`
 - UI unit tests: `make ui-test`
 - UI mock E2E: `make ui-test-e2e`
 - UI real-backend smoke E2E: `make ui-test-e2e-real`
 - Lint/format/typecheck pipeline: `make format-all`
-- Pre-commit quality gate: `make tidy`
+- Pre-commit quality gate: `make tidy` (backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; real-backend smoke stays separate)
 
 ## Multi-Agent Shortcuts
 

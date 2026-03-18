@@ -128,7 +128,7 @@ export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
 export PY_AG_UI_URL=http://127.0.0.1:${BACKEND_PORT}/ag-ui/
 EOF
 
-uv sync --all-groups
+env -u VIRTUAL_ENV uv sync --all-groups
 
 if (( SKIP_UI_INSTALL == 0 )); then
   make ui-install

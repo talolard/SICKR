@@ -41,6 +41,14 @@ Current gating behavior:
 - `Coverage (backend + frontend)` is blocking when backend or frontend total coverage regresses relative to the latest default-branch baseline.
 - `CI Summary` is informational; it summarizes lane status and coverage numbers but does not gate merges on its own.
 
+## Local Equivalent
+
+`make tidy` is the closest local approximation of the blocking unit-level CI lanes. It runs:
+- backend Ruff autofix + Pyrefly + Pytest
+- frontend ESLint + TypeScript + Vitest
+
+It does not run coverage reporting, GitHub annotations, or Playwright E2E lanes. Use `make ui-test-e2e-real-ui-smoke` separately when the change affects runtime/UI behavior.
+
 ## Coverage Reporting
 
 Coverage is measured directly in CI. No hosted coverage service is used.
