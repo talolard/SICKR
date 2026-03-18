@@ -144,6 +144,6 @@ def test_settings_accepts_app_logfire_token_alias(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("APP_LOGFIRE_TOKEN", "alias-value")
     monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
 
-    settings = AppSettings()
+    settings = AppSettings(_env_file=None)
 
     assert settings.logfire_token == os.getenv("APP_LOGFIRE_TOKEN")
