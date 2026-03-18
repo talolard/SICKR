@@ -1,76 +1,92 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { CopilotSidebar } from "@copilotkit/react-ui";
+import { CopilotChat } from "@copilotkit/react-ui";
 
 import { CopilotChatInlineError } from "@/components/copilotkit/CopilotChatInlineError";
 
-function PersistentChatButton(): null {
-  return null;
-}
-
-function PersistentChatHeader(): ReactElement {
-  return (
-    <div className="border-b border-gray-200 px-4 py-3">
-      <p className="text-sm font-semibold text-gray-900">Chat</p>
-    </div>
-  );
-}
-
 export function AgentChatSidebar(): ReactElement {
   return (
-    <>
+    <section className="flex h-full min-h-[60vh] min-w-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-200 px-4 py-3">
+        <p className="text-sm font-semibold text-gray-900">Chat</p>
+      </div>
       <style jsx global>{`
-        .copilotKitSidebarContentWrapper {
-          display: flex;
-          min-height: 100%;
-          width: 100%;
-          overflow: hidden;
-          margin-right: 0;
+        .agent-chat-pane.copilotKitChat {
+          min-height: 0;
+          flex: 1;
+          background:
+            linear-gradient(180deg, rgb(248 250 252 / 0.95) 0%, rgb(255 255 255) 18%),
+            rgb(255 255 255);
         }
 
-        .copilotKitSidebarContentWrapper.sidebarExpanded {
-          margin-right: 0;
+        .agent-chat-pane .copilotKitMessages {
+          gap: 0;
         }
 
-        .agent-chat-sidebar.copilotKitSidebar {
-          position: static;
-          right: auto;
-          bottom: auto;
-          z-index: auto;
-          display: flex;
-          min-height: 100%;
-          width: 100%;
+        .agent-chat-pane .copilotKitMessagesContainer {
+          gap: 0.85rem;
+          padding: 1rem 1rem 0.75rem;
         }
 
-        .agent-chat-sidebar.copilotKitSidebar .copilotKitWindow {
-          position: static;
-          inset: auto;
-          display: flex;
-          width: 100%;
-          min-height: 60vh;
-          height: 100%;
-          max-height: none;
+        .agent-chat-pane .copilotKitMessagesFooter {
+          width: calc(100% - 1.5rem);
+          margin-top: 0;
+          padding: 0 0 0.5rem;
+        }
+
+        .agent-chat-pane .copilotKitMessage {
+          max-width: min(92%, 44rem);
           margin-bottom: 0;
-          border-radius: 0.5rem;
-          border: 1px solid rgb(229 231 235);
-          box-shadow: none;
-          opacity: 1;
-          transform: none;
-          pointer-events: auto;
+          border-radius: 1.1rem;
+          box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
         }
 
-        .agent-chat-sidebar.copilotKitSidebar .copilotKitWindow.open {
-          transform: none;
+        .agent-chat-pane .copilotKitMessage.copilotKitAssistantMessage {
+          background: rgb(248 250 252);
+          border: 1px solid rgb(226 232 240);
+          border-radius: 1.1rem 1.1rem 1.1rem 0.4rem;
+          padding: 0.8rem 0.95rem 1.25rem;
+          max-width: 100%;
+        }
+
+        .agent-chat-pane .copilotKitMessage.copilotKitUserMessage {
+          border-radius: 1.1rem 1.1rem 0.4rem 1.1rem;
+          padding: 0.8rem 0.95rem;
+        }
+
+        .agent-chat-pane .copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
+          left: 0.95rem;
+          bottom: 0.35rem;
+        }
+
+        .agent-chat-pane .copilotKitInputContainer {
+          border-top: 1px solid rgb(226 232 240);
+          background: rgb(255 255 255 / 0.94);
+          padding: 0.85rem 0.75rem 0.55rem;
+        }
+
+        .agent-chat-pane .copilotKitInput {
+          width: 100%;
+          min-height: 68px;
+          border-radius: 1rem;
+          border-color: rgb(203 213 225);
+          padding: 0.85rem 0.95rem;
+          box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.03);
+        }
+
+        .agent-chat-pane .copilotKitInput textarea {
+          font-size: 0.95rem;
+          line-height: 1.5;
+        }
+
+        .agent-chat-pane .poweredBy {
+          padding-top: 0.15rem !important;
+          padding-bottom: 0 !important;
         }
       `}</style>
-      <CopilotSidebar
-        Button={PersistentChatButton}
-        Header={PersistentChatHeader}
-        className="agent-chat-sidebar"
-        clickOutsideToClose={false}
-        defaultOpen
-        hitEscapeToClose={false}
+      <CopilotChat
+        className="agent-chat-pane"
         renderError={({ message, onDismiss, onRetry, operation }) => (
           <CopilotChatInlineError
             message={message}
@@ -80,6 +96,6 @@ export function AgentChatSidebar(): ReactElement {
           />
         )}
       />
-    </>
+    </section>
   );
 }
