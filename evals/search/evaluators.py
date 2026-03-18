@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
+from pydantic_evals.evaluators import (
+    EvaluationReason,
+    Evaluator,
+    EvaluatorContext,
+    EvaluatorOutput,
+)
 
 from evals.base import extract_logfire_tool_call_captures
 from evals.search.types import SearchEvalInput
@@ -14,7 +19,7 @@ from evals.search.types import SearchEvalInput
 class FinalOutputContractEvaluator(Evaluator[SearchEvalInput, str, None]):
     """Check case-specific forbidden terms in the final user-facing response."""
 
-    def evaluate(self, ctx: EvaluatorContext[SearchEvalInput, str, None]) -> object:
+    def evaluate(self, ctx: EvaluatorContext[SearchEvalInput, str, None]) -> EvaluatorOutput:
         """Evaluate one case against its forbidden final-response terms."""
 
         forbidden_terms = ctx.inputs.forbidden_response_terms
@@ -44,7 +49,7 @@ class BundleToolCallContractEvaluator(Evaluator[SearchEvalInput, str, None]):
 
     tool_name: str = "propose_bundle"
 
-    def evaluate(self, ctx: EvaluatorContext[SearchEvalInput, str, None]) -> object:
+    def evaluate(self, ctx: EvaluatorContext[SearchEvalInput, str, None]) -> EvaluatorOutput:
         """Evaluate whether `propose_bundle` obeyed the case contract."""
 
         require_call = ctx.inputs.require_bundle_call
