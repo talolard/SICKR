@@ -30,7 +30,7 @@ type FloorPlanRenderBridgeProps = {
 };
 
 type BundleProposalBridgeProps = {
-  status: "queued" | "executing" | "complete";
+  status: "queued" | "executing" | "complete" | "failed";
   result: unknown;
   onBundleProposed?: (proposal: BundleProposal) => void;
 };
@@ -104,6 +104,7 @@ export function BundleProposalBridge({
   result,
   onBundleProposed,
 }: BundleProposalBridgeProps): ReactElement {
+  const failureMessage = extractToolFailureMessage(result);
   const parsed = bundleProposalSchema.safeParse(parseResult(result));
 
   useEffect(() => {
@@ -113,6 +114,17 @@ export function BundleProposalBridge({
     onBundleProposed?.(parsed.data);
   }, [onBundleProposed, parsed, status]);
 
+  if (failureMessage) {
+    return (
+      <DefaultToolCard
+        name="propose_bundle"
+        status="failed"
+        result={undefined}
+        args={undefined}
+        errorMessage={failureMessage}
+      />
+    );
+  }
   if (status !== "complete") {
     return <LoadingToolMessage message="Building bundle proposal..." />;
   }

@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import cast
 
-import pytest
 from pydantic_ai import RunContext
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
@@ -27,6 +26,7 @@ from ikea_agent.shared.types import (
     SearchQueryInput,
     SearchQueryToolResult,
     ShortRetrievalResult,
+    ToolFailureResult,
 )
 
 RunSearchGraphFunc = Callable[
@@ -35,7 +35,7 @@ RunSearchGraphFunc = Callable[
 ]
 ProposeBundleFunc = Callable[
     [RunContext[SearchAgentDeps], str, list[BundleProposalItemInput], str | None, float | None],
-    BundleProposalToolResult,
+    BundleProposalToolResult | ToolFailureResult,
 ]
 
 
@@ -252,6 +252,7 @@ def test_propose_bundle_appends_typed_bundle_persists_and_reports_budget_failure
         30.0,
     )
 
+    assert isinstance(result, BundleProposalToolResult)
     assert result.title == "Desk seating bundle"
     assert result.bundle_total_eur == 40.0
     assert result.items[0].line_total_eur == 40.0
@@ -283,6 +284,7 @@ def test_propose_bundle_merges_duplicates_and_reports_warning() -> None:
         ],
     )
 
+    assert isinstance(result, BundleProposalToolResult)
     assert len(result.items) == 1
     assert result.items[0].quantity == 3
     assert result.bundle_total_eur == 45.0
@@ -304,6 +306,7 @@ def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None
         items=[BundleProposalItemInput(item_id="chair-2", quantity=1, reason="Placeholder item")],
     )
 
+    assert isinstance(result, BundleProposalToolResult)
     assert result.bundle_total_eur is None
     pricing_validation = next(
         validation for validation in result.validations if validation.kind == "pricing_complete"
@@ -316,13 +319,39 @@ def test_propose_bundle_reports_unknown_budget_when_prices_are_missing() -> None
     assert result.notes == "Needs pricing follow-up."
 
 
-def test_propose_bundle_rejects_items_that_were_not_grounded_by_search() -> None:
+def test_propose_bundle_returns_tool_error_for_ungrounded_items() -> None:
     ctx = _run_context(price_eur=20.0)
     _ground_item(ctx, item_id="chair-1")
 
-    with pytest.raises(ValueError, match="Ungrounded item ids: `chair-2`"):
-        propose_bundle(
-            ctx,
-            title="Desk seating bundle",
-            items=[BundleProposalItemInput(item_id="chair-2", quantity=1, reason="Seat at desk")],
-        )
+    result = propose_bundle(
+        ctx,
+        title="Desk seating bundle",
+        items=[BundleProposalItemInput(item_id="chair-2", quantity=1, reason="Seat at desk")],
+    )
+
+    assert isinstance(result, ToolFailureResult)
+    assert result.status == "error"
+    assert result.message == "Bundle proposal could not be built."
+    assert result.reason == (
+        "Bundle proposal can only include products returned by `run_search_graph`. "
+        "Ungrounded item ids: `chair-2`."
+    )
+    assert ctx.deps.state.bundle_proposals == []
+
+
+def test_propose_bundle_returns_tool_error_when_no_search_results_exist() -> None:
+    ctx = _run_context(price_eur=20.0)
+
+    result = propose_bundle(
+        ctx,
+        title="Desk seating bundle",
+        items=[BundleProposalItemInput(item_id="chair-2", quantity=1, reason="Seat at desk")],
+    )
+
+    assert isinstance(result, ToolFailureResult)
+    assert result.status == "error"
+    assert result.message == "Bundle proposal could not be built."
+    assert result.reason == (
+        "Bundle proposal requires grounded search results. "
+        "Call `run_search_graph` first and only include returned products."
+    )

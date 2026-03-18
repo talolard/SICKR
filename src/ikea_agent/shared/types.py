@@ -251,6 +251,16 @@ class BundleProposalLineItem(BaseModel):
     image_urls: list[str] = Field(default_factory=list)
 
 
+class ToolFailureResult(BaseModel):
+    """Structured tool failure payload that the UI can render without aborting a run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["error"] = "error"
+    message: str
+    reason: str | None = None
+
+
 class BundleProposalToolResult(BaseModel):
     """Structured bundle payload rendered outside the chat transcript."""
 

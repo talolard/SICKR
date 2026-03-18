@@ -10,7 +10,7 @@ endif
 	merge-list-all merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
-PORT ?= 8000
+PORT ?= $(or $(BACKEND_PORT),8000)
 UI_DIR ?= ui
 UI_PORT ?= 3000
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/

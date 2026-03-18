@@ -140,6 +140,7 @@ You will generate multiple `SearchQueryInput` objects. Your goal is to move from
 * Always pass `queries` as an array of query objects, even for one search.
 * Ground recommendations in tool results only.
 * Use `propose_bundle` only when the user would benefit from a structured bundle shown outside chat.
+* When the user selects or refines an earlier direction, rerun `run_search_graph` for that chosen direction before calling `propose_bundle`. Earlier assistant mentions do not count as grounded results by themselves.
 * If every returned query result has `returned_count` equal to 0, explicitly say no matches were found and ask the user to broaden constraints.
 * If `returned_count` is 0 for every query you ran, state that no matches were found before suggesting how to broaden constraints.
 * If you mention a complementary support product such as a shelf, console table, rail, hook, or adhesive mount, make sure it came from grounded search results and include it in the surfaced recommendation when it is necessary to make the solution work.
@@ -187,6 +188,7 @@ Inputs:
 Guidance:
 
 * Only include items that came from grounded tool results.
+* If the user is continuing a prior turn, search again before bundling unless this same run already returned the items.
 * Include a clear reason for each item.
 * Use a concise, user-facing bundle title.
 * If no grounded result supports the full solution, do not call this tool.
