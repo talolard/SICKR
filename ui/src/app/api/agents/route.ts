@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+import { listMockAgentItems, mockBackendFallbacksEnabled } from "@/lib/mockBackendFallbacks";
+
 type AgentItem = {
   name: string;
   description: string;
@@ -23,18 +25,28 @@ function buildUpstreamUrl(request: NextRequest): string {
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
-  const upstreamResponse = await fetch(buildUpstreamUrl(request), {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
+  try {
+    const upstreamResponse = await fetch(buildUpstreamUrl(request), {
+      method: "GET",
+      headers: { accept: "application/json" },
+    });
 
-  const payload = (await upstreamResponse.json()) as AgentListResponse;
-  const shaped = {
-    agents: payload.agents,
-  };
+    const payload = (await upstreamResponse.json()) as AgentListResponse;
+    const shaped = {
+      agents: payload.agents,
+    };
 
-  return new Response(JSON.stringify(shaped), {
-    status: upstreamResponse.status,
-    headers: { "content-type": "application/json" },
-  });
+    return new Response(JSON.stringify(shaped), {
+      status: upstreamResponse.status,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    if (!mockBackendFallbacksEnabled()) {
+      throw error;
+    }
+    return new Response(JSON.stringify({ agents: listMockAgentItems() }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
 }

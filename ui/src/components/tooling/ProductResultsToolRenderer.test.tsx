@@ -46,7 +46,7 @@ describe("ProductResultsToolRenderer", () => {
     expect(screen.getByText("BRIMNES Wardrobe")).toBeInTheDocument();
     expect(screen.getByText("PAX Shelf")).toBeInTheDocument();
     expect(screen.getByTestId("product-results-panel-storage")).toHaveClass(
-      "max-h-96",
+      "max-h-[26rem]",
       "overflow-y-auto",
     );
     expect(

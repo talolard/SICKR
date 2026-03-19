@@ -100,6 +100,10 @@ async function handleStreamRequest(
       }
 
       if (scenario === "disconnect") {
+        push("error", {
+          message: "Stream ended unexpectedly before done event.",
+        });
+        await sleep(80);
         controller.close();
         return;
       }

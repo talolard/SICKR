@@ -1,3 +1,4 @@
+import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
@@ -8,9 +9,13 @@ import { CopilotKitProviders, useThreadSession } from "./CopilotKitProviders";
 const {
   usePathnameMock,
   randomUuidMock,
+  copilotKitMountMock,
+  copilotKitUnmountMock,
 } = vi.hoisted(() => ({
   usePathnameMock: vi.fn<() => string>(() => "/agents/search"),
   randomUuidMock: vi.fn<() => string>(() => "12345678-1234-1234-1234-123456789abc"),
+  copilotKitMountMock: vi.fn(),
+  copilotKitUnmountMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -28,16 +33,25 @@ vi.mock("@copilotkit/react-core", () => ({
     children: ReactElement;
     runtimeUrl: string;
     threadId?: string;
-  }): ReactElement => (
-    <div
-      data-agent={agent}
-      data-runtime-url={runtimeUrl}
-      data-testid="copilotkit-root"
-      data-thread-id={threadId ?? ""}
-    >
-      {children}
-    </div>
-  ),
+  }): ReactElement => {
+    React.useEffect(() => {
+      copilotKitMountMock({ agent, threadId: threadId ?? "" });
+      return () => {
+        copilotKitUnmountMock({ agent, threadId: threadId ?? "" });
+      };
+    }, [agent, threadId]);
+
+    return (
+      <div
+        data-agent={agent}
+        data-runtime-url={runtimeUrl}
+        data-testid="copilotkit-root"
+        data-thread-id={threadId ?? ""}
+      >
+        {children}
+      </div>
+    );
+  },
 }));
 
 function ThreadSessionConsumer(): ReactElement {
@@ -71,6 +85,8 @@ describe("CopilotKitProviders", () => {
     window.history.replaceState({}, "", "/agents/search");
     usePathnameMock.mockReturnValue("/agents/search");
     vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(randomUuidMock);
+    copilotKitMountMock.mockReset();
+    copilotKitUnmountMock.mockReset();
   });
 
   it("bootstraps the active thread from the URL and exposes it through the session context", async () => {
@@ -115,6 +131,14 @@ describe("CopilotKitProviders", () => {
       "agent_search-12345678",
     );
     expect(window.location.search).toContain("thread=agent_search-12345678");
+    expect(copilotKitUnmountMock).toHaveBeenCalledWith({
+      agent: "agent_search",
+      threadId: expect.any(String),
+    });
+    expect(copilotKitMountMock).toHaveBeenLastCalledWith({
+      agent: "agent_search",
+      threadId: "agent_search-12345678",
+    });
   });
 
   it("falls back to a new resumable thread when selecting an unavailable backend thread", async () => {

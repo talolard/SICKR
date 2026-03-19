@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
 
+import {
+  getMockAgentMetadata,
+  mockBackendFallbacksEnabled,
+} from "@/lib/mockBackendFallbacks";
+
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 
 export async function GET(
@@ -13,14 +18,31 @@ export async function GET(
     upstream.search = request.nextUrl.search;
   }
 
-  const upstreamResponse = await fetch(upstream, {
-    method: "GET",
-    headers: { accept: "application/json" },
-  });
+  try {
+    const upstreamResponse = await fetch(upstream, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    });
 
-  const body = await upstreamResponse.text();
-  return new Response(body, {
-    status: upstreamResponse.status,
-    headers: { "content-type": "application/json" },
-  });
+    const body = await upstreamResponse.text();
+    return new Response(body, {
+      status: upstreamResponse.status,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    if (!mockBackendFallbacksEnabled()) {
+      throw error;
+    }
+    const fallback = getMockAgentMetadata(agent);
+    if (!fallback) {
+      return new Response(JSON.stringify({ error: "Unknown mock agent." }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(fallback), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
 }
