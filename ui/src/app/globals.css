@@ -4,21 +4,27 @@
   --background: #fff8f2;
   --foreground: #201b10;
   --surface: #fff8f2;
-  --surface-low: #fef2e0;
-  --surface-lowest: #ffffff;
-  --surface-high: #f2e7d5;
-  --surface-highest: #ede1cf;
+  --surface-container: #f8ecda;
+  --surface-container-low: #fef2e0;
+  --surface-container-lowest: #ffffff;
+  --surface-container-high: #f2e7d5;
+  --surface-container-highest: #ede1cf;
+  --surface-bright: #fff8f2;
   --surface-dim: #e4d9c7;
   --surface-variant: #ede1cf;
+  --surface-tint: #556157;
   --primary: #18241b;
   --primary-container: #2d3930;
   --secondary: #825429;
   --secondary-container: #febf8b;
   --tertiary-fixed: #e8e2d6;
-  --text-primary: #201b10;
+  --on-surface: #201b10;
+  --on-surface-variant: #434843;
+  --outline-variant: #c3c8c2;
+  --text-primary: var(--on-surface);
   --text-muted: #5d5548;
   --text-soft: #786f60;
-  --outline-ghost: rgb(32 27 16 / 0.12);
+  --outline-ghost: rgb(195 200 194 / 0.35);
   --panel-shadow: 0 20px 40px rgb(32 27 16 / 0.06);
   --panel-shadow-strong: 0 40px 80px rgb(32 27 16 / 0.08);
 }
@@ -26,6 +32,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-bright: var(--surface-bright);
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-variant: var(--surface-variant);
+  --color-surface-tint: var(--surface-tint);
+  --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
+  --color-secondary: var(--secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-tertiary-fixed: var(--tertiary-fixed);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-outline-variant: var(--outline-variant);
   --font-sans: var(--font-editorial-sans);
   --font-serif: var(--font-editorial-serif);
   --font-mono: var(--font-geist-mono);
@@ -45,7 +69,7 @@ body {
     radial-gradient(circle at top left, rgb(254 191 139 / 0.12), transparent 24%),
     radial-gradient(circle at top right, rgb(45 57 48 / 0.08), transparent 28%),
     linear-gradient(180deg, #fff8f2 0%, #fdf4e8 46%, #f8ecda 100%);
-  color: var(--foreground);
+  color: var(--on-surface);
   font-family: var(--font-editorial-sans), sans-serif;
   text-rendering: optimizeLegibility;
 }
@@ -66,6 +90,28 @@ textarea {
     box-shadow 160ms ease,
     color 160ms ease,
     transform 160ms ease;
+}
+
+input,
+select,
+textarea {
+  border: 0;
+  border-radius: 1.5rem;
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgb(67 72 67 / 0.78);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  background: var(--surface-container-highest);
+  box-shadow: 0 0 0 1px rgb(24 36 27 / 0.2);
+  outline: none;
 }
 
 details > summary::-webkit-details-marker {
@@ -92,14 +138,17 @@ details > summary {
 }
 
 .editorial-panel {
-  background: var(--surface-low);
-  border: 1px solid var(--outline-ghost);
+  background: var(--surface-container-low);
+  box-shadow: var(--panel-shadow);
+}
+
+.editorial-panel-elevated {
+  background: var(--surface-container-lowest);
   box-shadow: var(--panel-shadow);
 }
 
 .editorial-card {
-  background: var(--surface-lowest);
-  border: 1px solid rgb(32 27 16 / 0.06);
+  background: var(--surface-container-lowest);
   box-shadow: var(--panel-shadow-strong);
 }
 
@@ -127,6 +176,12 @@ details > summary {
   box-shadow: 0 10px 24px rgb(32 27 16 / 0.08);
 }
 
+.editorial-avatar {
+  background: linear-gradient(135deg, #f5d6b7 0%, #f2bf8a 100%);
+  color: var(--secondary);
+  box-shadow: 0 14px 28px rgb(130 84 41 / 0.15);
+}
+
 .editorial-button-primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
   color: white;
@@ -141,6 +196,10 @@ details > summary {
 
 .editorial-ghost-outline {
   border: 1px solid var(--outline-ghost);
+}
+
+.editorial-subtle-separator {
+  background: linear-gradient(90deg, transparent 0%, rgb(195 200 194 / 0.4) 50%, transparent 100%);
 }
 
 .editorial-soft-pulse {

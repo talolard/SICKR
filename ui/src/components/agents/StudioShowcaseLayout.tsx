@@ -34,7 +34,7 @@ export function StudioShowcaseLayout({
             <div
               className={`rounded-full px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] ${
                 index === 0
-                  ? "bg-[color:var(--surface-lowest)] text-[color:var(--primary)] shadow-[0_14px_30px_rgba(32,27,16,0.08)]"
+                  ? "bg-surface-container-lowest text-primary shadow-[0_14px_30px_rgba(32,27,16,0.08)]"
                   : "text-[color:var(--text-soft)]"
               }`}
               key={label}
@@ -60,28 +60,42 @@ export function StudioShowcaseLayout({
           <p className="mt-5 max-w-2xl text-lg leading-8 text-[color:var(--text-muted)]">
             {description}
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Compare Fabrics</span>
-            <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Lighting Moods</span>
-          </div>
         </header>
 
         {error ? (
           <p className="mt-6 rounded-[22px] bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <div className="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.82fr)_minmax(0,1fr)] xl:items-start">
           {isLoadingAgents
             ? Array.from({ length: 3 }, (_, index) => (
                 <div
-                  className="editorial-card editorial-soft-pulse h-[26rem] rounded-[32px] bg-[color:var(--surface-lowest)]"
+                  className="editorial-card editorial-soft-pulse h-[26rem] rounded-[32px] bg-surface-container-lowest"
                   key={`agent-loading-${index}`}
                 />
               ))
-            : agents.map((agent) => <AgentLauncherCard agent={agent} key={agent.name} />)}
+            : agents.map((agent, index) => (
+                <div
+                  className={
+                    index === 1
+                      ? "xl:translate-y-7"
+                      : index === 2
+                        ? "xl:-translate-y-3"
+                        : ""
+                  }
+                  key={agent.name}
+                >
+                  <AgentLauncherCard agent={agent} />
+                </div>
+              ))}
         </div>
 
-        <section className="mt-16">
+        <div className="mt-4 flex flex-wrap justify-center gap-3 xl:-ml-16">
+          <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Compare Fabrics</span>
+          <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Lighting Modes</span>
+        </div>
+
+        <section className="mt-14">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="editorial-eyebrow">The Archives</p>
@@ -119,7 +133,7 @@ export function StudioShowcaseLayout({
             </article>
 
             <article className="grid grid-cols-[88px_minmax(0,1fr)] gap-5">
-              <div className="flex h-[88px] items-center justify-center rounded-[24px] bg-[color:var(--surface-high)] text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--primary)]">
+              <div className="flex h-[88px] items-center justify-center rounded-[24px] bg-surface-container-high text-sm font-semibold uppercase tracking-[0.2em] text-primary">
                 Mood
               </div>
               <div>
@@ -157,7 +171,7 @@ export function StudioShowcaseLayout({
             </div>
           </div>
 
-          <div className="mt-6 rounded-[24px] bg-[color:var(--surface-lowest)] px-4 py-5 text-sm leading-7 text-[color:var(--text-muted)] shadow-[0_14px_28px_rgba(32,27,16,0.06)]">
+          <div className="mt-6 rounded-[24px] bg-surface-container-lowest px-4 py-5 text-sm leading-7 text-[color:var(--text-muted)] shadow-[0_14px_28px_rgba(32,27,16,0.06)]">
             I&apos;ve noticed your preference for Belgian linen and quiet forest tones. Would you
             like me to curate matching textures for the living room?
           </div>
@@ -174,7 +188,8 @@ export function StudioShowcaseLayout({
           <p className="text-sm text-[color:var(--text-soft)]">History</p>
         </div>
 
-        <div className="mt-auto border-t border-[color:var(--outline-ghost)] pt-5 text-sm text-[color:var(--text-soft)]">
+        <div className="editorial-subtle-separator mt-auto h-px w-full" />
+        <div className="pt-5 text-sm text-[color:var(--text-soft)]">
           Help &amp; Resources
         </div>
       </aside>
