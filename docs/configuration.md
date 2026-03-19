@@ -22,8 +22,8 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 ## Notes
 
 - Embeddings are generated via pydantic-ai embedding providers.
-- Active local runtime expects a pgvector-enabled Postgres for relational data and one shared
-  Milvus service for vectors until the retrieval rewrite lands.
+- Active local runtime expects a pgvector-enabled Postgres for both relational data and semantic
+  retrieval.
 - `catalog.*` holds seeded product metadata, embeddings, image metadata, and optional precomputed
   embedding neighbors; `app.*` remains the runtime schema for conversation and analysis tables.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
@@ -39,8 +39,8 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
   application package.
 - Use `uv run python -m scripts.docker_deps.seed_postgres` to seed Postgres from canonical
   parquet and image-catalog inputs.
-- Use `uv run python -m scripts.docker_deps.prepare_milvus --state-file <path>` to refresh
-  the shared Milvus collection from `catalog.product_embeddings`.
+- `uv run python -m scripts.docker_deps.prepare_milvus --state-file <path>` is transitional
+  maintenance tooling only and no longer feeds the active runtime search path.
 
 ## Agent Model Overrides
 

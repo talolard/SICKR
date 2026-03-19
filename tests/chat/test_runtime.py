@@ -44,7 +44,6 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     catalog_repository = object()
     reranker = object()
     product_image_catalog = object()
-    require_collection_calls: list[bool] = []
 
     monkeypatch.setattr(runtime_module, "get_settings", lambda: settings)
     monkeypatch.setattr(
@@ -67,15 +66,6 @@ def test_build_chat_runtime_uses_prepared_dependencies(
 
     settings_ = settings
     monkeypatch.setattr(runtime_module, "Embedder", _EmbedderStub)
-
-    class _MilvusStub:
-        def __init__(self, runtime_settings: AppSettings) -> None:
-            assert runtime_settings is settings_
-
-        def require_collection(self) -> None:
-            require_collection_calls.append(True)
-
-    monkeypatch.setattr(runtime_module, "MilvusAccessService", _MilvusStub)
     monkeypatch.setattr(runtime_module, "resolve_reranker_backend", lambda _settings: "identity")
     monkeypatch.setattr(runtime_module, "CatalogRepository", lambda _engine: catalog_repository)
     monkeypatch.setattr(
@@ -111,4 +101,4 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     assert runtime.catalog_repository is catalog_repository
     assert runtime.reranker is reranker
     assert runtime.product_image_catalog is product_image_catalog
-    assert require_collection_calls == [True]
+    assert not hasattr(runtime, "milvus_service")

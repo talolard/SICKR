@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy import Engine
+from sqlalchemy.dialects import postgresql
 
-from ikea_agent.retrieval.catalog_repository import CatalogRepository
-from ikea_agent.retrieval.service import VectorMatch
+from ikea_agent.retrieval.catalog_repository import (
+    CatalogRepository,
+    _build_postgres_search_statement,
+)
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import (
@@ -95,11 +98,9 @@ def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> N
         dimensions=DimensionFilter(width=DimensionAxisFilter(min_cm=110.0, max_cm=130.0)),
     )
 
-    results = repository.hydrate_candidates(
-        candidates=[
-            VectorMatch(canonical_product_key="1-DE", semantic_score=0.95),
-            VectorMatch(canonical_product_key="2-DE", semantic_score=0.85),
-        ],
+    results = repository.search_semantic_products(
+        query_vector=(1.0, 0.0),
+        embedding_model="gemini-embedding-001",
         filters=filters,
         result_limit=10,
     )
@@ -121,17 +122,16 @@ def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Pat
         exclude_keyword="compact",
     )
 
-    results = repository.hydrate_candidates(
-        candidates=[
-            VectorMatch(canonical_product_key="1-DE", semantic_score=0.9),
-            VectorMatch(canonical_product_key="2-DE", semantic_score=0.8),
-        ],
+    results = repository.search_semantic_products(
+        query_vector=(1.0, 0.0),
+        embedding_model="gemini-embedding-001",
         filters=filters,
         result_limit=10,
     )
 
     assert len(results) == 1
     assert results[0].canonical_product_key == "1-DE"
+    assert results[0].rank_explanation == "legacy cosine score 1.000"
 
 
 def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
@@ -148,3 +148,22 @@ def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
     assert product is not None
     assert product.product_name == "Desk One"
     assert product.display_title == "Desk One Compact Workstation"
+
+
+def test_postgres_search_statement_uses_pgvector_distance_and_sqlalchemy_filters() -> None:
+    filters = RetrievalFilters(
+        category="tables-desks",
+        include_keyword="work",
+        exclude_keyword="compact",
+        price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),
+        dimensions=DimensionFilter(width=DimensionAxisFilter(min_cm=110.0, max_cm=130.0)),
+    )
+
+    compiled = str(_build_postgres_search_statement(filters).compile(dialect=postgresql.dialect()))
+
+    assert "catalog.product_embeddings.embedding_vector <=> %(query_vector)s" in compiled
+    assert "JOIN catalog.products_canonical" in compiled
+    assert "catalog.products_canonical.main_category = %(category)s" in compiled
+    assert "catalog.products_canonical.price_eur >= %(price_min_eur)s" in compiled
+    assert "catalog.products_canonical.width_cm >= %(width_min_cm)s" in compiled
+    assert "LIKE '%%' || %(include_keyword)s || '%%'" in compiled

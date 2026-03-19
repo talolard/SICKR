@@ -6,7 +6,7 @@
 
 Active runtime uses Postgres for:
 - `catalog.products_canonical` (seeded catalog metadata)
-- `catalog.product_embeddings` (seeded embedding snapshots that feed Milvus)
+- `catalog.product_embeddings` (seeded embedding snapshots used directly by pgvector retrieval)
 - `catalog.product_embedding_neighbors` (optional precomputed cosine neighbors for MMR)
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
 - `app.*` conversation and analysis tables managed by existing runtime migrations
@@ -15,9 +15,9 @@ Active runtime uses Postgres for:
 
 ### Shared Milvus (`MILVUS_URI`)
 
-Active runtime uses one shared Milvus collection:
+Milvus is still present as a transitional local dependency surface and data-prep target:
 - `ikea_product_embeddings` (configurable)
-- stores vector records used for semantic candidate retrieval
+- no longer serves the active runtime retrieval path
 
 ## Migrations
 
@@ -39,11 +39,11 @@ Active runtime uses one shared Milvus collection:
    rebuild from canonical inputs is needed.
 5. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
    restored `catalog.product_embeddings` rows and writes a local Milvus seed-state JSON file.
-6. Query flow retrieves vector candidates from Milvus.
-7. Postgres hydrates and filters candidates, then reads neighbor similarities from
+6. Query flow retrieves semantic matches directly from Postgres pgvector tables, then reads
+   neighbor similarities from
    `catalog.product_embedding_neighbors` when present or computes them from stored embeddings when
    neighbor rows are absent.
-8. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
+7. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
    direct public URLs based on config.
 
 The build/bootstrap tooling above is intentionally outside `src/ikea_agent/`; application runtime

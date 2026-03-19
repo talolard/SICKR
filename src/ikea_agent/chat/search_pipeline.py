@@ -8,7 +8,7 @@ from logging import getLogger
 from time import perf_counter
 
 from ikea_agent.chat.product_images import image_urls_for_runtime
-from ikea_agent.chat.runtime import ChatRuntime, embed_queries, search_candidates
+from ikea_agent.chat.runtime import ChatRuntime, embed_queries, search_catalog
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.retrieval.reranker import RerankedItem
 from ikea_agent.shared.types import (
@@ -94,7 +94,7 @@ def _execute_query_pipeline(
     query_vector: tuple[float, ...],
 ) -> tuple[SearchQueryToolResult, QueryStageProfile]:
     retrieval_started_at = perf_counter()
-    retrieval_results = search_candidates(
+    retrieval_results = search_catalog(
         runtime,
         query_vector=query_vector,
         filters=request.filters,

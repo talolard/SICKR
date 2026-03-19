@@ -76,7 +76,7 @@ class _RuntimeStub:
 
 
 @dataclass(slots=True)
-class _SearchCandidatesSpy:
+class _SearchCatalogSpy:
     responses: list[list[RetrievalResult]]
     result_limits: list[int] = field(default_factory=list)
 
@@ -172,11 +172,11 @@ def test_search_pipeline_returns_empty_matches_when_no_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(responses=[[]])
+    search_spy = _SearchCatalogSpy(responses=[[]])
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     output = _run_single_query_batch(
         runtime=runtime,
@@ -194,11 +194,11 @@ def test_search_pipeline_returns_ranked_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(responses=[[_sample_result()]])
+    search_spy = _SearchCatalogSpy(responses=[[_sample_result()]])
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     output = _run_single_query_batch(
         runtime=runtime,
@@ -219,11 +219,11 @@ def test_search_pipeline_uses_candidate_pool_limit_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(responses=[[_sample_result()]])
+    search_spy = _SearchCatalogSpy(responses=[[_sample_result()]])
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     _ = _run_single_query_batch(
         runtime=runtime,
@@ -239,7 +239,7 @@ def test_search_pipeline_batch_embeds_queries_in_one_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(
+    search_spy = _SearchCatalogSpy(
         responses=[
             [_sample_result(product_id="1-DE", product_name="Desk lamp")],
             [_sample_result(product_id="2-DE", product_name="Reading chair", product_type="Chair")],
@@ -248,7 +248,7 @@ def test_search_pipeline_batch_embeds_queries_in_one_call(
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     output = asyncio.run(
         run_search_pipeline_batch(
@@ -280,11 +280,11 @@ def test_search_pipeline_skips_reranker_for_single_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(responses=[[_sample_result()]])
+    search_spy = _SearchCatalogSpy(responses=[[_sample_result()]])
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     output = asyncio.run(
         run_search_pipeline_batch(
@@ -320,13 +320,13 @@ def test_search_pipeline_diversification_uses_reranker_and_neighbor_similarities
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime = _runtime()
-    search_spy = _SearchCandidatesSpy(
+    search_spy = _SearchCatalogSpy(
         responses=[[_sample_result(product_id="1-DE"), _sample_result(product_id="2-DE")]]
     )
     embed_spy = _EmbedQueriesSpy()
 
     monkeypatch.setattr("ikea_agent.chat.search_pipeline.embed_queries", embed_spy)
-    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_candidates", search_spy)
+    monkeypatch.setattr("ikea_agent.chat.search_pipeline.search_catalog", search_spy)
 
     output = asyncio.run(
         run_search_pipeline_batch(

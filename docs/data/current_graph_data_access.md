@@ -8,7 +8,7 @@ The active orchestration in `src/ikea_agent/chat/search_pipeline.py` runs:
 
 1. Build `RetrievalRequest` from user query + filters.
 2. Embed query text via runtime embedder (`chat/runtime.py`).
-3. Search the shared Milvus collection and hydrate candidates from Postgres.
+3. Search Postgres `catalog.product_embeddings` directly with pgvector and hydrate typed catalog rows in the same repository query.
 4. Rerank candidates with the configured backend.
 5. Apply MMR diversification.
 6. Return `SearchGraphToolResult` for tool/UI rendering.
@@ -23,14 +23,14 @@ deployments should stay on the lexical backend.
 `run_search_pipeline_batch` uses runtime helpers in `chat/runtime.py`:
 
 1. Embed query text through `pydantic_ai.Embedder`.
-2. Search the shared Milvus collection for nearest vectors.
-3. Hydrate candidate keys in Postgres (`catalog.products_canonical` + `catalog.product_embeddings`).
-4. Apply structured filters in inline SQL.
+2. Run one SQLAlchemy-built pgvector query against `catalog.product_embeddings` joined with
+   `catalog.products_canonical`.
+3. Apply structured filters, sorting, and limits inside that repository query.
 
 ## Raw Data vs Embeddings
 
 - Raw product metadata: Postgres `catalog.products_canonical`.
-- Embedding vectors at runtime: shared Milvus collection.
+- Embedding vectors at runtime: Postgres `catalog.product_embeddings` with pgvector.
 - Embedding source-of-truth snapshots: Postgres `catalog.product_embeddings`, plus canonical parquet
   artifacts in `data/parquet/`.
 - Neighbor similarities: Postgres `catalog.product_embedding_neighbors` when seeded; otherwise the

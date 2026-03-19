@@ -16,7 +16,6 @@ from ikea_agent.chat.product_images import ProductImageCatalog
 from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.retrieval.catalog_repository import CatalogRepository
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
-from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
 from ikea_agent.shared.sqlalchemy_db import (
     create_database_engine,
     create_session_factory,
@@ -63,7 +62,6 @@ class ChatRuntime:
     sqlalchemy_engine: Engine
     session_factory: sessionmaker[Session]
     embedder: Embedder
-    milvus_service: MilvusAccessService
     catalog_repository: CatalogRepository
     reranker: Reranker
     product_image_catalog: ProductImageCatalog
@@ -101,23 +99,18 @@ async def embed_queries(
     return vectors
 
 
-def search_candidates(
+def search_catalog(
     runtime: ChatRuntime,
     *,
     query_vector: tuple[float, ...],
     filters: RetrievalFilters,
     result_limit: int,
 ) -> list[RetrievalResult]:
-    """Run Milvus search then hydrate typed product rows from Postgres."""
+    """Run the active semantic retrieval query directly in Postgres."""
 
-    candidate_limit = max(result_limit * 10, runtime.settings.retrieval_candidate_limit)
-    candidates: list[VectorMatch] = runtime.milvus_service.search(
+    return runtime.catalog_repository.search_semantic_products(
         query_vector=query_vector,
         embedding_model=runtime.settings.gemini_model,
-        candidate_limit=candidate_limit,
-    )
-    return runtime.catalog_repository.hydrate_candidates(
-        candidates=candidates,
         filters=filters,
         result_limit=result_limit,
     )
@@ -132,7 +125,7 @@ def resolve_reranker_backend(settings: AppSettings) -> RerankerBackend:
 
 
 def build_chat_runtime() -> ChatRuntime:
-    """Build chat runtime with Postgres and shared-Milvus dependencies."""
+    """Build chat runtime with Postgres-backed retrieval dependencies."""
 
     settings = get_settings()
     database_url = resolve_database_url(
@@ -147,8 +140,6 @@ def build_chat_runtime() -> ChatRuntime:
         settings.embedding_model_uri,
         settings=embedding_settings,
     )
-    milvus_service = MilvusAccessService(settings)
-    milvus_service.require_collection()
 
     backend = resolve_reranker_backend(settings)
 
@@ -157,7 +148,6 @@ def build_chat_runtime() -> ChatRuntime:
         sqlalchemy_engine=sqlalchemy_engine,
         session_factory=session_factory,
         embedder=embedder,
-        milvus_service=milvus_service,
         catalog_repository=CatalogRepository(sqlalchemy_engine),
         reranker=get_reranker(backend, settings),
         product_image_catalog=ProductImageCatalog.from_database(
