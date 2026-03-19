@@ -1,16 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f3ee;
-  --foreground: #0f172a;
-  --panel-border: rgb(203 213 225 / 0.8);
-  --panel-shadow: 0 18px 48px -38px rgb(15 23 42 / 0.48);
+  --background: #fff8f2;
+  --foreground: #201b10;
+  --surface: #fff8f2;
+  --surface-low: #fef2e0;
+  --surface-lowest: #ffffff;
+  --surface-high: #f2e7d5;
+  --surface-highest: #ede1cf;
+  --surface-dim: #e4d9c7;
+  --surface-variant: #ede1cf;
+  --primary: #18241b;
+  --primary-container: #2d3930;
+  --secondary: #825429;
+  --secondary-container: #febf8b;
+  --tertiary-fixed: #e8e2d6;
+  --text-primary: #201b10;
+  --text-muted: #5d5548;
+  --text-soft: #786f60;
+  --outline-ghost: rgb(32 27 16 / 0.12);
+  --panel-shadow: 0 20px 40px rgb(32 27 16 / 0.06);
+  --panel-shadow-strong: 0 40px 80px rgb(32 27 16 / 0.08);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-editorial-sans);
+  --font-serif: var(--font-editorial-serif);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -24,9 +41,12 @@ html {
 
 body {
   min-height: 100vh;
-  background: var(--background);
+  background:
+    radial-gradient(circle at top left, rgb(254 191 139 / 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgb(45 57 48 / 0.08), transparent 28%),
+    linear-gradient(180deg, #fff8f2 0%, #fdf4e8 46%, #f8ecda 100%);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-editorial-sans), sans-serif;
   text-rendering: optimizeLegibility;
 }
 
@@ -56,7 +76,84 @@ details > summary {
   list-style: none;
 }
 
-.app-panel {
-  border: 1px solid var(--panel-border);
+.editorial-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgb(254 191 139 / 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgb(45 57 48 / 0.08), transparent 28%),
+    linear-gradient(180deg, #fff8f2 0%, #fdf4e8 46%, #f8ecda 100%);
+}
+
+.editorial-glass-nav {
+  background: rgb(255 248 242 / 0.82);
   box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.editorial-panel {
+  background: var(--surface-low);
+  border: 1px solid var(--outline-ghost);
+  box-shadow: var(--panel-shadow);
+}
+
+.editorial-card {
+  background: var(--surface-lowest);
+  border: 1px solid rgb(32 27 16 / 0.06);
+  box-shadow: var(--panel-shadow-strong);
+}
+
+.editorial-display {
+  font-family: var(--font-editorial-serif), serif;
+  letter-spacing: -0.04em;
+}
+
+.editorial-eyebrow {
+  color: var(--secondary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.editorial-muted {
+  color: var(--text-muted);
+}
+
+.editorial-chip {
+  border-radius: 9999px;
+  background: var(--tertiary-fixed);
+  color: var(--text-primary);
+  box-shadow: 0 10px 24px rgb(32 27 16 / 0.08);
+}
+
+.editorial-button-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+  color: white;
+  box-shadow: 0 20px 40px rgb(24 36 27 / 0.18);
+}
+
+.editorial-button-secondary {
+  background: var(--secondary-container);
+  color: #5b3612;
+  box-shadow: 0 16px 30px rgb(130 84 41 / 0.12);
+}
+
+.editorial-ghost-outline {
+  border: 1px solid var(--outline-ghost);
+}
+
+.editorial-soft-pulse {
+  animation: editorial-soft-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes editorial-soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }

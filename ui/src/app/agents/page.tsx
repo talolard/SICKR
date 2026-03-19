@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { AgentLauncherCard } from "@/components/agents/AgentLauncherCard";
+import { StudioShowcaseLayout } from "@/components/agents/StudioShowcaseLayout";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { fetchAgents, type AgentItem } from "@/lib/agents";
 
@@ -27,46 +27,21 @@ export default function AgentsPage(): React.ReactElement {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(246,219,138,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(31,74,123,0.12),transparent_30%),linear-gradient(180deg,#f6f3ee_0%,#f2eee8_46%,#ece7df_100%)]">
+    <main className="editorial-page">
       <AppNavBanner
         currentAgentName={null}
         agents={agents}
         agentLoadError={error}
         isLoadingAgents={isLoadingAgents}
       />
-      <section className="mx-auto max-w-[1720px] px-4 py-4 pb-6">
-        <section className="rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(247,244,239,0.92))] p-6 shadow-[0_22px_60px_-42px_rgba(15,23,42,0.5)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Agent directory
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
-            Browse the available workspaces.
-          </h2>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-            Each agent keeps its own tools, prompt, and workflow context. Open the one that best
-            matches the current task, then continue in-thread from there.
-          </p>
-        </section>
-
-        {error ? (
-          <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {isLoadingAgents
-            ? Array.from({ length: 3 }, (_, index) => (
-                <div
-                  className="rounded-[28px] border border-slate-200 bg-white/70 p-5 text-sm text-slate-500"
-                  key={`agents-loading-${index}`}
-                >
-                  Loading agent...
-                </div>
-              ))
-            : agents.map((agent) => <AgentLauncherCard agent={agent} key={agent.name} />)}
-        </div>
-      </section>
+      <StudioShowcaseLayout
+        agents={agents}
+        description="Browse the available studios, then step into the one that best matches the room, product, or image problem you need to solve."
+        error={error}
+        eyebrow="Workspace Directory"
+        isLoadingAgents={isLoadingAgents}
+        title="Choose the studio that fits the task in front of you"
+      />
     </main>
   );
 }

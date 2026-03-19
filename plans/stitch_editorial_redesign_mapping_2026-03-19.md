@@ -8,6 +8,10 @@ Adopt the visual language and interaction tone from `design_references/stitch_de
 
 This plan is for a follow-on redesign branch after `tal_maria_ikea-mi4`, not a wholesale rewrite from scratch.
 
+Implementation rule:
+
+- Update local UI guidance when it conflicts with Stitch rather than trying to preserve older styling rules alongside the new system.
+
 ## Source Artifacts
 
 - `design_references/stitch_design/DESIGN.md`
