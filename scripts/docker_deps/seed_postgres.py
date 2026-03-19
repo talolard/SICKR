@@ -12,10 +12,11 @@ from typing import Any
 
 import duckdb
 from sqlalchemy import Connection, Engine, text
-from sqlalchemy.sql.elements import TextClause
+from sqlalchemy.sql.base import Executable
 
 from ikea_agent.config import get_settings
 from ikea_agent.retrieval.display_titles import derive_display_title
+from ikea_agent.retrieval.schema import product_embeddings
 from ikea_agent.shared.db_contract import (
     IMAGE_CATALOG_SEED_SYSTEM,
     LOCAL_IMAGE_STORAGE_BACKEND,
@@ -245,25 +246,7 @@ def seed_postgres_database(
         )
         _insert_rows(
             connection=connection,
-            statement=text(
-                """
-                INSERT INTO catalog.product_embeddings (
-                    canonical_product_key,
-                    embedding_model,
-                    run_id,
-                    embedding_vector,
-                    embedded_text,
-                    embedded_at
-                ) VALUES (
-                    :canonical_product_key,
-                    :embedding_model,
-                    :run_id,
-                    :embedding_vector,
-                    :embedded_text,
-                    :embedded_at
-                )
-                """
-            ),
+            statement=product_embeddings.insert(),
             rows=embedding_rows,
         )
         _insert_rows(
@@ -446,7 +429,11 @@ def _load_embedding_rows(*, embeddings_parquet: Path) -> list[dict[str, object]]
             "canonical_product_key": str(row[0]),
             "embedding_model": str(row[1]),
             "run_id": _str_or_none(row[2]),
-            "embedding_vector": list(row[3]) if isinstance(row[3], list | tuple) else [],
+            "embedding_vector": tuple(
+                float(item) for item in row[3] if isinstance(item, int | float)
+            )
+            if isinstance(row[3], list | tuple)
+            else (),
             "embedded_text": _str_or_none(row[4]),
             "embedded_at": row[5],
         }
@@ -639,7 +626,7 @@ def _write_seed_state(
 def _insert_rows(
     *,
     connection: Connection,
-    statement: TextClause,
+    statement: Executable,
     rows: list[dict[str, object]],
     batch_size: int = 500,
 ) -> None:

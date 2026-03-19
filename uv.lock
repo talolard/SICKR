@@ -602,6 +602,7 @@ dependencies = [
     { name = "httpx", marker = "sys_platform != 'emscripten'" },
     { name = "logfire", extra = ["fastapi"], marker = "sys_platform != 'emscripten'" },
     { name = "milvus-lite", marker = "sys_platform != 'emscripten'" },
+    { name = "pgvector", marker = "sys_platform != 'emscripten'" },
     { name = "psycopg", extra = ["binary"], marker = "sys_platform != 'emscripten'" },
     { name = "pydantic-ai-slim", extra = ["ag-ui", "google", "logfire", "vertexai"], marker = "sys_platform != 'emscripten'" },
     { name = "pydantic-evals", marker = "sys_platform != 'emscripten'" },
@@ -637,6 +638,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "logfire", extras = ["fastapi"], specifier = ">=4.26.0" },
     { name = "milvus-lite", specifier = ">=2.4.11" },
+    { name = "pgvector", specifier = ">=0.4.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.10" },
     { name = "pydantic-ai-slim", extras = ["ag-ui", "google", "vertexai", "logfire"], specifier = ">=1.66.0" },
     { name = "pydantic-evals", specifier = ">=1.67.0" },
@@ -1132,6 +1134,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/61/772b2e2757855e232b7ccf7cb8079a5711becb3a97f291c953def15a833f/pandas-3.0.1-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:6bf0603c2e30e2cafac32807b06435f28741135cb8697eae8b28c7d492fc7d76", size = 11334191, upload-time = "2026-02-17T22:19:29.411Z" },
     { url = "https://files.pythonhosted.org/packages/1b/08/b16c6df3ef555d8495d1d265a7963b65be166785d28f06a350913a4fac78/pandas-3.0.1-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:6c426422973973cae1f4a23e51d4ae85974f44871b24844e4f7de752dd877098", size = 11782256, upload-time = "2026-02-17T22:19:32.34Z" },
     { url = "https://files.pythonhosted.org/packages/55/80/178af0594890dee17e239fca96d3d8670ba0f5ff59b7d0439850924a9c09/pandas-3.0.1-cp313-cp313t-win_amd64.whl", hash = "sha256:b03f91ae8c10a85c1613102c7bef5229b5379f343030a3ccefeca8a33414cf35", size = 10485047, upload-time = "2026-02-17T22:19:34.605Z" },
+]
+
+[[package]]
+name = "pgvector"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "sys_platform != 'emscripten'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/6c/6d8b4b03b958c02fa8687ec6063c49d952a189f8c91ebbe51e877dfab8f7/pgvector-0.4.2.tar.gz", hash = "sha256:322cac0c1dc5d41c9ecf782bd9991b7966685dee3a00bc873631391ed949513a", size = 31354, upload-time = "2025-12-05T01:07:17.87Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/26/6cee8a1ce8c43625ec561aff19df07f9776b7525d9002c86bceb3e0ac970/pgvector-0.4.2-py3-none-any.whl", hash = "sha256:549d45f7a18593783d5eec609ea1684a724ba8405c4cb182a0b2b08aeff04e08", size = 27441, upload-time = "2025-12-05T01:07:16.536Z" },
 ]
 
 [[package]]

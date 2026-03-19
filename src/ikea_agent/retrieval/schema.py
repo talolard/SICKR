@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     BIGINT,
@@ -16,9 +17,15 @@ from sqlalchemy import (
     Table,
 )
 
-from ikea_agent.shared.db_contract import CATALOG_SCHEMA
+from ikea_agent.shared.db_contract import (
+    CATALOG_SCHEMA,
+    PRODUCT_EMBEDDING_DIMENSIONS,
+    PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,
+    PRODUCT_EMBEDDING_VECTOR_OPCLASS,
+)
 
 retrieval_metadata = MetaData(schema=CATALOG_SCHEMA)
+_embedding_vector_type = Vector(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(ARRAY(FLOAT), "duckdb")
 
 products_canonical = Table(
     "products_canonical",
@@ -53,10 +60,16 @@ product_embeddings = Table(
     Column("canonical_product_key", VARCHAR, primary_key=True),
     Column("embedding_model", VARCHAR, primary_key=True),
     Column("run_id", VARCHAR),
-    Column("embedding_vector", ARRAY(FLOAT)),
+    Column("embedding_vector", _embedding_vector_type),
     Column("embedded_text", VARCHAR),
     Column("embedded_at", TIMESTAMP(timezone=False)),
 )
+Index(
+    PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,
+    product_embeddings.c.embedding_vector,
+    postgresql_using="hnsw",
+    postgresql_ops={"embedding_vector": PRODUCT_EMBEDDING_VECTOR_OPCLASS},
+).ddl_if(dialect="postgresql")
 
 product_embedding_neighbors = Table(
     "product_embedding_neighbors",

@@ -6,8 +6,9 @@ from collections.abc import Sequence
 from math import sqrt
 from typing import cast
 
-from sqlalchemy import Engine, bindparam, text
+from sqlalchemy import Engine, bindparam, select, text
 
+from ikea_agent.retrieval.schema import product_embeddings
 from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
@@ -49,16 +50,14 @@ _READ_PRODUCT_BY_KEY_QUERY = text(
     LIMIT 1
     """
 )
-_READ_EMBEDDING_ROWS_QUERY = text(
-    """
-    SELECT
-        canonical_product_key,
-        embedding_model,
-        embedding_vector
-    FROM catalog.product_embeddings
-    WHERE embedding_model = :embedding_model
-    ORDER BY canonical_product_key
-    """
+_READ_EMBEDDING_ROWS_QUERY = (
+    select(
+        product_embeddings.c.canonical_product_key,
+        product_embeddings.c.embedding_model,
+        product_embeddings.c.embedding_vector,
+    )
+    .where(product_embeddings.c.embedding_model == bindparam("embedding_model"))
+    .order_by(product_embeddings.c.canonical_product_key)
 )
 _DELETE_NEIGHBOR_ROWS_QUERY = text(
     """
@@ -83,14 +82,13 @@ _INSERT_NEIGHBOR_ROWS_QUERY = text(
     )
     """
 )
-_READ_EMBEDDINGS_FOR_SIMILARITY_QUERY = text(
-    """
-    SELECT canonical_product_key, embedding_vector
-    FROM catalog.product_embeddings
-    WHERE embedding_model = :embedding_model
-      AND canonical_product_key IN :product_keys
-    """
-).bindparams(bindparam("product_keys", expanding=True))
+_READ_EMBEDDINGS_FOR_SIMILARITY_QUERY = select(
+    product_embeddings.c.canonical_product_key,
+    product_embeddings.c.embedding_vector,
+).where(
+    product_embeddings.c.embedding_model == bindparam("embedding_model"),
+    product_embeddings.c.canonical_product_key.in_(bindparam("product_keys", expanding=True)),
+)
 
 
 class CatalogRepository:
@@ -488,10 +486,17 @@ def _format_embedding_text(value: object) -> str | None:
 
 
 def _vector_from_value(value: object) -> tuple[float, ...]:
-    if isinstance(value, list):
+    if value is None:
+        return ()
+    if hasattr(value, "tolist"):
+        return _vector_from_value(value.tolist())
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
         return tuple(float(item) for item in value if isinstance(item, int | float))
-    if isinstance(value, tuple):
-        return tuple(float(item) for item in value if isinstance(item, int | float))
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            items = [part.strip() for part in stripped[1:-1].split(",") if part.strip()]
+            return tuple(float(item) for item in items)
     return ()
 
 

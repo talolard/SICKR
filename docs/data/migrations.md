@@ -31,7 +31,7 @@ Use a throwaway local Postgres database or one slot-scoped worktree database to 
 migration bootstrapping:
 
 ```bash
-scripts/worktree/deps.sh ensure-postgres --slot 7
+scripts/worktree/deps.sh reset --slot 7
 
 ALEMBIC_DATABASE_URL="postgresql+psycopg://ikea:ikea@127.0.0.1:15439/ikea_agent" \
   uv run alembic upgrade head
@@ -39,6 +39,9 @@ ALEMBIC_DATABASE_URL="postgresql+psycopg://ikea:ikea@127.0.0.1:15439/ikea_agent"
 
 If successful, the database should contain Alembic version metadata plus the expected `app`,
 `catalog`, and `ops` schemas, and no errors should be emitted.
+
+If the slot was created before the pgvector change, use `reset` once so Docker recreates the
+Postgres container from the pgvector-capable image.
 
 ## Current Catalog And Seed Tables
 
@@ -54,6 +57,13 @@ Revision `20260319_0005` adds:
   - seeded product-image metadata used by runtime image lookup
 - `ops.seed_state`
   - observable seed versions and refresh details for local dependency preparation
+
+Revision `20260319_0006` adds:
+
+- PostgreSQL `vector` extension creation for local Dockerized Postgres
+- conversion of `catalog.product_embeddings.embedding_vector` from `DOUBLE PRECISION[]` to
+  `VECTOR(256)`
+- HNSW ANN index on `catalog.product_embeddings.embedding_vector` using cosine distance
 
 ## Current Room 3D Tables
 

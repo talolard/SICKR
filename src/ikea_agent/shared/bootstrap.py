@@ -13,6 +13,8 @@ def ensure_runtime_schema(engine: Engine) -> None:
     """Create catalog-side tables for tests and local one-off validation."""
 
     with engine.begin() as connection:
+        if engine.dialect.name == "postgresql":
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {CATALOG_SCHEMA}"))
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {OPS_SCHEMA}"))
     retrieval_metadata.create_all(engine, checkfirst=True)

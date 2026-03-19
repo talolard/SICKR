@@ -9,7 +9,7 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `MILVUS_URI` default: `http://127.0.0.1:19530`
 - `MILVUS_COLLECTION` default: `ikea_product_embeddings`
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
-- `EMBEDDING_DIMENSIONS` default: `256`
+- `EMBEDDING_DIMENSIONS` default: `256` (fixed to match the current pgvector column shape)
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
 - `ALLOW_MODEL_REQUESTS` default: `1`
 - `MMR_LAMBDA` default: `0.8`
@@ -22,7 +22,8 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 ## Notes
 
 - Embeddings are generated via pydantic-ai embedding providers.
-- Active local runtime expects Postgres for relational data and one shared Milvus service for vectors.
+- Active local runtime expects a pgvector-enabled Postgres for relational data and one shared
+  Milvus service for vectors until the retrieval rewrite lands.
 - `catalog.*` holds seeded product metadata, embeddings, image metadata, and optional precomputed
   embedding neighbors; `app.*` remains the runtime schema for conversation and analysis tables.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.

@@ -12,6 +12,8 @@ from typing import Literal
 from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ikea_agent.shared.db_contract import PRODUCT_EMBEDDING_DIMENSIONS
+
 
 class AgentModelConfig(BaseModel):
     """Optional model override configuration for one named agent."""
@@ -75,7 +77,11 @@ class AppSettings(BaseSettings):
     trace_root_dir: str = Field(default="traces")
     default_query_limit: int = Field(default=25, ge=1, le=200)
 
-    embedding_dimensions: int = Field(default=256, ge=64, le=3072)
+    embedding_dimensions: int = Field(
+        default=PRODUCT_EMBEDDING_DIMENSIONS,
+        ge=PRODUCT_EMBEDDING_DIMENSIONS,
+        le=PRODUCT_EMBEDDING_DIMENSIONS,
+    )
     retrieval_candidate_limit: int = Field(default=250, ge=50, le=2000)
 
     milvus_uri: str = Field(
