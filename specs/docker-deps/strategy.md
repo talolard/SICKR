@@ -84,7 +84,7 @@ The target shape is:
 - the embedding table has the vector index appropriate for the chosen distance
   metric
 - retrieval expresses vector distance through SQLAlchemy constructs instead of
-  raw SQL strings
+  handwritten SQL text blocks
 
 This is the missing piece that turns Postgres from a staging store into the
 actual search backend.
@@ -115,7 +115,7 @@ That split is exactly the complexity this rewrite is meant to remove.
 ### 4. The active retrieval path should use SQLAlchemy query construction
 
 For the corrected architecture, the active retrieval path should be written with
-SQLAlchemy query construction rather than raw SQL strings.
+SQLAlchemy query construction rather than handwritten SQL text blocks.
 
 That applies especially to:
 
@@ -126,7 +126,8 @@ That applies especially to:
   tooling
 
 Small typed SQL may still be acceptable in one-off infra scripts, but the
-runtime search path should not remain a large `text(...)`-driven surface.
+runtime search path should not remain a large SQL-text surface assembled around
+handwritten statement strings.
 
 ## Snapshot Strategy
 

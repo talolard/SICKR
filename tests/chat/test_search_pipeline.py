@@ -24,11 +24,14 @@ class _SettingsStub:
     mmr_lambda: float = 0.8
     mmr_preselect_limit: int = 30
     embedding_query_batch_size: int = 16
+    image_serving_strategy: str = "backend_proxy"
+    image_service_base_url: str | None = None
 
 
 @dataclass(slots=True)
 class _CatalogStub:
     neighbor_similarity_calls: list[list[str]] = field(default_factory=list)
+    image_lookup_calls: list[list[str]] = field(default_factory=list)
 
     def read_neighbor_similarities(
         self,
@@ -40,14 +43,19 @@ class _CatalogStub:
         self.neighbor_similarity_calls.append(product_keys)
         return {}
 
-
-@dataclass(frozen=True, slots=True)
-class _ProductImageCatalogStub:
-    image_urls: tuple[str, ...] = ()
-
-    def image_urls_for_canonical_key(self, *, canonical_product_key: str) -> tuple[str, ...]:
-        _ = canonical_product_key
-        return self.image_urls
+    def read_image_urls_by_product_keys(
+        self,
+        *,
+        canonical_product_keys: list[str],
+        serving_strategy: str,
+        base_url: str | None,
+    ) -> dict[str, tuple[str, ...]]:
+        _ = (serving_strategy, base_url)
+        self.image_lookup_calls.append(canonical_product_keys)
+        return {
+            key: (f"/static/product-images/{key.removesuffix('-DE')}",)
+            for key in canonical_product_keys
+        }
 
 
 @dataclass(slots=True)
@@ -72,7 +80,6 @@ class _RuntimeStub:
     settings: _SettingsStub
     reranker: _RerankerSpy
     catalog_repository: _CatalogStub
-    product_image_catalog: _ProductImageCatalogStub
 
 
 @dataclass(slots=True)
@@ -138,7 +145,6 @@ def _runtime() -> _RuntimeStub:
         settings=_SettingsStub(),
         reranker=_RerankerSpy(),
         catalog_repository=_CatalogStub(),
-        product_image_catalog=_ProductImageCatalogStub(image_urls=("/static/product-images/1",)),
     )
 
 
@@ -211,6 +217,7 @@ def test_search_pipeline_returns_ranked_results(
     assert output.results[0].product_name == "Lamp"
     assert output.results[0].product_type == "Lamp"
     assert output.results[0].image_urls == ("/static/product-images/1",)
+    assert runtime.catalog_repository.image_lookup_calls == [["1-DE"]]
     assert output.total_candidates == 1
     assert search_spy.result_limits == [200]
 

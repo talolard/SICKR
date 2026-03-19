@@ -5,28 +5,24 @@ from __future__ import annotations
 from collections.abc import Sequence
 from urllib.parse import urlparse
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, bindparam, func, select, update
+
+from ikea_agent.retrieval.schema import products_canonical
 
 _SHORT_TOKEN_MAX_LENGTH = 3
-_READ_MISSING_DISPLAY_TITLES_QUERY = text(
-    """
-    SELECT
-        canonical_product_key,
-        product_name,
-        description_text,
-        url,
-        display_title
-    FROM catalog.products_canonical
-    WHERE coalesce(trim(product_name), '') <> ''
-      AND (display_title IS NULL OR trim(display_title) = '')
-    """
-)
-_UPDATE_DISPLAY_TITLES_QUERY = text(
-    """
-    UPDATE catalog.products_canonical
-    SET display_title = :display_title
-    WHERE canonical_product_key = :canonical_product_key
-    """
+_READ_MISSING_DISPLAY_TITLES_QUERY = (
+    select(
+        products_canonical.c.canonical_product_key,
+        products_canonical.c.product_name,
+        products_canonical.c.description_text,
+        products_canonical.c.url,
+        products_canonical.c.display_title,
+    )
+    .where(func.coalesce(func.trim(products_canonical.c.product_name), "") != "")
+    .where(
+        (products_canonical.c.display_title.is_(None))
+        | (func.trim(products_canonical.c.display_title) == "")
+    )
 )
 
 
@@ -61,20 +57,29 @@ def backfill_product_display_titles(engine: Engine) -> int:
 
     with engine.begin() as connection:
         rows = connection.execute(_READ_MISSING_DISPLAY_TITLES_QUERY).fetchall()
-        updates = [
-            {
-                "display_title": derive_display_title(
-                    product_name=str(row[1]),
-                    description_text=_str_or_none(row[2]),
-                    url=_str_or_none(row[3]),
-                ),
-                "canonical_product_key": str(row[0]),
-            }
-            for row in rows
-        ]
+        updates = []
+        for row in rows:
+            display_title = derive_display_title(
+                product_name=str(row[1]),
+                description_text=_str_or_none(row[2]),
+                url=_str_or_none(row[3]),
+            )
+            updates.append(
+                {
+                    "b_display_title": display_title,
+                    "b_canonical_product_key": str(row[0]),
+                }
+            )
         if not updates:
             return 0
-        connection.execute(_UPDATE_DISPLAY_TITLES_QUERY, updates)
+        connection.execute(
+            update(products_canonical)
+            .where(
+                products_canonical.c.canonical_product_key == bindparam("b_canonical_product_key")
+            )
+            .values(display_title=bindparam("b_display_title")),
+            updates,
+        )
     return len(updates)
 
 

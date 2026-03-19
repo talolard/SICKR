@@ -261,7 +261,7 @@ force_reseed() {
   migrate_postgres
   env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
     --database-url "${POSTGRES_DATABASE_URL}" \
-    --repo-root "${CANONICAL_ROOT}" \
+    --repo-root "${WORKTREE_ROOT}" \
     --force
   clear_snapshot_state
 }

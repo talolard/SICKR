@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from logging import getLogger
 from time import perf_counter
 
-from ikea_agent.chat.product_images import image_urls_for_runtime
 from ikea_agent.chat.runtime import ChatRuntime, embed_queries, search_catalog
 from ikea_agent.chat.search_diversity import diversify_results
 from ikea_agent.retrieval.reranker import RerankedItem
@@ -212,21 +211,24 @@ def _select_top_ranked_results(
 ) -> list[ShortRetrievalResult]:
     if limit <= 0:
         return []
-    selected_results: list[ShortRetrievalResult] = []
+    selected_items: list[RerankedItem] = []
     seen_keys: set[str] = set()
     for item in reranked_items:
         key = item.result.canonical_product_key
         if key in seen_keys:
             continue
-        selected_results.append(
-            item.result.to_short_result(
-                image_urls=image_urls_for_runtime(
-                    runtime=runtime,
-                    canonical_product_key=key,
-                )
-            )
-        )
+        selected_items.append(item)
         seen_keys.add(key)
-        if len(selected_results) >= limit:
+        if len(selected_items) >= limit:
             break
-    return selected_results
+    image_urls_by_key = runtime.catalog_repository.read_image_urls_by_product_keys(
+        canonical_product_keys=[item.result.canonical_product_key for item in selected_items],
+        serving_strategy=runtime.settings.image_serving_strategy,
+        base_url=runtime.settings.image_service_base_url,
+    )
+    return [
+        item.result.to_short_result(
+            image_urls=image_urls_by_key.get(item.result.canonical_product_key, ())
+        )
+        for item in selected_items
+    ]

@@ -67,6 +67,17 @@ Revision `20260319_0006` adds:
   `VECTOR(256)`
 - HNSW ANN index on `catalog.product_embeddings.embedding_vector` using cosine distance
 
+Revision `20260319_0007` adds:
+
+- conversion of `catalog.product_embeddings.embedding_vector` from `VECTOR(256)` to
+  `HALFVEC(3072)` so the active schema stores native-width Gemini embeddings while keeping
+  HNSW cosine search indexed in Postgres
+- conversion of existing local `VECTOR(256)` rows by padding them during migration so older
+  volumes can upgrade in place before a fresh snapshot restore
+- composite product-image lookup indexes for the active ORM access paths:
+  - `catalog.product_images(product_id, is_og_image, image_rank, image_asset_key)`
+  - `catalog.product_images(canonical_product_key, is_og_image, image_rank, image_asset_key)`
+
 ## Current Room 3D Tables
 
 Revision `20260306_0003` adds:

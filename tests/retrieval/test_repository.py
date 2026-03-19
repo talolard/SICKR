@@ -12,7 +12,7 @@ from ikea_agent.retrieval.catalog_repository import (
     _build_postgres_neighbor_similarity_statement,
     _build_postgres_search_statement,
 )
-from ikea_agent.retrieval.schema import product_embeddings, products_canonical
+from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
@@ -102,6 +102,33 @@ def _seed_products(engine: Engine) -> None:
                 },
             ],
         )
+        connection.execute(
+            product_images.insert(),
+            [
+                {
+                    "image_asset_key": "1-primary.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 5,
+                    "is_og_image": True,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": "catalog/1-primary.jpg",
+                    "public_url": "https://example.com/images/1-primary.jpg",
+                    "local_path": None,
+                },
+                {
+                    "image_asset_key": "1-detail.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 2,
+                    "is_og_image": False,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": "catalog/1-detail.jpg",
+                    "public_url": "https://example.com/images/1-detail.jpg",
+                    "local_path": None,
+                },
+            ],
+        )
 
 
 def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> None:
@@ -166,6 +193,73 @@ def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
     assert product is not None
     assert product.product_name == "Desk One"
     assert product.display_title == "Desk One Compact Workstation"
+
+
+def test_read_image_urls_by_product_keys_returns_ordered_proxy_urls(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_4.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+
+    repository = CatalogRepository(engine)
+
+    image_urls = repository.read_image_urls_by_product_keys(
+        canonical_product_keys=["1-DE"],
+        serving_strategy="backend_proxy",
+        base_url=None,
+    )
+
+    assert image_urls == {
+        "1-DE": (
+            "/static/product-images/1",
+            "/static/product-images/1/2",
+        )
+    }
+
+
+def test_resolve_product_image_path_returns_ranked_local_path(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_5.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    primary_path = image_root / "primary.jpg"
+    detail_path = image_root / "detail.jpg"
+    primary_path.write_bytes(b"primary")
+    detail_path.write_bytes(b"detail")
+    with engine.begin() as connection:
+        connection.execute(product_images.delete())
+        connection.execute(
+            product_images.insert(),
+            [
+                {
+                    "image_asset_key": "1-primary-local.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 5,
+                    "is_og_image": True,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": str(primary_path),
+                    "public_url": None,
+                    "local_path": str(primary_path),
+                },
+                {
+                    "image_asset_key": "1-detail-local.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 2,
+                    "is_og_image": False,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": str(detail_path),
+                    "public_url": None,
+                    "local_path": str(detail_path),
+                },
+            ],
+        )
+
+    repository = CatalogRepository(engine)
+
+    assert repository.resolve_product_image_path(product_id="1") == primary_path.resolve()
+    assert repository.resolve_product_image_path(product_id="1", ordinal=2) == detail_path.resolve()
 
 
 def test_postgres_search_statement_uses_pgvector_distance_and_sqlalchemy_filters() -> None:

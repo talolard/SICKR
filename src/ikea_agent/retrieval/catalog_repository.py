@@ -5,13 +5,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import sqrt
-from typing import Any, cast
+from pathlib import Path
+from typing import Any, Literal, cast
 
-from sqlalchemy import Engine, Row, and_, bindparam, func, select, text
+from sqlalchemy import Engine, Row, and_, bindparam, case, delete, func, select
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Select
 
-from ikea_agent.retrieval.schema import product_embeddings, products_canonical
+from ikea_agent.chat.product_images import build_catalog_image_url
+from ikea_agent.retrieval.catalog_models import ProductImageRecord
+from ikea_agent.retrieval.schema import (
+    product_embedding_neighbors,
+    product_embeddings,
+    products_canonical,
+)
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 _MIN_PAIRWISE_KEY_COUNT = 2
@@ -19,43 +27,6 @@ _DEFAULT_COUNTRY = "Germany"
 _QUERY_VECTOR_BINDPARAM = bindparam(
     "query_vector",
     type_=product_embeddings.c.embedding_vector.type,
-)
-_NEIGHBOR_SIMILARITIES_QUERY = text(
-    """
-    SELECT source_product_key, neighbor_product_key, cosine_similarity
-    FROM catalog.product_embedding_neighbors
-    WHERE embedding_model = :embedding_model
-      AND source_product_key IN :source_keys
-      AND neighbor_product_key IN :neighbor_keys
-    """
-).bindparams(
-    bindparam("source_keys", expanding=True),
-    bindparam("neighbor_keys", expanding=True),
-)
-_READ_PRODUCT_BY_KEY_QUERY = text(
-    """
-    SELECT
-        c.canonical_product_key,
-        c.product_name,
-        c.product_type,
-        c.description_text,
-        e.embedded_text,
-        c.main_category,
-        c.sub_category,
-        c.dimensions_text,
-        c.width_cm,
-        c.depth_cm,
-        c.height_cm,
-        c.price_eur,
-        c.url,
-        c.display_title
-    FROM catalog.products_canonical AS c
-    LEFT JOIN catalog.product_embeddings AS e
-      ON e.canonical_product_key = c.canonical_product_key
-    WHERE c.country = 'Germany'
-      AND c.canonical_product_key = :canonical_product_key
-    LIMIT 1
-    """
 )
 _READ_EMBEDDING_ROWS_QUERY = (
     select(
@@ -66,35 +37,55 @@ _READ_EMBEDDING_ROWS_QUERY = (
     .where(product_embeddings.c.embedding_model == bindparam("embedding_model"))
     .order_by(product_embeddings.c.canonical_product_key)
 )
-_DELETE_NEIGHBOR_ROWS_QUERY = text(
-    """
-    DELETE FROM catalog.product_embedding_neighbors
-    WHERE embedding_model = :embedding_model
-    """
-)
-_INSERT_NEIGHBOR_ROWS_QUERY = text(
-    """
-    INSERT INTO catalog.product_embedding_neighbors (
-        embedding_model,
-        source_product_key,
-        neighbor_product_key,
-        neighbor_rank,
-        cosine_similarity
-    ) VALUES (
-        :embedding_model,
-        :source_product_key,
-        :neighbor_product_key,
-        :neighbor_rank,
-        :cosine_similarity
-    )
-    """
-)
 _READ_EMBEDDINGS_FOR_SIMILARITY_QUERY = select(
     product_embeddings.c.canonical_product_key,
     product_embeddings.c.embedding_vector,
 ).where(
     product_embeddings.c.embedding_model == bindparam("embedding_model"),
     product_embeddings.c.canonical_product_key.in_(bindparam("product_keys", expanding=True)),
+)
+_READ_PRODUCT_BY_KEY_QUERY = (
+    select(
+        products_canonical.c.canonical_product_key,
+        products_canonical.c.product_name,
+        products_canonical.c.product_type,
+        products_canonical.c.description_text,
+        product_embeddings.c.embedded_text,
+        products_canonical.c.main_category,
+        products_canonical.c.sub_category,
+        products_canonical.c.dimensions_text,
+        products_canonical.c.width_cm,
+        products_canonical.c.depth_cm,
+        products_canonical.c.height_cm,
+        products_canonical.c.price_eur,
+        products_canonical.c.url,
+        products_canonical.c.display_title,
+    )
+    .select_from(
+        products_canonical.outerjoin(
+            product_embeddings,
+            (
+                product_embeddings.c.canonical_product_key
+                == products_canonical.c.canonical_product_key
+            ),
+        )
+    )
+    .where(
+        products_canonical.c.country == _DEFAULT_COUNTRY,
+        products_canonical.c.canonical_product_key == bindparam("canonical_product_key"),
+    )
+    .limit(1)
+)
+_NEIGHBOR_SIMILARITIES_QUERY = select(
+    product_embedding_neighbors.c.source_product_key,
+    product_embedding_neighbors.c.neighbor_product_key,
+    product_embedding_neighbors.c.cosine_similarity,
+).where(
+    product_embedding_neighbors.c.embedding_model == bindparam("embedding_model"),
+    product_embedding_neighbors.c.source_product_key.in_(bindparam("source_keys", expanding=True)),
+    product_embedding_neighbors.c.neighbor_product_key.in_(
+        bindparam("neighbor_keys", expanding=True)
+    ),
 )
 
 
@@ -252,6 +243,82 @@ class CatalogRepository:
             lookup[(source_key, neighbor_key)] = similarity
         return lookup
 
+    def read_image_urls_by_product_keys(
+        self,
+        *,
+        canonical_product_keys: Sequence[str],
+        serving_strategy: Literal["backend_proxy", "direct_public_url"],
+        base_url: str | None,
+    ) -> dict[str, tuple[str, ...]]:
+        """Return ordered image URLs for each requested canonical product key."""
+
+        normalized_keys = [key for key in dict.fromkeys(canonical_product_keys) if key]
+        if not normalized_keys:
+            return {}
+        with Session(self._engine) as session:
+            records = session.scalars(
+                select(ProductImageRecord)
+                .where(ProductImageRecord.canonical_product_key.in_(normalized_keys))
+                .order_by(
+                    ProductImageRecord.canonical_product_key.asc(),
+                    _image_order_priority(ProductImageRecord.is_og_image),
+                    ProductImageRecord.image_rank.asc().nulls_last(),
+                    ProductImageRecord.image_asset_key.asc(),
+                )
+            ).all()
+        image_urls: dict[str, list[str]] = {}
+        counts_by_key: dict[str, int] = {}
+        for record in records:
+            key = record.canonical_product_key
+            counts_by_key[key] = counts_by_key.get(key, 0) + 1
+            image_urls.setdefault(key, []).append(
+                build_catalog_image_url(
+                    product_id=record.product_id,
+                    ordinal=counts_by_key[key],
+                    public_url=record.public_url,
+                    serving_strategy=serving_strategy,
+                    base_url=base_url,
+                )
+            )
+        return {key: tuple(urls) for key, urls in image_urls.items()}
+
+    def resolve_product_image_path(
+        self,
+        *,
+        product_id: str,
+        ordinal: int | None = None,
+    ) -> Path | None:
+        """Return one local image path for a product id and optional ordinal."""
+
+        if not product_id:
+            return None
+        target_ordinal = 1 if ordinal is None else ordinal
+        if target_ordinal < 1:
+            return None
+        with Session(self._engine) as session:
+            records = session.scalars(
+                select(ProductImageRecord)
+                .where(
+                    ProductImageRecord.product_id == product_id,
+                    ProductImageRecord.local_path.is_not(None),
+                )
+                .order_by(
+                    _image_order_priority(ProductImageRecord.is_og_image),
+                    ProductImageRecord.image_rank.asc().nulls_last(),
+                    ProductImageRecord.image_asset_key.asc(),
+                )
+                .limit(target_ordinal)
+            ).all()
+        if len(records) < target_ordinal:
+            return None
+        local_path = records[target_ordinal - 1].local_path
+        if local_path is None:
+            return None
+        candidate = Path(local_path).expanduser()
+        if not candidate.exists():
+            return None
+        return candidate.resolve()
+
     def _read_neighbor_similarities_legacy(
         self,
         *,
@@ -372,11 +439,15 @@ class EmbeddingSnapshotRepository:
         """Replace precomputed neighbor rows for one embedding model in one batch."""
 
         with self._engine.begin() as connection:
-            connection.execute(_DELETE_NEIGHBOR_ROWS_QUERY, {"embedding_model": embedding_model})
+            connection.execute(
+                delete(product_embedding_neighbors).where(
+                    product_embedding_neighbors.c.embedding_model == embedding_model
+                )
+            )
             if not rows:
                 return 0
             connection.execute(
-                _INSERT_NEIGHBOR_ROWS_QUERY,
+                product_embedding_neighbors.insert(),
                 [
                     {
                         "embedding_model": embedding_model,
@@ -791,6 +862,11 @@ def _float_or_none(value: object) -> float | None:
     if isinstance(value, str):
         return float(value)
     return None
+
+
+def _image_order_priority(column: object) -> ColumnElement[int]:
+    expression = cast("Any", column)
+    return case((expression.is_(True), 0), else_=1)
 
 
 def _format_embedding_text(value: object) -> str | None:

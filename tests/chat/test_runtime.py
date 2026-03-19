@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from ikea_agent.chat import runtime as runtime_module
@@ -43,7 +41,6 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     session_factory = object()
     catalog_repository = object()
     reranker = object()
-    product_image_catalog = object()
 
     monkeypatch.setattr(runtime_module, "get_settings", lambda: settings)
     monkeypatch.setattr(
@@ -74,25 +71,6 @@ def test_build_chat_runtime_uses_prepared_dependencies(
         lambda _backend, _runtime_settings: reranker,
     )
 
-    def _from_database(
-        *,
-        engine: object,
-        output_root: object,
-        serving_strategy: str,
-        base_url: str | None,
-    ) -> object:
-        assert engine is not None
-        assert output_root is not None
-        assert serving_strategy == settings.image_serving_strategy
-        assert base_url == settings.image_service_base_url
-        return product_image_catalog
-
-    monkeypatch.setattr(
-        runtime_module,
-        "ProductImageCatalog",
-        SimpleNamespace(from_database=_from_database),
-    )
-
     runtime = runtime_module.build_chat_runtime()
 
     assert runtime.settings is settings
@@ -100,7 +78,6 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     assert runtime.session_factory is session_factory
     assert runtime.catalog_repository is catalog_repository
     assert runtime.reranker is reranker
-    assert runtime.product_image_catalog is product_image_catalog
     assert tuple(runtime.__dataclass_fields__) == (
         "settings",
         "sqlalchemy_engine",
@@ -108,5 +85,4 @@ def test_build_chat_runtime_uses_prepared_dependencies(
         "embedder",
         "catalog_repository",
         "reranker",
-        "product_image_catalog",
     )

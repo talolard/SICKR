@@ -11,18 +11,25 @@ from pathlib import Path
 from typing import Any
 
 from pyarrow import parquet as pq
-from sqlalchemy import Connection, Engine, text
+from sqlalchemy import Connection, Engine, delete, func, insert, select
 from sqlalchemy.sql.base import Executable
 
 from ikea_agent.config import get_settings
 from ikea_agent.retrieval.display_titles import derive_display_title
-from ikea_agent.retrieval.schema import product_embeddings
+from ikea_agent.retrieval.schema import (
+    product_embedding_neighbors,
+    product_embeddings,
+    product_images,
+    products_canonical,
+)
 from ikea_agent.shared.db_contract import (
     IMAGE_CATALOG_SEED_SYSTEM,
     LOCAL_IMAGE_STORAGE_BACKEND,
     POSTGRES_SEED_SYSTEM,
+    PRODUCT_EMBEDDING_DIMENSIONS,
     REMOTE_IMAGE_STORAGE_BACKEND,
 )
+from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
 
 _PRODUCTS_PARQUET_PATH = "data/parquet/products_canonical"
@@ -31,62 +38,12 @@ _PRODUCTS_CANONICAL_TABLE = "catalog.products_canonical"
 _PRODUCT_EMBEDDINGS_TABLE = "catalog.product_embeddings"
 _PRODUCT_IMAGES_TABLE = "catalog.product_images"
 _PRODUCT_EMBEDDING_NEIGHBORS_TABLE = "catalog.product_embedding_neighbors"
-_READ_PARQUET_IMAGE_QUERY = """
-    SELECT
-        image_asset_key,
-        repo_canonical_product_key,
-        CAST(product_id AS VARCHAR),
-        image_rank,
-        COALESCE(is_og_image, FALSE),
-        image_role,
-        local_path,
-        canonical_image_url,
-        storage_uri,
-        extraction_source,
-        crawl_run_id,
-        source_page_url,
-        sha256,
-        content_type,
-        width_px,
-        height_px,
-        scraped_at,
-        downloaded_at
-    FROM read_parquet(?)
-    WHERE repo_canonical_product_key IS NOT NULL
-      AND CAST(product_id AS VARCHAR) IS NOT NULL
-    ORDER BY image_asset_key
-"""
-_READ_JSON_IMAGE_QUERY = """
-    SELECT
-        image_asset_key,
-        repo_canonical_product_key,
-        CAST(product_id AS VARCHAR),
-        image_rank,
-        COALESCE(is_og_image, FALSE),
-        image_role,
-        local_path,
-        canonical_image_url,
-        storage_uri,
-        extraction_source,
-        crawl_run_id,
-        source_page_url,
-        sha256,
-        content_type,
-        width_px,
-        height_px,
-        scraped_at,
-        downloaded_at
-    FROM read_json_auto(?)
-    WHERE repo_canonical_product_key IS NOT NULL
-      AND CAST(product_id AS VARCHAR) IS NOT NULL
-    ORDER BY image_asset_key
-"""
 _ROW_COUNT_QUERY_BY_TABLE = {
-    _PRODUCTS_CANONICAL_TABLE: text("SELECT count(*) FROM catalog.products_canonical"),
-    _PRODUCT_EMBEDDINGS_TABLE: text("SELECT count(*) FROM catalog.product_embeddings"),
-    _PRODUCT_IMAGES_TABLE: text("SELECT count(*) FROM catalog.product_images"),
-    _PRODUCT_EMBEDDING_NEIGHBORS_TABLE: text(
-        "SELECT count(*) FROM catalog.product_embedding_neighbors"
+    _PRODUCTS_CANONICAL_TABLE: select(func.count()).select_from(products_canonical),
+    _PRODUCT_EMBEDDINGS_TABLE: select(func.count()).select_from(product_embeddings),
+    _PRODUCT_IMAGES_TABLE: select(func.count()).select_from(product_images),
+    _PRODUCT_EMBEDDING_NEIGHBORS_TABLE: select(func.count()).select_from(
+        product_embedding_neighbors
     ),
 }
 
@@ -181,64 +138,14 @@ def seed_postgres_database(
     image_rows = _load_image_rows(catalog_source=image_catalog_source)
 
     with engine.begin() as connection:
-        connection.execute(text("DELETE FROM catalog.product_embedding_neighbors"))
-        connection.execute(text("DELETE FROM catalog.product_images"))
-        connection.execute(text("DELETE FROM catalog.product_embeddings"))
-        connection.execute(text("DELETE FROM catalog.products_canonical"))
+        connection.execute(product_embedding_neighbors.delete())
+        connection.execute(product_images.delete())
+        connection.execute(product_embeddings.delete())
+        connection.execute(products_canonical.delete())
 
         _insert_rows(
             connection=connection,
-            statement=text(
-                """
-                INSERT INTO catalog.products_canonical (
-                    canonical_product_key,
-                    product_id,
-                    unique_id,
-                    country,
-                    product_name,
-                    display_title,
-                    product_type,
-                    description_text,
-                    main_category,
-                    sub_category,
-                    dimensions_text,
-                    width_cm,
-                    depth_cm,
-                    height_cm,
-                    price_eur,
-                    currency,
-                    rating,
-                    rating_count,
-                    badge,
-                    online_sellable,
-                    url,
-                    source_updated_at
-                ) VALUES (
-                    :canonical_product_key,
-                    :product_id,
-                    :unique_id,
-                    :country,
-                    :product_name,
-                    :display_title,
-                    :product_type,
-                    :description_text,
-                    :main_category,
-                    :sub_category,
-                    :dimensions_text,
-                    :width_cm,
-                    :depth_cm,
-                    :height_cm,
-                    :price_eur,
-                    :currency,
-                    :rating,
-                    :rating_count,
-                    :badge,
-                    :online_sellable,
-                    :url,
-                    :source_updated_at
-                )
-                """
-            ),
+            statement=products_canonical.insert(),
             rows=product_rows,
         )
         _insert_rows(
@@ -248,51 +155,7 @@ def seed_postgres_database(
         )
         _insert_rows(
             connection=connection,
-            statement=text(
-                """
-                INSERT INTO catalog.product_images (
-                    image_asset_key,
-                    canonical_product_key,
-                    product_id,
-                    image_rank,
-                    is_og_image,
-                    image_role,
-                    storage_backend_kind,
-                    storage_locator,
-                    public_url,
-                    local_path,
-                    canonical_image_url,
-                    provenance,
-                    crawl_run_id,
-                    source_page_url,
-                    sha256,
-                    content_type,
-                    width_px,
-                    height_px,
-                    refreshed_at
-                ) VALUES (
-                    :image_asset_key,
-                    :canonical_product_key,
-                    :product_id,
-                    :image_rank,
-                    :is_og_image,
-                    :image_role,
-                    :storage_backend_kind,
-                    :storage_locator,
-                    :public_url,
-                    :local_path,
-                    :canonical_image_url,
-                    :provenance,
-                    :crawl_run_id,
-                    :source_page_url,
-                    :sha256,
-                    :content_type,
-                    :width_px,
-                    :height_px,
-                    :refreshed_at
-                )
-                """
-            ),
+            statement=product_images.insert(),
             rows=image_rows,
         )
         _write_seed_state(
@@ -384,22 +247,30 @@ def _load_embedding_rows(*, embeddings_parquet: Path) -> list[dict[str, object]]
             _str_or_none(row.get("embedding_model")) or "",
         ),
     )
-    return [
-        {
-            "canonical_product_key": str(row["canonical_product_key"]),
-            "embedding_model": str(row["embedding_model"]),
-            "run_id": _str_or_none(row.get("run_id")),
-            "embedding_vector": tuple(
-                float(item)
-                for item in _sequence_or_empty(row.get("embedding_vector"))
-                if isinstance(item, int | float)
+    embedding_rows: list[dict[str, object]] = []
+    for row in rows:
+        embedding_vector = tuple(
+            float(item)
+            for item in _sequence_or_empty(row.get("embedding_vector"))
+            if isinstance(item, int | float)
+        )
+        if embedding_vector and len(embedding_vector) != PRODUCT_EMBEDDING_DIMENSIONS:
+            msg = (
+                f"Embedding width mismatch for {row['canonical_product_key']}: "
+                f"expected {PRODUCT_EMBEDDING_DIMENSIONS}, got {len(embedding_vector)}."
             )
-            or (),
-            "embedded_text": _str_or_none(row.get("embedded_text")),
-            "embedded_at": row.get("embedded_at"),
-        }
-        for row in rows
-    ]
+            raise ValueError(msg)
+        embedding_rows.append(
+            {
+                "canonical_product_key": str(row["canonical_product_key"]),
+                "embedding_model": str(row["embedding_model"]),
+                "run_id": _str_or_none(row.get("run_id")),
+                "embedding_vector": embedding_vector,
+                "embedded_text": _str_or_none(row.get("embedded_text")),
+                "embedded_at": row.get("embedded_at"),
+            }
+        )
+    return embedding_rows
 
 
 def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
@@ -538,14 +409,7 @@ def _fingerprint_paths(paths: list[Path]) -> str:
 def _read_seed_version(*, engine: Engine, system_name: str) -> str | None:
     with engine.connect() as connection:
         row = connection.execute(
-            text(
-                """
-                SELECT version
-                FROM ops.seed_state
-                WHERE system_name = :system_name
-                """
-            ),
-            {"system_name": system_name},
+            select(seed_state.c.version).where(seed_state.c.system_name == system_name)
         ).fetchone()
     if row is None or row[0] is None:
         return None
@@ -561,36 +425,17 @@ def _write_seed_state(
     details: dict[str, Any],
 ) -> None:
     connection.execute(
-        text("DELETE FROM ops.seed_state WHERE system_name = :system_name"),
-        {"system_name": system_name},
+        delete(seed_state).where(seed_state.c.system_name == system_name),
     )
     connection.execute(
-        text(
-            """
-            INSERT INTO ops.seed_state (
-                system_name,
-                version,
-                source_kind,
-                status,
-                details_json,
-                updated_at
-            ) VALUES (
-                :system_name,
-                :version,
-                :source_kind,
-                'ready',
-                :details_json,
-                :updated_at
-            )
-            """
+        insert(seed_state).values(
+            system_name=system_name,
+            version=version,
+            source_kind=source_kind,
+            status="ready",
+            details_json=json.dumps(details, sort_keys=True),
+            updated_at=datetime.now(tz=UTC),
         ),
-        {
-            "system_name": system_name,
-            "version": version,
-            "source_kind": source_kind,
-            "details_json": json.dumps(details, sort_keys=True),
-            "updated_at": datetime.now(tz=UTC),
-        },
     )
 
 

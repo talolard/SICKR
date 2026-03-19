@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from pydantic_ai import Embedder
@@ -12,7 +11,6 @@ from pydantic_ai.embeddings import EmbeddingSettings
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.chat.product_images import ProductImageCatalog
 from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.retrieval.catalog_repository import CatalogRepository
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
@@ -64,7 +62,6 @@ class ChatRuntime:
     embedder: Embedder
     catalog_repository: CatalogRepository
     reranker: Reranker
-    product_image_catalog: ProductImageCatalog
 
 
 async def embed_query(runtime: ChatRuntime, query_text: str) -> tuple[float, ...]:
@@ -147,10 +144,4 @@ def build_chat_runtime() -> ChatRuntime:
         embedder=embedder,
         catalog_repository=CatalogRepository(sqlalchemy_engine),
         reranker=get_reranker(backend, settings),
-        product_image_catalog=ProductImageCatalog.from_database(
-            engine=sqlalchemy_engine,
-            output_root=Path(settings.ikea_image_catalog_root_dir),
-            serving_strategy=settings.image_serving_strategy,
-            base_url=settings.image_service_base_url,
-        ),
     )

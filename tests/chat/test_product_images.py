@@ -1,123 +1,63 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-import pyarrow as pa
 import pytest
 from fastapi.testclient import TestClient
-from pyarrow import parquet as pq
 
 from ikea_agent.chat.product_images import (
-    IndexedProductImage,
-    ProductImageCatalog,
+    build_catalog_image_url,
+    build_primary_image_url,
+    build_ranked_image_url,
     product_id_from_canonical_key,
 )
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import create_app
 
 
-def _write_catalog_jsonl(
-    *,
-    root: Path,
-    run_id: str,
-    rows: list[dict[str, object]],
-) -> Path:
-    run_dir = root / "runs" / run_id
-    run_dir.mkdir(parents=True)
-    catalog_path = run_dir / "catalog.jsonl"
-    catalog_path.write_text(
-        "\n".join(json.dumps(row) for row in rows),
-        encoding="utf-8",
+def test_build_catalog_image_url_prefers_proxy_routes_for_backend_serving() -> None:
+    assert (
+        build_catalog_image_url(
+            product_id="28508",
+            ordinal=1,
+            public_url="https://example.test/primary.jpg",
+            serving_strategy="backend_proxy",
+            base_url=None,
+        )
+        == "/static/product-images/28508"
     )
-    return catalog_path
-
-
-def _write_catalog_parquet(
-    *,
-    root: Path,
-    run_id: str,
-    rows: list[dict[str, object]],
-) -> Path:
-    run_dir = root / "runs" / run_id
-    run_dir.mkdir(parents=True)
-    parquet_path = run_dir / "catalog.parquet"
-    pq.write_table(pa.Table.from_pylist(rows), parquet_path)
-    return parquet_path
-
-
-def test_product_image_catalog_indexes_ranked_images_from_jsonl(tmp_path: Path) -> None:
-    image_root = tmp_path / "images"
-    image_root.mkdir()
-    primary = image_root / "alpha.jpg"
-    primary.write_bytes(b"alpha")
-    secondary = image_root / "beta.jpg"
-    secondary.write_bytes(b"beta")
-    missing = image_root / "missing.jpg"
-
-    _write_catalog_jsonl(
-        root=tmp_path,
-        run_id="run-1",
-        rows=[
-            {
-                "product_id": "28508",
-                "local_path": str(secondary),
-                "image_rank": 2,
-                "is_og_image": False,
-                "canonical_image_url": "https://example.test/secondary.jpg",
-            },
-            {
-                "product_id": "28508",
-                "local_path": str(primary),
-                "image_rank": 5,
-                "is_og_image": True,
-                "canonical_image_url": "https://example.test/primary.jpg",
-            },
-            {
-                "product_id": "28508",
-                "local_path": str(missing),
-                "image_rank": 1,
-                "is_og_image": True,
-                "canonical_image_url": "https://example.test/missing.jpg",
-            },
-        ],
+    assert (
+        build_catalog_image_url(
+            product_id="28508",
+            ordinal=2,
+            public_url="https://example.test/secondary.jpg",
+            serving_strategy="backend_proxy",
+            base_url="https://app.example.test",
+        )
+        == "https://app.example.test/static/product-images/28508/2"
     )
 
-    catalog = ProductImageCatalog.from_output_root(output_root=tmp_path)
 
-    assert catalog.image_urls_for_canonical_key(canonical_product_key="28508-DE") == (
-        "/static/product-images/28508",
-        "/static/product-images/28508/2",
-    )
-    assert catalog.resolve_image_path(product_id="28508") == primary.resolve()
-    assert catalog.resolve_image_path(product_id="28508", ordinal=2) == secondary.resolve()
-
-
-def test_product_image_catalog_prefers_parquet_when_available(tmp_path: Path) -> None:
-    image_root = tmp_path / "images"
-    image_root.mkdir()
-    image_path = image_root / "gamma.jpg"
-    image_path.write_bytes(b"gamma")
-
-    _write_catalog_parquet(
-        root=tmp_path,
-        run_id="run-2",
-        rows=[
-            {
-                "product_id": "348326",
-                "local_path": str(image_path),
-                "image_rank": 1,
-                "is_og_image": True,
-                "canonical_image_url": "https://example.test/gamma.jpg",
-            }
-        ],
+def test_build_catalog_image_url_can_pass_through_public_urls() -> None:
+    assert (
+        build_catalog_image_url(
+            product_id="348326",
+            ordinal=1,
+            public_url="https://example.test/gamma.jpg",
+            serving_strategy="direct_public_url",
+            base_url=None,
+        )
+        == "https://example.test/gamma.jpg"
     )
 
-    catalog = ProductImageCatalog.from_output_root(output_root=tmp_path)
 
-    assert catalog.resolve_image_path(product_id="348326") == image_path.resolve()
+def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:
+    assert build_primary_image_url(product_id="90458891") == "/static/product-images/90458891"
+    assert build_ranked_image_url(product_id="90458891", ordinal=3) == (
+        "/static/product-images/90458891/3"
+    )
 
 
 def test_product_id_from_canonical_key_splits_country_suffix() -> None:
@@ -127,31 +67,34 @@ def test_product_id_from_canonical_key_splits_country_suffix() -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class _CatalogRepositoryStub:
+    image_path: Path
+
+    def resolve_product_image_path(
+        self,
+        *,
+        product_id: str,
+        ordinal: int | None = None,
+    ) -> Path | None:
+        if product_id != "90458891":
+            return None
+        target_ordinal = 1 if ordinal is None else ordinal
+        if target_ordinal != 1:
+            return None
+        return self.image_path
+
+
+@dataclass(frozen=True, slots=True)
 class _RuntimeStub:
-    product_image_catalog: ProductImageCatalog
+    catalog_repository: _CatalogRepositoryStub
 
 
-def test_create_app_serves_indexed_product_images(
+def test_create_app_serves_product_images_from_catalog_repository(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image_path = tmp_path / "served.jpg"
     image_path.write_bytes(b"served-image")
-    catalog = ProductImageCatalog(
-        output_root=tmp_path,
-        images_by_product_id={
-            "90458891": (
-                IndexedProductImage(
-                    product_id="90458891",
-                    local_path=image_path.resolve(),
-                    image_rank=1,
-                    is_og_image=True,
-                    public_url=None,
-                    storage_backend_kind="local_shared_root",
-                ),
-            )
-        },
-    )
 
     monkeypatch.setattr("ikea_agent.chat_app.main.list_agent_catalog", list)
 
@@ -159,7 +102,7 @@ def test_create_app_serves_indexed_product_images(
         create_app(
             runtime=cast(
                 "ChatRuntime",
-                _RuntimeStub(product_image_catalog=catalog),
+                _RuntimeStub(catalog_repository=_CatalogRepositoryStub(image_path=image_path)),
             ),
             mount_web_ui=False,
             mount_ag_ui=False,

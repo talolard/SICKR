@@ -107,7 +107,7 @@ This file is the continuity log for the conversation persistence epic and all ch
   - `uv run ruff check src/ikea_agent/retrieval/schema.py src/ikea_agent/shared/bootstrap.py src/ikea_agent/retrieval/catalog_repository.py src/ikea_agent/chat/runtime.py tests/retrieval/test_repository.py`
   - `uv run pytest tests/retrieval/test_repository.py tests/chat/test_runtime.py -q` (5 passed)
 - Risks / known gaps:
-  - Retrieval hydration still uses raw SQL text statements executed through SQLAlchemy driver API for parity and temp-table semantics; full query-builder conversion can be done incrementally later.
+  - Retrieval hydration still used SQL text statements executed through the SQLAlchemy driver API for parity and temp-table semantics at the time of this handoff; later follow-up work can continue that conversion.
   - Legacy helper `src/ikea_agent/shared/db.py` remains for non-runtime scripts and is not part of active runtime retrieval path.
 - Next step recommendation:
   - Claim `tal_maria_ikea-l18.4` and persist AG-UI run lifecycle + message archive records from live runs.

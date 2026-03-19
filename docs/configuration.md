@@ -6,7 +6,7 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 
 - `DATABASE_URL` default: `postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent`
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
-- `EMBEDDING_DIMENSIONS` default: `256` (fixed to match the current pgvector column shape)
+- `EMBEDDING_DIMENSIONS` default: `3072` (fixed to the native Gemini embedding width used by the seeded parquet snapshot and Postgres `halfvec` column)
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
 - `ALLOW_MODEL_REQUESTS` default: `1`
 - `MMR_LAMBDA` default: `0.8`
@@ -33,6 +33,8 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
   maintenance path.
 - Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the
   application package.
+- Use `uv run python scripts/docker_deps/regenerate_product_embeddings.py` when the repo-local
+  embedding parquet must be refreshed at native Gemini width before rebuilding snapshots.
 - Use `uv run python -m scripts.docker_deps.seed_postgres` to seed Postgres from canonical
   parquet and image-catalog inputs.
 

@@ -15,15 +15,21 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, delete, func, insert, select
 
-from ikea_agent.chat.product_images import ProductImageCatalog
 from ikea_agent.config import get_settings
-from ikea_agent.retrieval.catalog_repository import EmbeddingSnapshotRepository
+from ikea_agent.retrieval.catalog_repository import CatalogRepository, EmbeddingSnapshotRepository
+from ikea_agent.retrieval.schema import (
+    product_embedding_neighbors,
+    product_embeddings,
+    product_images,
+    products_canonical,
+)
 from ikea_agent.shared.db_contract import (
     POSTGRES_SNAPSHOT_SYSTEM,
     PRODUCT_EMBEDDING_DISTANCE_METRIC,
 )
+from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_database_engine
 from ingest.precompute_embedding_neighbors import build_neighbor_rows
 from scripts.docker_deps.seed_postgres import (
@@ -443,35 +449,17 @@ def _write_snapshot_state(
 ) -> None:
     with engine.begin() as connection:
         connection.execute(
-            text("DELETE FROM ops.seed_state WHERE system_name = :system_name"),
-            {"system_name": POSTGRES_SNAPSHOT_SYSTEM},
+            delete(seed_state).where(seed_state.c.system_name == POSTGRES_SNAPSHOT_SYSTEM),
         )
         connection.execute(
-            text(
-                """
-                INSERT INTO ops.seed_state (
-                    system_name,
-                    version,
-                    source_kind,
-                    status,
-                    details_json,
-                    updated_at
-                ) VALUES (
-                    :system_name,
-                    :version,
-                    'postgres_snapshot',
-                    'ready',
-                    :details_json,
-                    :updated_at
-                )
-                """
+            insert(seed_state).values(
+                system_name=POSTGRES_SNAPSHOT_SYSTEM,
+                version=snapshot_version,
+                source_kind="postgres_snapshot",
+                status="ready",
+                details_json=json.dumps(details, sort_keys=True),
+                updated_at=datetime.now(tz=UTC),
             ),
-            {
-                "system_name": POSTGRES_SNAPSHOT_SYSTEM,
-                "version": snapshot_version,
-                "details_json": json.dumps(details, sort_keys=True),
-                "updated_at": datetime.now(tz=UTC),
-            },
         )
 
 
@@ -525,47 +513,42 @@ def _validate_restored_snapshot(
 ) -> dict[str, object]:
     settings = get_settings()
     engine = create_database_engine(database_url)
-    image_catalog = ProductImageCatalog.from_database(
-        engine=engine,
-        output_root=image_catalog_root,
-        serving_strategy="direct_public_url",
-        base_url="https://example.test",
-    )
+    _ = image_catalog_root
+    image_repository = CatalogRepository(engine)
     embedding_repository = EmbeddingSnapshotRepository(engine)
     embeddings = embedding_repository.read_embedding_rows(settings.gemini_model)
     with engine.connect() as connection:
         restored_counts = {
             "products_count": int(
                 connection.execute(
-                    text("SELECT count(*) FROM catalog.products_canonical")
+                    select(func.count()).select_from(products_canonical)
                 ).scalar_one()
             ),
             "embeddings_count": int(
                 connection.execute(
-                    text("SELECT count(*) FROM catalog.product_embeddings")
+                    select(func.count()).select_from(product_embeddings)
                 ).scalar_one()
             ),
             "image_count": int(
-                connection.execute(text("SELECT count(*) FROM catalog.product_images")).scalar_one()
+                connection.execute(select(func.count()).select_from(product_images)).scalar_one()
             ),
             "neighbor_count": int(
                 connection.execute(
-                    text("SELECT count(*) FROM catalog.product_embedding_neighbors")
+                    select(func.count()).select_from(product_embedding_neighbors)
                 ).scalar_one()
             ),
         }
         snapshot_row = connection.execute(
-            text(
-                """
-                SELECT version
-                FROM ops.seed_state
-                WHERE system_name = :system_name
-                """
-            ),
-            {"system_name": POSTGRES_SNAPSHOT_SYSTEM},
+            select(seed_state.c.version).where(seed_state.c.system_name == POSTGRES_SNAPSHOT_SYSTEM)
         ).fetchone()
+    validated_keys = [row[0] for row in embeddings[:100]]
+    image_urls_by_key = image_repository.read_image_urls_by_product_keys(
+        canonical_product_keys=validated_keys,
+        serving_strategy="direct_public_url",
+        base_url="https://example.test",
+    )
     return {
-        "image_catalog_indexed_product_count": len(image_catalog.images_by_product_id),
+        "validated_image_lookup_product_count": len(image_urls_by_key),
         "restored_counts": restored_counts,
         "restored_counts_match": restored_counts == expected_counts,
         "snapshot_seed_version": None if snapshot_row is None else str(snapshot_row[0]),

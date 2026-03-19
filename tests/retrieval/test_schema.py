@@ -18,7 +18,7 @@ from ikea_agent.shared.db_contract import (
 def test_embedding_vector_compiles_to_pgvector_for_postgres() -> None:
     compiled = product_embeddings.c.embedding_vector.type.compile(dialect=postgresql.dialect())
 
-    assert compiled == f"VECTOR({PRODUCT_EMBEDDING_DIMENSIONS})"
+    assert compiled == f"HALFVEC({PRODUCT_EMBEDDING_DIMENSIONS})"
 
 
 def test_embedding_vector_index_uses_hnsw_cosine_in_postgres() -> None:

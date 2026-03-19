@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import HALFVEC
 from sqlalchemy import (
     BIGINT,
     BOOLEAN,
     DOUBLE,
     JSON,
+    TEXT,
     TIMESTAMP,
     VARCHAR,
     Column,
@@ -21,10 +22,12 @@ from ikea_agent.shared.db_contract import (
     PRODUCT_EMBEDDING_DIMENSIONS,
     PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,
     PRODUCT_EMBEDDING_VECTOR_OPCLASS,
+    PRODUCT_IMAGE_CANONICAL_KEY_LOOKUP_INDEX_NAME,
+    PRODUCT_IMAGE_PRODUCT_ID_LOOKUP_INDEX_NAME,
 )
 
 retrieval_metadata = MetaData(schema=CATALOG_SCHEMA)
-_embedding_vector_type = Vector(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(JSON(), "sqlite")
+_embedding_vector_type = HALFVEC(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(JSON(), "sqlite")
 
 products_canonical = Table(
     "products_canonical",
@@ -69,6 +72,44 @@ Index(
     postgresql_using="hnsw",
     postgresql_ops={"embedding_vector": PRODUCT_EMBEDDING_VECTOR_OPCLASS},
 ).ddl_if(dialect="postgresql")
+
+product_images = Table(
+    "product_images",
+    retrieval_metadata,
+    Column("image_asset_key", VARCHAR, primary_key=True),
+    Column("canonical_product_key", VARCHAR, nullable=False),
+    Column("product_id", VARCHAR, nullable=False),
+    Column("image_rank", BIGINT),
+    Column("is_og_image", BOOLEAN, nullable=False),
+    Column("image_role", VARCHAR),
+    Column("storage_backend_kind", VARCHAR, nullable=False),
+    Column("storage_locator", TEXT, nullable=False),
+    Column("public_url", TEXT),
+    Column("local_path", TEXT),
+    Column("canonical_image_url", TEXT),
+    Column("provenance", VARCHAR),
+    Column("crawl_run_id", VARCHAR),
+    Column("source_page_url", TEXT),
+    Column("sha256", VARCHAR),
+    Column("content_type", VARCHAR),
+    Column("width_px", BIGINT),
+    Column("height_px", BIGINT),
+    Column("refreshed_at", TIMESTAMP(timezone=True)),
+)
+Index(
+    PRODUCT_IMAGE_PRODUCT_ID_LOOKUP_INDEX_NAME,
+    product_images.c.product_id,
+    product_images.c.is_og_image,
+    product_images.c.image_rank,
+    product_images.c.image_asset_key,
+)
+Index(
+    PRODUCT_IMAGE_CANONICAL_KEY_LOOKUP_INDEX_NAME,
+    product_images.c.canonical_product_key,
+    product_images.c.is_og_image,
+    product_images.c.image_rank,
+    product_images.c.image_asset_key,
+)
 
 product_embedding_neighbors = Table(
     "product_embedding_neighbors",
