@@ -6,8 +6,6 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 
 - `DATABASE_URL` default: `postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent`
 - `DUCKDB_PATH` default: unset
-- `MILVUS_URI` default: `http://127.0.0.1:19530`
-- `MILVUS_COLLECTION` default: `ikea_product_embeddings`
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
 - `EMBEDDING_DIMENSIONS` default: `256` (fixed to match the current pgvector column shape)
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`
@@ -27,20 +25,17 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `catalog.*` holds seeded product metadata, embeddings, image metadata, and optional precomputed
   embedding neighbors; `app.*` remains the runtime schema for conversation and analysis tables.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
-- Worktree bootstrap writes `DATABASE_URL` and `MILVUS_URI` into
-  `.tmp_untracked/worktree.env` and uses `scripts/worktree/deps.sh` to ensure both services.
+- Worktree bootstrap writes `DATABASE_URL` into `.tmp_untracked/worktree.env` and uses
+  `scripts/worktree/deps.sh` to ensure the slot-local Postgres service.
 - Normal `ensure-postgres` and bootstrap flows now restore the latest versioned snapshot from
   `<CANONICAL_ROOT>/.tmp_untracked/docker-deps/snapshots/latest.json` instead of reseeding from
   canonical parquet and image inputs.
 - `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit rebuild-from-source
   maintenance path.
-- `MILVUS_LITE_URI` is still accepted as a legacy alias for `MILVUS_URI`.
 - Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the
   application package.
 - Use `uv run python -m scripts.docker_deps.seed_postgres` to seed Postgres from canonical
   parquet and image-catalog inputs.
-- `uv run python -m scripts.docker_deps.prepare_milvus --state-file <path>` is transitional
-  maintenance tooling only and no longer feeds the active runtime search path.
 
 ## Agent Model Overrides
 

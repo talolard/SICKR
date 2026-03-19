@@ -13,12 +13,6 @@ Active runtime uses Postgres for:
 - `ops.seed_state` (observable seed versions and refresh metadata)
   - includes `postgres_snapshot` rows after a versioned snapshot artifact is built
 
-### Shared Milvus (`MILVUS_URI`)
-
-Milvus is still present as a transitional local dependency surface and data-prep target:
-- `ikea_product_embeddings` (configurable)
-- no longer serves the active runtime retrieval path
-
 ## Migrations
 
 - Runtime schema migrations use Alembic + SQLAlchemy.
@@ -37,11 +31,9 @@ Milvus is still present as a transitional local dependency surface and data-prep
    files.
 4. `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit maintenance workflow when a
    rebuild from canonical inputs is needed.
-5. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
-   restored `catalog.product_embeddings` rows and writes a local Milvus seed-state JSON file.
-6. Query flow retrieves semantic matches directly from Postgres pgvector tables, then derives the
+5. Query flow retrieves semantic matches directly from Postgres pgvector tables, then derives the
    candidate-set pair similarities for MMR directly in Postgres from `catalog.product_embeddings`.
-7. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
+6. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
    direct public URLs based on config.
 
 The build/bootstrap tooling above is intentionally outside `src/ikea_agent/`; application runtime

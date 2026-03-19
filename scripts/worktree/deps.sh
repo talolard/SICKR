@@ -6,8 +6,8 @@ usage() {
 Manage Dockerized local dependencies for one worktree slot.
 
 Usage:
-  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|ensure-milvus|build-snapshot> \
-    [--slot <0-99>] [--canonical-root <path>] [--worktree-root <path>] [--include-global]
+  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|build-snapshot> \
+    [--slot <0-99>] [--canonical-root <path>] [--worktree-root <path>]
 EOF
 }
 
@@ -21,7 +21,6 @@ shift || true
 SLOT="${AGENT_SLOT:-}"
 CANONICAL_ROOT=""
 WORKTREE_ROOT=""
-INCLUDE_GLOBAL=0
 
 resolve_canonical_root() {
   local repo_root="$1"
@@ -51,10 +50,6 @@ while [[ $# -gt 0 ]]; do
     --worktree-root)
       WORKTREE_ROOT="$2"
       shift 2
-      ;;
-    --include-global)
-      INCLUDE_GLOBAL=1
-      shift 1
       ;;
     -h|--help)
       usage
@@ -95,29 +90,21 @@ fi
 
 SLOT_PADDED="$(printf '%02d' "${SLOT}")"
 POSTGRES_PROJECT="ikea-slot-${SLOT_PADDED}"
-GLOBAL_PROJECT="ikea-global"
 POSTGRES_PORT=$((15432 + SLOT))
 POSTGRES_DB="ikea_agent"
 POSTGRES_USER="ikea"
 POSTGRES_PASSWORD="ikea"
 POSTGRES_VOLUME_NAME="${POSTGRES_PROJECT}-postgres-data"
-MILVUS_PORT=19530
-MILVUS_HTTP_PORT=9091
-MILVUS_VOLUME_NAME="${GLOBAL_PROJECT}-milvus-data"
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
 POSTGRES_ENV_DIR="${WORKTREE_ROOT}/.tmp_untracked/docker-deps/postgres"
-GLOBAL_ENV_DIR="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/global"
 POSTGRES_ENV_FILE="${POSTGRES_ENV_DIR}/compose.env"
-MILVUS_ENV_FILE="${GLOBAL_ENV_DIR}/compose.env"
-MILVUS_STATE_FILE="${GLOBAL_ENV_DIR}/milvus_seed_state.json"
 SNAPSHOT_ROOT="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/snapshots"
 SNAPSHOT_LATEST_FILE="${SNAPSHOT_ROOT}/latest.json"
 POSTGRES_DATABASE_URL="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 POSTGRES_COMPOSE_FILE="${WORKTREE_ROOT}/docker/compose.postgres.yml"
-MILVUS_COMPOSE_FILE="${WORKTREE_ROOT}/docker/compose.milvus.yml"
 
-mkdir -p "${POSTGRES_ENV_DIR}" "${GLOBAL_ENV_DIR}"
+mkdir -p "${POSTGRES_ENV_DIR}"
 
 cat > "${POSTGRES_ENV_FILE}" <<EOF
 POSTGRES_PORT=${POSTGRES_PORT}
@@ -127,25 +114,11 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_VOLUME_NAME=${POSTGRES_VOLUME_NAME}
 EOF
 
-cat > "${MILVUS_ENV_FILE}" <<EOF
-MILVUS_PORT=${MILVUS_PORT}
-MILVUS_HTTP_PORT=${MILVUS_HTTP_PORT}
-MILVUS_VOLUME_NAME=${MILVUS_VOLUME_NAME}
-EOF
-
 compose_postgres() {
   docker compose \
     --env-file "${POSTGRES_ENV_FILE}" \
     -f "${POSTGRES_COMPOSE_FILE}" \
     -p "${POSTGRES_PROJECT}" \
-    "$@"
-}
-
-compose_milvus() {
-  docker compose \
-    --env-file "${MILVUS_ENV_FILE}" \
-    -f "${MILVUS_COMPOSE_FILE}" \
-    -p "${GLOBAL_PROJECT}" \
     "$@"
 }
 
@@ -166,18 +139,6 @@ wait_for_postgres() {
     attempts=$((attempts + 1))
     if (( attempts > 60 )); then
       printf 'Postgres did not become ready on port %s.\n' "${POSTGRES_PORT}" >&2
-      return 1
-    fi
-    sleep 1
-  done
-}
-
-wait_for_milvus() {
-  local attempts=0
-  until curl -fsS "http://127.0.0.1:${MILVUS_HTTP_PORT}/healthz" >/dev/null 2>&1; do
-    attempts=$((attempts + 1))
-    if (( attempts > 90 )); then
-      printf 'Milvus did not become healthy on port %s.\n' "${MILVUS_HTTP_PORT}" >&2
       return 1
     fi
     sleep 1
@@ -296,23 +257,11 @@ ensure_postgres() {
   migrate_postgres
 }
 
-ensure_milvus() {
-  compose_milvus up -d milvus
-  wait_for_milvus
-  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.prepare_milvus \
-    --database-url "${POSTGRES_DATABASE_URL}" \
-    --state-file "${MILVUS_STATE_FILE}"
-}
-
 force_reseed() {
   migrate_postgres
   env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
     --database-url "${POSTGRES_DATABASE_URL}" \
     --repo-root "${CANONICAL_ROOT}" \
-    --force
-  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.prepare_milvus \
-    --database-url "${POSTGRES_DATABASE_URL}" \
-    --state-file "${MILVUS_STATE_FILE}" \
     --force
   clear_snapshot_state
 }
@@ -335,22 +284,13 @@ case "${COMMAND}" in
     require_docker
     ensure_postgres
     ;;
-  ensure-milvus)
-    require_docker
-    compose_milvus up -d milvus
-    wait_for_milvus
-    ;;
   up)
     require_docker
     ensure_postgres
-    ensure_milvus
     ;;
   down)
     require_docker
     compose_postgres down --remove-orphans
-    if (( INCLUDE_GLOBAL == 1 )); then
-      compose_milvus down --remove-orphans
-    fi
     ;;
   reset)
     require_docker
@@ -361,8 +301,6 @@ case "${COMMAND}" in
     require_docker
     compose_postgres up -d postgres
     wait_for_postgres
-    compose_milvus up -d milvus
-    wait_for_milvus
     force_reseed
     ;;
   build-snapshot)
@@ -376,17 +314,11 @@ case "${COMMAND}" in
     printf 'Slot: %s\n' "${SLOT}"
     printf 'Backend/UI ports: %s / %s\n' "${BACKEND_PORT}" "${UI_PORT}"
     printf 'DATABASE_URL: %s\n' "${POSTGRES_DATABASE_URL}"
-    printf 'MILVUS_URI: http://127.0.0.1:%s\n' "${MILVUS_PORT}"
     if [[ -f "${SNAPSHOT_LATEST_FILE}" ]]; then
       printf 'Latest snapshot version: %s\n' "$(latest_snapshot_version)"
     fi
     printf 'Current DB snapshot version: %s\n' "$(current_snapshot_version)"
     compose_postgres ps || true
-    compose_milvus ps || true
-    if [[ -f "${MILVUS_STATE_FILE}" ]]; then
-      printf '\nMilvus seed state:\n'
-      cat "${MILVUS_STATE_FILE}"
-    fi
     ;;
   *)
     printf 'Unknown command: %s\n' "${COMMAND}" >&2

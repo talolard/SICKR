@@ -16,7 +16,7 @@ After bootstrap:
 
 - plain `make` targets automatically load `.tmp_untracked/worktree.env`
 - slot claims are rejected if another worktree or running process is already using that slot's ports
-- bootstrap ensures the shared Milvus dependency and the slot-scoped Postgres dependency are prepared before dev servers start
+- bootstrap ensures the slot-scoped Postgres dependency is prepared before dev servers start
 
 ## Rules
 
@@ -33,14 +33,12 @@ After bootstrap:
 Per-worktree writable paths:
 
 - `DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:1543x/ikea_agent`
-- `MILVUS_URI=http://127.0.0.1:19530`
 - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
 - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
 - `TRACE_ROOT_DIR=.tmp_untracked/traces`
 
 Dependency scopes:
 
-- one global Milvus Docker volume and service shared by all worktrees
 - one worktree-local Postgres Docker volume and service per slot
 - canonical catalog parquet under `data/parquet` remains shared read-only
 

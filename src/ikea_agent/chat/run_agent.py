@@ -53,11 +53,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional DATABASE_URL override for one CLI run.",
     )
     parser.add_argument(
-        "--milvus-uri",
-        default=None,
-        help="Optional shared Milvus URI override for one CLI run.",
-    )
-    parser.add_argument(
         "--duckdb-path",
         default=None,
         help="Legacy compatibility alias that maps to a DuckDB-backed DATABASE_URL.",
@@ -101,16 +96,13 @@ async def _run_once(
     prompt: str,
     session_id: str,
     database_url: str | None,
-    milvus_uri: str | None,
     duckdb_path: str | None,
 ) -> str:
     if database_url:
         os.environ["DATABASE_URL"] = database_url
-    if milvus_uri:
-        os.environ["MILVUS_URI"] = milvus_uri
     if duckdb_path:
         os.environ["DATABASE_URL"] = build_duckdb_sqlalchemy_url(duckdb_path)
-    if database_url or milvus_uri or duckdb_path:
+    if database_url or duckdb_path:
         get_settings.cache_clear()
     settings = get_settings()
     configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
@@ -139,7 +131,6 @@ def main() -> None:
             prompt=args.prompt,
             session_id=args.session_id,
             database_url=args.database_url,
-            milvus_uri=args.milvus_uri,
             duckdb_path=args.duckdb_path,
         )
     )

@@ -21,7 +21,7 @@
 
 - FastAPI app builds shared runtime dependencies, serves support APIs, mounts per-agent pydantic-ai web UIs, and exposes AG-UI POST handlers.
 - Chat request flow is parse request -> selected `pydantic_ai.Agent` -> tool call(s) -> streamed response.
-- Retrieval uses one shared local Milvus service for semantic candidates and Postgres for metadata hydration.
+- Retrieval uses Postgres pgvector directly for semantic search and metadata hydration.
 
 ## Thread Selection Behavior
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from math import sqrt
 from typing import Any, cast
 
@@ -11,7 +12,6 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Select
 
 from ikea_agent.retrieval.schema import product_embeddings, products_canonical
-from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 _MIN_PAIRWISE_KEY_COUNT = 2
@@ -96,6 +96,14 @@ _READ_EMBEDDINGS_FOR_SIMILARITY_QUERY = select(
     product_embeddings.c.embedding_model == bindparam("embedding_model"),
     product_embeddings.c.canonical_product_key.in_(bindparam("product_keys", expanding=True)),
 )
+
+
+@dataclass(frozen=True, slots=True)
+class VectorMatch:
+    """One ranked semantic match used by the legacy non-Postgres fallback path."""
+
+    canonical_product_key: str
+    semantic_score: float
 
 
 class CatalogRepository:
@@ -348,7 +356,7 @@ class CatalogRepository:
 
 
 class EmbeddingSnapshotRepository:
-    """Load embedding snapshot rows for shared Milvus preparation scripts."""
+    """Load embedding snapshot rows for snapshot-build and legacy compatibility tooling."""
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine

@@ -113,7 +113,6 @@ export POSTGRES_DB=ikea_agent
 export POSTGRES_USER=ikea
 export POSTGRES_PASSWORD=ikea
 export DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:${POSTGRES_PORT}/ikea_agent
-export MILVUS_URI=http://127.0.0.1:19530
 export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
 export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
 export TRACE_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/traces
@@ -132,6 +131,5 @@ Environment file: ${WORKTREE_ENV}
 Backend port: ${BACKEND_PORT}
 UI port: ${UI_PORT}
 Postgres port: ${POSTGRES_PORT}
-Milvus URI: http://127.0.0.1:19530
 UI deps installed: $([[ "${SKIP_UI_INSTALL}" == "0" ]] && printf 'yes' || printf 'no (skipped)')
 EOF

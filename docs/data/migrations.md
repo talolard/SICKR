@@ -50,7 +50,7 @@ Revision `20260319_0005` adds:
 - `catalog.products_canonical`
   - seeded product metadata used for runtime hydration
 - `catalog.product_embeddings`
-  - embedding snapshot source used to populate the shared Milvus collection
+  - embedding snapshot source used for runtime pgvector retrieval
 - `catalog.product_embedding_neighbors`
   - optional legacy precomputed neighbor similarities; active MMR now derives candidate-set
     similarities directly from `catalog.product_embeddings`

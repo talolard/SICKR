@@ -83,12 +83,6 @@ class AppSettings(BaseSettings):
         le=PRODUCT_EMBEDDING_DIMENSIONS,
     )
     retrieval_candidate_limit: int = Field(default=250, ge=50, le=2000)
-
-    milvus_uri: str = Field(
-        default="http://127.0.0.1:19530",
-        validation_alias=AliasChoices("MILVUS_URI", "MILVUS_LITE_URI"),
-    )
-    milvus_collection: str = Field(default="ikea_product_embeddings")
     image_serving_strategy: Literal["backend_proxy", "direct_public_url"] = Field(
         default="backend_proxy"
     )

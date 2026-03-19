@@ -101,4 +101,12 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     assert runtime.catalog_repository is catalog_repository
     assert runtime.reranker is reranker
     assert runtime.product_image_catalog is product_image_catalog
-    assert not hasattr(runtime, "milvus_service")
+    assert tuple(runtime.__dataclass_fields__) == (
+        "settings",
+        "sqlalchemy_engine",
+        "session_factory",
+        "embedder",
+        "catalog_repository",
+        "reranker",
+        "product_image_catalog",
+    )
