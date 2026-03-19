@@ -13,6 +13,7 @@ type AgentLauncherCardProps = {
 type AgentStudioCardContent = {
   eyebrow: string;
   headline: string;
+  summary: string;
   cta: string;
   imageSrc: string;
   imageAlt: string;
@@ -25,6 +26,7 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       return {
         eyebrow: "Product discovery",
         headline: "Find the right pieces for your space",
+        summary: "Discover furniture that solves the room problem without losing the mood.",
         cta: "Start Designing",
         imageSrc: "/stitch/search-studio.svg",
         imageAlt: "Warm editorial illustration of a curated sofa and lighting setup.",
@@ -34,6 +36,7 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       return {
         eyebrow: "Room planning",
         headline: "Plan your room with confidence",
+        summary: "Map the space first so layout and scale feel deliberate before you buy.",
         cta: "Begin Planning",
         imageSrc: "/stitch/floor-plan-studio.svg",
         imageAlt: "Soft architectural floor plan illustration on warm paper tones.",
@@ -43,6 +46,7 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       return {
         eyebrow: "Image review",
         headline: "Get design guidance from your space",
+        summary: "Read the room through a photo and pull out styling opportunities quickly.",
         cta: "Get Guidance",
         imageSrc: "/stitch/image-studio.svg",
         imageAlt: "Editorial room-scene illustration for image-led design guidance.",
@@ -52,6 +56,7 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       return {
         eyebrow: "Specialized workflow",
         headline: `Open ${formatAgentName(agentName)}`,
+        summary: "Step into a focused workspace built for a specific interior-design task.",
         cta: "Open Workspace",
         imageSrc: "/stitch/search-studio.svg",
         imageAlt: "Editorial workspace illustration.",
@@ -122,10 +127,10 @@ export function AgentLauncherCard({
 
   return (
     <Link
-      className="group editorial-card flex h-full flex-col overflow-hidden rounded-[32px] p-4 transition hover:-translate-y-1 hover:shadow-[0_50px_90px_rgba(32,27,16,0.12)]"
+      className="group editorial-card flex h-full flex-col overflow-hidden rounded-[32px] transition hover:-translate-y-1 hover:shadow-[0_50px_90px_rgba(32,27,16,0.12)]"
       href={`/agents/${agent.name}`}
     >
-      <div className="relative h-52 overflow-hidden rounded-[28px] bg-surface-container-low">
+      <div className="relative h-72 overflow-hidden bg-surface-container-low">
         <Image
           alt={content.imageAlt}
           className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
@@ -134,23 +139,27 @@ export function AgentLauncherCard({
           src={content.imageSrc}
           width={640}
         />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(32,27,16,0.04)_100%)]" />
-      </div>
-      <div className="-mt-5 ml-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-white shadow-[0_16px_30px_rgba(24,36,27,0.22)]">
-        <AgentAccentGlyph accent={content.accent} />
-      </div>
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-5">
-        <div>
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(32,27,16,0.02)_0%,rgba(32,27,16,0.12)_100%)]" />
+        <div className="absolute left-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-white shadow-[0_16px_30px_rgba(24,36,27,0.22)]">
+          <AgentAccentGlyph accent={content.accent} />
+        </div>
+        <div className="editorial-moodboard-label absolute bottom-5 left-5 max-w-[82%] rounded-[24px] px-5 py-4">
           <p className="editorial-eyebrow">{content.eyebrow}</p>
-          <h3 className="editorial-display mt-5 text-[2.35rem] leading-[0.95] text-primary">
+          <h3 className="editorial-display mt-3 text-[1.9rem] leading-[0.96] text-primary">
             {content.headline}
           </h3>
         </div>
-        <span className="mt-5 inline-flex w-fit rounded-full bg-surface-container-low px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
-          {agentLabel}
-        </span>
-        <p className="mt-4 text-sm leading-7 text-[color:var(--text-muted)]">{agent.description}</p>
-        <div className="mt-auto flex items-center justify-between pt-8 text-sm font-semibold text-primary">
+      </div>
+      <div className="editorial-card-footer flex flex-1 items-end justify-between gap-4 px-5 py-5">
+        <div className="min-w-0">
+          <span className="inline-flex w-fit rounded-full bg-surface-container-lowest px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant shadow-[0_10px_20px_rgba(32,27,16,0.05)]">
+            {agentLabel}
+          </span>
+          <p className="editorial-body-copy mt-3 max-w-[18rem] text-sm leading-6">
+            {content.summary}
+          </p>
+        </div>
+        <div className="mt-auto flex items-center justify-between pt-6 text-sm font-semibold text-primary">
           <span>{content.cta}</span>
           <span className="transition group-hover:translate-x-1">Open studio</span>
         </div>

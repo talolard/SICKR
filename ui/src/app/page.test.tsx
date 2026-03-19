@@ -45,5 +45,9 @@ describe("Home page", () => {
       "/agents/search",
     );
     expect(screen.getByTestId("app-nav-banner")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /View All Archives/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Room Facts/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Chat/i })).toBeInTheDocument();
+    expect(screen.getByText("Design Consultation")).toBeInTheDocument();
   });
 });

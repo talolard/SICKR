@@ -60,6 +60,13 @@ export function AppNavBanner({
     router.push(nextPath);
   }
 
+  function launcherOptionClass(active: boolean): string {
+    return [
+      "flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left transition",
+      active ? "editorial-launcher-option-active" : "editorial-launcher-option",
+    ].join(" ");
+  }
+
   return (
     <header className="editorial-glass-nav sticky top-0 z-40">
       <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
@@ -80,7 +87,7 @@ export function AppNavBanner({
               My Designs
             </button>
             <button
-              className="pb-1 text-sm text-[color:var(--text-soft)] transition hover:text-[color:var(--primary)]"
+              className="editorial-quiet-copy pb-1 text-sm transition hover:text-[color:var(--primary)]"
               onClick={() => navigateTo("/agents")}
               type="button"
             >
@@ -92,7 +99,7 @@ export function AppNavBanner({
         <div className="flex items-center gap-3">
           <button
             aria-label="Browse workspaces"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-lowest text-primary shadow-[0_12px_24px_rgba(32,27,16,0.08)] transition hover:-translate-y-0.5"
+            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
             onClick={() => navigateTo("/agents")}
             type="button"
           >
@@ -100,7 +107,7 @@ export function AppNavBanner({
           </button>
           <button
             aria-label="Open updates"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-lowest text-primary shadow-[0_12px_24px_rgba(32,27,16,0.08)] transition hover:-translate-y-0.5"
+            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
             onClick={() => navigateTo("/")}
             type="button"
           >
@@ -110,7 +117,7 @@ export function AppNavBanner({
           {launcherDisabled ? (
             <div
               aria-disabled="true"
-              className="rounded-full bg-surface-container-lowest px-4 py-2.5 text-left text-on-surface-variant shadow-[0_16px_30px_rgba(32,27,16,0.08)]"
+              className="editorial-launcher-shell px-4 py-2.5 text-left text-on-surface-variant"
               data-testid="app-nav-agent-launcher"
             >
               <span className="text-sm font-medium text-primary">Loading agent list...</span>
@@ -123,7 +130,7 @@ export function AppNavBanner({
             >
               <summary
                 aria-label="Open studio menu"
-                className="cursor-pointer rounded-full bg-surface-container-lowest p-1.5 shadow-[0_16px_30px_rgba(32,27,16,0.08)]"
+                className="editorial-launcher-shell cursor-pointer p-1.5"
                 data-testid="app-nav-agent-launcher-trigger"
               >
                 <div className="flex items-center gap-2 pl-1 pr-2">
@@ -135,7 +142,7 @@ export function AppNavBanner({
                   </span>
                 </div>
               </summary>
-              <div className="editorial-card absolute right-0 z-30 mt-3 w-[22rem] rounded-[28px] p-3">
+              <div className="editorial-launcher-menu absolute right-0 z-30 mt-3 w-[22rem] rounded-[28px] p-3">
                 {agentLoadError ? (
                   <p className="rounded-[20px] bg-red-50 px-3 py-2 text-xs text-red-700">
                     {agentLoadError}
@@ -151,11 +158,7 @@ export function AppNavBanner({
                   </p>
                 </div>
                 <button
-                  className={`flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left transition ${
-                    currentAgentName === null
-                      ? "editorial-button-primary"
-                      : "bg-surface-container-low text-primary hover:bg-surface-container-high"
-                  }`}
+                  className={launcherOptionClass(currentAgentName === null)}
                   onClick={() => navigateTo("/")}
                   type="button"
                 >
@@ -178,14 +181,10 @@ export function AppNavBanner({
                     const active = agent.name === currentAgentName;
                     return (
                       <button
-                      className={`flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left transition ${
-                        active
-                          ? "editorial-button-primary"
-                          : "bg-surface-container-low text-primary hover:bg-surface-container-high"
-                      }`}
-                      key={agent.name}
-                      onClick={() => navigateTo(`/agents/${agent.name}`)}
-                      type="button"
+                        className={launcherOptionClass(active)}
+                        key={agent.name}
+                        onClick={() => navigateTo(`/agents/${agent.name}`)}
+                        type="button"
                       >
                         <span>
                           <span className="block text-sm font-semibold">
