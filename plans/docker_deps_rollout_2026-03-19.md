@@ -22,7 +22,7 @@ The corrected target is:
 
 This plan now tracks rewrite epic `tal_maria_ikea-5p1`.
 
-## Current Constraints
+## Starting Constraints
 
 - PR #69 landed a transitional design that still keeps Milvus in the active
   runtime/dependency path.
@@ -35,6 +35,23 @@ This plan now tracks rewrite epic `tal_maria_ikea-5p1`.
 - Checked-in canonical catalog inputs live under `data/parquet/`.
 - The canonical local image catalog lives under
   `/Users/tal/dev/tal_maria_ikea/.tmp_untracked/ikea_image_catalog`.
+
+## Implementation Status
+
+Implemented on this branch:
+
+- snapshot build and manifest creation as top-level tooling
+- snapshot restore during normal bootstrap
+- Postgres `pgvector` embedding storage and indexing
+- direct Postgres retrieval and diversification
+- removal of Milvus from runtime, bootstrap, config, and dependency wiring
+- removal of DuckDB from active runtime, bootstrap, dependency, and test paths
+
+Validation completed after the rewrite:
+
+- `bash scripts/worktree/deps.sh reseed --slot 7`
+- `make tidy`
+- `make ui-test-e2e-real-ui-smoke`
 
 ## Target Contract
 

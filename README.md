@@ -7,7 +7,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 
 - `pydantic-ai` agents + typed toolsets for chat orchestration and tool execution
 - FastAPI runtime exposing both web chat and AG-UI endpoints
-- Milvus Lite + DuckDB for retrieval
+- Postgres + `pgvector` for retrieval and catalog metadata
 - Next.js + TypeScript UI workspace for CopilotKit/AG-UI integration
 
 ## What this repo does
@@ -34,6 +34,7 @@ Typed IKEA assistant runtime and UI integration project built around:
 - Python `3.13`
 - `uv` for Python dependency management
 - Node `20` + `pnpm` (via `corepack`) for the UI workspace
+- Docker for the slot-local Postgres dependency
 - Optional: `GEMINI_API_KEY`/`GOOGLE_API_KEY` plus `ALLOW_MODEL_REQUESTS=1` for real model-backed agent runs
 
 ## Run locally
@@ -41,9 +42,11 @@ Typed IKEA assistant runtime and UI integration project built around:
 ### Backend
 
 1. Install Python deps: `make deps`
-2. Optional environment check: `make preflight`
-3. Start backend: `make chat`
-4. Open one mounted agent chat UI, for example: `http://127.0.0.1:8000/agents/search/chat/`
+2. Prepare the slot-local Postgres and worktree env:
+   `bash scripts/worktree/bootstrap.sh --slot 7 --skip-ui-install`
+3. Optional environment check: `make preflight`
+4. Start backend: `make chat`
+5. Open one mounted agent chat UI, for example: `http://127.0.0.1:8107/agents/search/chat/`
 
 ### Frontend (separate process)
 
@@ -51,7 +54,8 @@ Typed IKEA assistant runtime and UI integration project built around:
 2. Start mock UI: `make ui-dev-mock`
 3. Start UI against real backend: `make ui-dev-real`
 
-By default, real UI mode targets `http://127.0.0.1:8000/ag-ui/` via `PY_AG_UI_URL`.
+By default, real UI mode targets the slot-local backend from
+`.tmp_untracked/worktree.env`, for example `http://127.0.0.1:8107/ag-ui/`.
 
 ### Start everything
 
@@ -67,7 +71,7 @@ flowchart LR
     UI --> CK["POST /api/copilotkit<br/>CopilotRuntime + HttpAgent"]
     CK --> AG["FastAPI /ag-ui<br/>pydantic-ai AG-UI app"]
     AG --> A["Registered pydantic_ai.Agent<br/>per-agent deps + toolsets"]
-    A --> T1["Retrieval Tools<br/>Milvus Lite + DuckDB"]
+    A --> T1["Retrieval Tools<br/>Postgres + pgvector"]
     A --> T2["Image/Attachment Tools<br/>/attachments + generated artifacts"]
     T1 --> AG
     T2 --> AG
@@ -75,6 +79,10 @@ flowchart LR
     CK --> UI
     UI --> U
 ```
+
+Local bootstrap restores a versioned Postgres snapshot into the slot-local
+Docker volume during normal setup. The slow rebuild-from-source path remains an
+explicit maintenance flow via `scripts/worktree/deps.sh reseed --slot <n>`.
 
 ## Testing and quality
 
