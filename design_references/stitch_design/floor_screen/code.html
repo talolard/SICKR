@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Curated Home | Floor Plan Intake</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;family=Plus+Jakarta+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#fff8f2",
+                        "on-surface": "#201b10",
+                        "tertiary-container": "#39362e",
+                        "outline": "#747873",
+                        "surface": "#fff8f2",
+                        "on-tertiary-container": "#a39f94",
+                        "secondary-container": "#febf8b",
+                        "on-secondary": "#ffffff",
+                        "surface-container-highest": "#ede1cf",
+                        "surface-container-low": "#fef2e0",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#794c22",
+                        "on-tertiary-fixed-variant": "#4a473e",
+                        "on-background": "#201b10",
+                        "on-primary-fixed-variant": "#3d4a40",
+                        "primary-container": "#2d3930",
+                        "primary-fixed": "#d8e6d9",
+                        "on-error-container": "#93000a",
+                        "secondary": "#825429",
+                        "inverse-surface": "#363024",
+                        "secondary-fixed-dim": "#f8ba86",
+                        "on-primary": "#ffffff",
+                        "primary-fixed-dim": "#bccabd",
+                        "surface-bright": "#fff8f2",
+                        "inverse-on-surface": "#fbefdd",
+                        "surface-tint": "#556157",
+                        "on-error": "#ffffff",
+                        "primary": "#18241b",
+                        "surface-dim": "#e4d9c7",
+                        "on-surface-variant": "#434843",
+                        "on-secondary-fixed-variant": "#673d14",
+                        "tertiary": "#232119",
+                        "on-secondary-fixed": "#2e1500",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#f2e7d5",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-fixed": "#e8e2d6",
+                        "surface-container": "#f8ecda",
+                        "secondary-fixed": "#ffdcc2",
+                        "inverse-primary": "#bccabd",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#131e16",
+                        "tertiary-fixed-dim": "#cbc6ba",
+                        "on-primary-container": "#95a397",
+                        "outline-variant": "#c3c8c2",
+                        "on-tertiary-fixed": "#1e1c14",
+                        "surface-variant": "#ede1cf"
+                    },
+                    fontFamily: {
+                        "headline": ["Noto Serif"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .font-notoSerif { font-family: 'Noto Serif', serif; }
+        .font-plusJakartaSans { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .grid-bg {
+            background-image: radial-gradient(circle, #201b10 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.05;
+        }
+        .glass-nav {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 w-full z-50 h-16 bg-[#fff8f2]/80 dark:bg-[#18241b]/80 backdrop-blur-xl flex justify-between items-center px-8 w-full mx-auto shadow-[0_20px_40px_rgba(32,27,16,0.06)] no-border transition-colors duration-300">
+<div class="flex items-center gap-8">
+<span class="font-notoSerif italic text-xl tracking-tight text-[#18241b] dark:text-[#fef2e0]">The Curated Home</span>
+<nav class="hidden md:flex gap-6 items-center">
+<a class="text-[#18241b] dark:text-white font-semibold border-b-2 border-[#18241b] dark:border-[#fef2e0] pb-1 font-plusJakartaSans text-sm" href="#">Projects</a>
+<a class="text-[#201b10]/60 dark:text-[#fef2e0]/60 hover:text-[#18241b] transition-colors font-plusJakartaSans text-sm" href="#">Inspiration</a>
+<a class="text-[#201b10]/60 dark:text-[#fef2e0]/60 hover:text-[#18241b] transition-colors font-plusJakartaSans text-sm" href="#">Archive</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-[#fef2e0]/50 dark:hover:bg-[#2d3930]/50 rounded-lg scale-98 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 hover:bg-[#fef2e0]/50 dark:hover:bg-[#2d3930]/50 rounded-lg scale-98 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User Profile" data-alt="Portrait of a professional interior designer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBedwRoAA0WdXbpzy5JDiSAqIf1ZZsp9HHYYF2013iV1xojoNkYPb-L_Wzjo2G1CaYFP1MYVl86uqy0fOXazrOX6FVbehZnD1EFfYF-DPywZ-xPTCrahC8it2e04ItjdVMcmIaHgIETTFqiWOR-A7mACVlDk3OA26m_kssS_pAiH3AYW8qSyT04FuXmH7WY1rLo7psOZV5jBsANcq120M-dvgvsA_ICc6i71Kgc4ZQ692y6yOHootSN2rqaHA7XCFkMH_xfcsEI4BE"/>
+</div>
+</div>
+</header>
+<!-- Main Workspace Layout -->
+<main class="flex h-screen pt-16">
+<!-- Left Sidebar: Project Context -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-[#fef2e0] dark:bg-[#2d3930] flex flex-col py-8 no-border">
+<div class="px-8 mb-8">
+<h2 class="font-notoSerif font-bold text-[#18241b] dark:text-[#fef2e0] text-lg">Room Specifications</h2>
+<p class="text-[#201b10]/70 dark:text-[#fef2e0]/70 font-plusJakartaSans text-[10px] uppercase tracking-widest">Project Specifications</p>
+</div>
+<nav class="flex-1">
+<div class="bg-[#ffffff] dark:bg-[#18241b] text-[#18241b] dark:text-white rounded-l-full ml-4 pl-4 py-3 shadow-sm flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px] font-bold">Dimensions &amp; Scale</span>
+</div>
+<div class="text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 hover:translate-x-1 transition-transform cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="favorite">favorite</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Layout Goals</span>
+</div>
+<div class="text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 hover:translate-x-1 transition-transform cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Budget</span>
+</div>
+<div class="text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 hover:translate-x-1 transition-transform cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="texture">texture</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Materials</span>
+</div>
+</nav>
+<!-- Specification Details -->
+<div class="mx-6 p-4 bg-surface-container-lowest/50 rounded-xl space-y-4">
+<div>
+<span class="block text-[10px] font-bold text-outline uppercase tracking-tight mb-1">Dimensions</span>
+<span class="font-headline text-lg italic">4.0m × 2.5m</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-outline uppercase tracking-tight mb-1">Status</span>
+<span class="font-body text-xs text-secondary-fixed-dim bg-primary px-2 py-0.5 rounded-full">Rental Constraints</span>
+</div>
+</div>
+<div class="px-6 mt-auto">
+<button class="w-full bg-primary text-on-primary py-3 rounded-xl font-body text-sm font-medium hover:opacity-90 transition-opacity">
+                    Update Brief
+                </button>
+</div>
+</aside>
+<!-- Center Workbench: Floor Plan -->
+<section class="flex-1 ml-64 mr-80 bg-surface relative overflow-hidden flex flex-col">
+<div class="absolute inset-0 grid-bg pointer-events-none"></div>
+<!-- Toolbar -->
+<div class="h-12 border-b border-outline-variant/10 flex items-center px-6 gap-6 z-10 bg-surface/50 backdrop-blur-sm">
+<button class="flex items-center gap-2 text-xs font-medium text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="edit_square">edit_square</span>
+                    Draft Mode
+                </button>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<button class="flex items-center gap-2 text-xs font-medium text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="layers">layers</span>
+                    Annotations
+                </button>
+<button class="flex items-center gap-2 text-xs font-medium text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="straighten">straighten</span>
+                    Measure
+                </button>
+</div>
+<!-- Architectural Canvas -->
+<div class="flex-1 relative flex items-center justify-center p-12">
+<!-- Floating AI Status -->
+<div class="absolute top-8 left-1/2 -translate-x-1/2 z-20 bg-primary-container/95 text-on-primary-container px-4 py-2 rounded-full shadow-lg flex items-center gap-3 animate-pulse">
+<span class="material-symbols-outlined text-lg" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-xs font-medium tracking-wide">Analyzing for optimal flow</span>
+</div>
+<!-- Floor Plan SVG/Draft Representation -->
+<div class="w-full max-w-2xl aspect-[4/2.5] bg-surface-container-lowest shadow-[0_40px_80px_rgba(32,27,16,0.08)] rounded-lg p-1 relative border border-outline-variant/20">
+<div class="w-full h-full border-[3px] border-primary/80 relative rounded-sm">
+<!-- Walls & Windows -->
+<div class="absolute top-0 left-0 w-full h-[6px] bg-primary"></div>
+<div class="absolute bottom-0 left-0 w-full h-[6px] bg-primary"></div>
+<div class="absolute top-0 left-0 h-full w-[6px] bg-primary"></div>
+<div class="absolute top-0 right-0 h-full w-[6px] bg-primary"></div>
+<!-- Window Marker -->
+<div class="absolute top-0 right-1/4 w-24 h-[6px] bg-surface-container-highest border-x border-primary flex items-center justify-center">
+<span class="text-[8px] text-primary/60 font-bold">W1</span>
+</div>
+<!-- Door Arc -->
+<div class="absolute bottom-0 left-8 w-16 h-16 border-t border-r border-primary/40 rounded-tr-full"></div>
+<div class="absolute bottom-0 left-8 w-[6px] h-16 bg-primary -translate-x-[6px]"></div>
+<!-- Bed Draft (Asymmetric Placeholder) -->
+<div class="absolute top-12 left-1/2 -translate-x-1/2 w-40 h-48 bg-surface-container-high/40 border border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant opacity-40 mb-2" data-icon="bed">bed</span>
+<span class="font-headline italic text-xs text-outline-variant">Proposed Bed Placement</span>
+</div>
+<!-- Grid Annotations -->
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-notoSerif italic text-outline">4000mm</div>
+<div class="absolute top-1/2 -left-12 -translate-y-1/2 -rotate-90 text-[10px] font-notoSerif italic text-outline">2500mm</div>
+</div>
+</div>
+<!-- Floating Dimension Tag -->
+<div class="absolute bottom-12 right-12 bg-surface-container-lowest p-3 rounded-xl shadow-md border border-outline-variant/10">
+<span class="block text-[9px] font-bold text-outline uppercase tracking-widest mb-1">Total Area</span>
+<span class="font-headline text-lg">10.0 m²</span>
+</div>
+</div>
+</section>
+<!-- Right Sidebar: AI Chat Consultation -->
+<aside class="fixed right-0 top-16 h-[calc(100vh-64px)] w-80 bg-[#fff8f2] dark:bg-[#18241b] flex flex-col border-l border-[#201b10]/10 shadow-[-10px_0_30px_rgba(32,27,16,0.03)] z-40">
+<div class="p-6 border-b border-outline-variant/5">
+<div class="flex items-center gap-3 mb-1">
+<div class="h-8 w-8 bg-primary rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-sm" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<div>
+<h3 class="font-notoSerif font-bold text-[#18241b] dark:text-[#fef2e0]">Design Consultation</h3>
+<p class="text-[10px] text-outline uppercase tracking-wider">Refining your vision</p>
+</div>
+</div>
+</div>
+<!-- Chat Feed -->
+<div class="flex-1 overflow-y-auto p-6 space-y-6">
+<!-- AI Message -->
+<div class="space-y-2">
+<div class="bg-surface-container-low p-4 rounded-2xl rounded-tl-none border border-outline-variant/10">
+<p class="text-sm font-plusJakartaSans leading-relaxed text-on-surface">
+                            Based on your <span class="text-secondary font-medium">Rental constraints</span>, I suggest avoiding any floor-fixed furniture. The current orientation maximizes natural light from <span class="italic">Window W1</span>.
+                        </p>
+</div>
+<span class="text-[9px] text-outline px-2 uppercase tracking-tighter">AI Curator • Just now</span>
+</div>
+<!-- User Message -->
+<div class="flex flex-col items-end space-y-2">
+<div class="bg-primary text-on-primary p-4 rounded-2xl rounded-tr-none shadow-sm max-w-[90%]">
+<p class="text-sm font-plusJakartaSans leading-relaxed">
+                            Could we rotate the bed to face the door? I prefer seeing the entry when I wake up.
+                        </p>
+</div>
+<span class="text-[9px] text-outline px-2 uppercase tracking-tighter">You • 2m ago</span>
+</div>
+<!-- AI Thinking Suggestion -->
+<div class="space-y-4">
+<div class="bg-surface-container-low p-4 rounded-2xl rounded-tl-none border border-outline-variant/10">
+<p class="text-sm font-plusJakartaSans leading-relaxed text-on-surface">
+                            That's a classic <span class="italic">"Command Position"</span> principle. Let's look at the clearance near the door arc. If we rotate 90°, we might need a narrower nightstand on the left.
+                        </p>
+<div class="mt-4 flex flex-wrap gap-2">
+<button class="bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold py-1.5 px-3 rounded-full hover:bg-surface-variant transition-colors">
+                                Show clearance
+                            </button>
+<button class="bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold py-1.5 px-3 rounded-full hover:bg-surface-variant transition-colors">
+                                Compare variants
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Area -->
+<div class="p-4 bg-surface-container-low/50">
+<div class="relative flex items-center">
+<textarea class="w-full bg-surface-container-lowest border-none rounded-xl text-sm font-plusJakartaSans py-4 pl-4 pr-12 focus:ring-1 focus:ring-primary/20 resize-none min-h-[56px] shadow-sm" placeholder="How should we adjust your layout?"></textarea>
+<button class="absolute right-3 p-2 text-primary hover:bg-primary/5 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+</button>
+</div>
+<div class="mt-3 flex justify-between items-center px-2">
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-outline text-lg cursor-pointer hover:text-primary transition-colors" data-icon="attachment">attachment</span>
+<span class="material-symbols-outlined text-outline text-lg cursor-pointer hover:text-primary transition-colors" data-icon="mic">mic</span>
+</div>
+<span class="text-[9px] font-bold text-outline/60 uppercase tracking-widest">Architectural Mode Active</span>
+</div>
+</div>
+<!-- Footer Nav -->
+<div class="border-t border-outline-variant/10">
+<a class="flex items-center gap-3 px-8 py-4 text-[#201b10]/50 dark:text-[#fef2e0]/40 hover:bg-[#fef2e0] dark:hover:bg-[#2d3930] transition-colors" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="help_outline">help_outline</span>
+<span class="text-xs font-plusJakartaSans font-medium">Help &amp; Support</span>
+</a>
+</div>
+</aside>
+</main>
+<!-- Contextual FAB -->
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+<button class="bg-primary text-on-primary px-8 py-4 rounded-full shadow-[0_20px_40px_rgba(32,27,16,0.15)] flex items-center gap-3 hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+<span class="font-plusJakartaSans font-bold text-sm tracking-wide">Finalize My Layout</span>
+</button>
+</div>
+</body></html>

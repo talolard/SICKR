@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Curated Home | Designer's Studio</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;family=Plus+Jakarta+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "background": "#fff8f2",
+                        "on-surface": "#201b10",
+                        "tertiary-container": "#39362e",
+                        "outline": "#747873",
+                        "surface": "#fff8f2",
+                        "on-tertiary-container": "#a39f94",
+                        "secondary-container": "#febf8b",
+                        "on-secondary": "#ffffff",
+                        "surface-container-highest": "#ede1cf",
+                        "surface-container-low": "#fef2e0",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#794c22",
+                        "on-tertiary-fixed-variant": "#4a473e",
+                        "on-background": "#201b10",
+                        "on-primary-fixed-variant": "#3d4a40",
+                        "primary-container": "#2d3930",
+                        "primary-fixed": "#d8e6d9",
+                        "on-error-container": "#93000a",
+                        "secondary": "#825429",
+                        "inverse-surface": "#363024",
+                        "secondary-fixed-dim": "#f8ba86",
+                        "on-primary": "#ffffff",
+                        "primary-fixed-dim": "#bccabd",
+                        "surface-bright": "#fff8f2",
+                        "inverse-on-surface": "#fbefdd",
+                        "surface-tint": "#556157",
+                        "on-error": "#ffffff",
+                        "primary": "#18241b",
+                        "surface-dim": "#e4d9c7",
+                        "on-surface-variant": "#434843",
+                        "on-secondary-fixed-variant": "#673d14",
+                        "tertiary": "#232119",
+                        "on-secondary-fixed": "#2e1500",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#f2e7d5",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-fixed": "#e8e2d6",
+                        "surface-container": "#f8ecda",
+                        "secondary-fixed": "#ffdcc2",
+                        "inverse-primary": "#bccabd",
+                        "error-container": "#ffdad6",
+                        "on-primary-fixed": "#131e16",
+                        "tertiary-fixed-dim": "#cbc6ba",
+                        "on-primary-container": "#95a397",
+                        "outline-variant": "#c3c8c2",
+                        "on-tertiary-fixed": "#1e1c14",
+                        "surface-variant": "#ede1cf"
+                    },
+                    fontFamily: {
+                        "headline": ["Noto Serif"],
+                        "body": ["Plus Jakarta Sans"],
+                        "label": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .font-notoSerif { font-family: 'Noto Serif', serif; }
+        .font-plusJakartaSans { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-plusJakartaSans selection:bg-secondary-container/30">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 h-16 bg-[#fff8f2]/80 dark:bg-[#18241b]/80 backdrop-blur-xl shadow-[0_20px_40px_rgba(32,27,16,0.06)] flex justify-between items-center px-8 transition-colors duration-300">
+<div class="flex items-center gap-8">
+<span class="font-notoSerif italic text-xl tracking-tight text-[#18241b] dark:text-[#fef2e0]">The Curated Home</span>
+<div class="hidden md:flex gap-6">
+<a class="text-[#18241b] dark:text-white font-semibold border-b-2 border-[#18241b] dark:border-[#fef2e0] pb-1 font-plusJakartaSans text-sm" href="#">My Designs</a>
+<a class="text-[#201b10]/60 dark:text-[#fef2e0]/60 hover:text-[#18241b] transition-colors font-plusJakartaSans text-sm" href="#">Gallery</a>
+<a class="text-[#201b10]/60 dark:text-[#fef2e0]/60 hover:text-[#18241b] transition-colors font-plusJakartaSans text-sm" href="#">History</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-[#fef2e0]/50 dark:hover:bg-[#2d3930]/50 rounded-lg transition-transform duration-200 active:scale-95">
+<span class="material-symbols-outlined text-[#18241b] dark:text-[#fef2e0]">notifications</span>
+</button>
+<button class="p-2 hover:bg-[#fef2e0]/50 dark:hover:bg-[#2d3930]/50 rounded-lg transition-transform duration-200 active:scale-95">
+<span class="material-symbols-outlined text-[#18241b] dark:text-[#fef2e0]">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden ml-2">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Professional female designer headshot profile picture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYjFOJn_a5SQm_EBoE3CzWUFsukNONf79KSaRLxQtrzz-4HhNrqEtwkmI2Onbt6d_ckVxKBTSK7zNpy0G2cSKSEELjd_pLc128jd1M06OGWNpD7EQngn-JWJ_TCbk2Itot5l8y5Tw_lEAqo9uRxzsGjBnbCQheN3QqQug9AdMBYye7R6Zd1gj2f97yJiC6uAqfv0tgDTzfeuhMVs1__a4TU2tJiP_pizoEIhJduSBBK1YWlOVhbWQHDPgvQ6ugLvgxhZl1rDBwJiY"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar (Left) -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 bg-[#fef2e0] dark:bg-[#2d3930] flex flex-col py-8 hidden lg:flex">
+<div class="px-8 mb-8">
+<h3 class="font-notoSerif font-bold text-[#18241b] dark:text-[#fef2e0]">Context</h3>
+<p class="font-plusJakartaSans uppercase tracking-widest text-[10px] text-[#201b10]/70 dark:text-[#fef2e0]/70">Project Specifications</p>
+</div>
+<div class="flex-grow">
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 bg-[#ffffff] dark:bg-[#18241b] text-[#18241b] dark:text-white rounded-l-full ml-4 pl-4 py-3 shadow-sm transition-transform hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">info</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Room Facts</span>
+</a>
+<a class="flex items-center gap-3 text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 transition-transform hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">favorite</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Preferences</span>
+</a>
+<a class="flex items-center gap-3 text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 transition-transform hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Budget</span>
+</a>
+<a class="flex items-center gap-3 text-[#201b10]/70 dark:text-[#fef2e0]/70 px-8 py-3 transition-transform hover:translate-x-1 duration-300" href="#">
+<span class="material-symbols-outlined">texture</span>
+<span class="font-plusJakartaSans uppercase tracking-widest text-[10px]">Materials</span>
+</a>
+</div>
+</div>
+<div class="px-8 mt-auto">
+<button class="w-full py-3 bg-primary text-on-primary rounded-xl font-plusJakartaSans text-sm font-semibold shadow-lg hover:shadow-xl transition-all">
+                Update Brief
+            </button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="lg:ml-64 lg:mr-80 pt-24 pb-12 px-8 min-h-screen">
+<!-- Hero Section -->
+<section class="max-w-5xl mx-auto mb-16">
+<h1 class="font-notoSerif text-5xl md:text-6xl text-on-surface mb-4">Welcome to your Designer's Studio</h1>
+<p class="font-plusJakartaSans text-lg text-on-surface-variant max-w-2xl leading-relaxed">Beautiful, accurate interior design made accessible — from concept to shoppable room.</p>
+</section>
+<!-- Agent Cards Bento Grid -->
+<section class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
+<!-- Search Agent -->
+<div class="group relative bg-surface-container-lowest rounded-3xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_40px_80px_rgba(32,27,16,0.08)]">
+<div class="h-48 overflow-hidden">
+<img alt="Furniture Curated" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Close up of high end minimalist designer chair and lamp" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPMzhWvpPclKZO-xe5O976a0C7y12QDNVD6ifeAR5xxYnM_c5OP5Won3WY8QAnC4x9Pc6B3hUR8z9T5lJlYkL0W4u9md8Ecj_oyzCSgJoS5LZZq7UXNrrpxl890Jh9lWAmKyorcwfLmfRXHYecmB3XTpUoyXbiWmIbo6sxti3C0wa20qZ4l32Q_5TgXHsTNTfD2EMgBXvxhLKPyzQdnLLiG1EFRNtWqSE1nQiALZ85bViWly7SpCn72KFOenY9MIi-GAOxQz0ibmE"/>
+</div>
+<div class="p-8 flex-grow flex flex-col">
+<div class="w-10 h-10 bg-primary-container rounded-full flex items-center justify-center mb-6">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">chair_alt</span>
+</div>
+<h3 class="font-notoSerif text-2xl mb-2 text-primary">Find the right pieces for your space</h3>
+<p class="font-plusJakartaSans text-sm text-on-surface-variant mb-6 flex-grow">Discover furniture that fits your style and solves specific layout problems with precision.</p>
+<button class="flex items-center gap-2 text-primary font-bold text-sm">
+<span>Start Designing</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Floor Plan Intake -->
+<div class="group relative bg-surface-container-lowest rounded-3xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_40px_80px_rgba(32,27,16,0.08)]">
+<div class="h-48 overflow-hidden">
+<img alt="Architectural Plan" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Clean architectural floor plan drawing on high quality paper" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmnYYJuJNOx59Ux-gYLWICnXIdmoGRwFiuy4gj2fYUa3D_SUYrQrGj_vFApppCGjQT1CWwedNWK-B6_3dmD0NdqEu3Xi0YlhX73Idwp2BkC44cnnx4cjc2xtYtXqKdPwDp7rMnuI942RXaqTeNGVWaru-NdUCfxW2qHuiCzy-NIjcnT1YkzWAZRukdeg3JWVhEYOytu_FQ2clMc7AnOlpI--sB9E2sW56JMnMFpaUnAfE-dNBF3YO79dLTjV9KXwrIJfPTXVtAAMM"/>
+</div>
+<div class="p-8 flex-grow flex flex-col">
+<div class="w-10 h-10 bg-secondary-container rounded-full flex items-center justify-center mb-6">
+<span class="material-symbols-outlined text-on-secondary-container" style="font-variation-settings: 'FILL' 1;">architecture</span>
+</div>
+<h3 class="font-notoSerif text-2xl mb-2 text-primary">Plan your room with confidence</h3>
+<p class="font-plusJakartaSans text-sm text-on-surface-variant mb-6 flex-grow">Map your space accurately to see how different layouts work before you buy.</p>
+<button class="flex items-center gap-2 text-primary font-bold text-sm">
+<span>Begin Planning</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Image Analysis -->
+<div class="group relative bg-surface-container-lowest rounded-3xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_40px_80px_rgba(32,27,16,0.08)]">
+<div class="h-48 overflow-hidden">
+<img alt="Living Room Analysis" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Bright airy living room with sun streaming through windows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDMu1_Vpl9SG3epNrqeotESljHVZtYaORJMgXRGV2YLl4pBSKoJhuEstfQC5arUtuFH4mTGhZnctqE_Q-oh1Ycdho7aFt2nbwz1b_b7NAC991klpSKsiD-9SVBr0fKE6CohI3WnAOKVNtJ2OgnBmoVwkuxyqHP51rVoGYZiSR9dpDt7NXZFE-4AFhxtmrx-e4U0ohzloS_R05-C5GA57eLZROiBH_Y_lvIyER-X5xX1TgAmq3qScd99M7Ah7jNunIm4GJ2AJ1rMbc"/>
+</div>
+<div class="p-8 flex-grow flex flex-col">
+<div class="w-10 h-10 bg-primary-container rounded-full flex items-center justify-center mb-6">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<h3 class="font-notoSerif text-2xl mb-2 text-primary">Get design guidance from your space</h3>
+<p class="font-plusJakartaSans text-sm text-on-surface-variant mb-6 flex-grow">Upload a photo to analyze your room's aesthetic potential and get professional styling tips.</p>
+<button class="flex items-center gap-2 text-primary font-bold text-sm">
+<span>Get Guidance</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Recent Projects Section -->
+<section class="max-w-5xl mx-auto">
+<div class="flex justify-between items-end mb-8">
+<div>
+<span class="font-plusJakartaSans uppercase tracking-[0.2em] text-[10px] text-secondary font-bold">The Archives</span>
+<h2 class="font-notoSerif text-4xl mt-2 text-primary">Recent Projects</h2>
+</div>
+<a class="text-primary font-bold text-sm border-b-2 border-surface-tint/30 pb-1" href="#">View All Archives</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+<!-- Project Card 1 -->
+<div class="flex gap-6 items-start">
+<div class="w-32 h-32 rounded-2xl overflow-hidden flex-shrink-0 bg-surface-container">
+<img alt="Project Thumbnail" class="w-full h-full object-cover" data-alt="Modern minimal living room interior with warm tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBp58pHfItc0fEB2AkrHf4cQfZHHrvBb2DG6yKfw4nmqIndj3nwyHEkFvt5_3M7hrgsTnSGyJqoWGsI0FbxuhJmh-jES7SALyYkm2wq51hMNJUguWYvY2wq37M6DwVJS-bIYtiA2TOSCacFEhBeKQ9cDKjfyO3rtgcjX_p-ngqgcJG5S7p7O2BIM7lka707RAYnczS1m9mrSJB2BQgX6A-mVq6tHTUzeWlgEItglc2fMOJ-2h31LikDYA4kR7XBo_OTc-gEAzDtaUA"/>
+</div>
+<div class="flex flex-col justify-center h-32">
+<span class="font-notoSerif italic text-secondary text-sm mb-1">Residential</span>
+<h4 class="font-plusJakartaSans font-bold text-lg text-primary">Small Rental Living Room</h4>
+<p class="text-on-surface-variant text-sm mt-1">Focusing on non-permanent luxury and vertical storage.</p>
+<div class="mt-3 flex gap-4 text-[10px] uppercase tracking-widest font-bold text-on-surface-variant/60">
+<span>Last edited 2d ago</span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-800"></span> Active</span>
+</div>
+</div>
+</div>
+<!-- Project Card 2 -->
+<div class="flex gap-6 items-start">
+<div class="w-32 h-32 rounded-2xl overflow-hidden flex-shrink-0 bg-surface-container">
+<img alt="Project Thumbnail" class="w-full h-full object-cover" data-alt="Moody bedroom lighting setup with designer lamps" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWT8zKAgGAZko6f8SW4ufAo4ILwdWiPaaJx6TF29FFlbd6OFfjTyhloUgjKc8TUMDORUbfSgP50k3m8KiGjgNGxZ_PcDds-mXYinpFw5Iw-6mvDmq-A9Hl3Y6hIjo4vk7i8RwkgcacpyldQzWVSRKWnygfVQepjAccl7HX4DBtS0SAkAaWwMmIqDlEGwgPP2zF4aeB4WcU1lOZCgizBmWlACYyHnLWRRZYwzzXq5DIG_rtY6yzELQNiRBAYsqEY_n680hlzQIc2ls"/>
+</div>
+<div class="flex flex-col justify-center h-32">
+<span class="font-notoSerif italic text-secondary text-sm mb-1">Atmosphere</span>
+<h4 class="font-plusJakartaSans font-bold text-lg text-primary">Bedroom Lighting Update</h4>
+<p class="text-on-surface-variant text-sm mt-1">Atmospheric layering for rest and evening reading.</p>
+<div class="mt-3 flex gap-4 text-[10px] uppercase tracking-widest font-bold text-on-surface-variant/60">
+<span>Last edited 5d ago</span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-surface-tint"></span> Finalized</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- SideNavBar (Right) -->
+<aside class="fixed right-0 top-16 h-[calc(100vh-64px)] w-80 bg-[#fff8f2] dark:bg-[#18241b] border-l border-[#201b10]/10 flex flex-col shadow-[-10px_0_30px_rgba(32,27,16,0.03)] hidden xl:flex">
+<div class="p-8 border-b border-[#201b10]/5">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div>
+<h3 class="font-plusJakartaSans font-bold text-primary dark:text-[#fef2e0]">Design Consultation</h3>
+<p class="text-xs text-on-surface-variant">AI Assistant Active</p>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-2xl">
+<p class="font-plusJakartaSans text-sm text-primary leading-relaxed">
+                    "I've noticed your preference for Belgian Linen. Would you like me to curate some matching textures for the living room?"
+                </p>
+</div>
+</div>
+<div class="flex-grow py-4">
+<nav class="flex flex-col">
+<a class="flex items-center justify-between text-[#18241b] dark:text-[#fef2e0] font-bold border-r-4 border-[#2d3930] px-8 py-4 transition-all duration-200" href="#">
+<span class="flex items-center gap-3"><span class="material-symbols-outlined">chat</span> Chat</span>
+<span class="bg-secondary text-white text-[10px] px-2 py-0.5 rounded-full">New</span>
+</a>
+<a class="flex items-center gap-3 text-[#201b10]/50 dark:text-[#fef2e0]/40 px-8 py-4 hover:bg-[#fef2e0] dark:hover:bg-[#2d3930] transition-all duration-200" href="#">
+<span class="material-symbols-outlined">lightbulb</span> Suggestions
+                </a>
+<a class="flex items-center gap-3 text-[#201b10]/50 dark:text-[#fef2e0]/40 px-8 py-4 hover:bg-[#fef2e0] dark:hover:bg-[#2d3930] transition-all duration-200" href="#">
+<span class="material-symbols-outlined">history</span> History
+                </a>
+</nav>
+</div>
+<div class="p-8 mt-auto border-t border-[#201b10]/5">
+<a class="flex items-center gap-3 text-[#201b10]/50 dark:text-[#fef2e0]/40 text-sm hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">help_outline</span> Help &amp; Resources
+            </a>
+</div>
+</aside>
+<!-- Suggestion Chips (Floating Overlay for Mobile/Context) -->
+<div class="fixed bottom-8 left-1/2 -translate-x-1/2 flex gap-3 z-40">
+<button class="bg-tertiary-fixed text-on-tertiary-fixed px-6 py-2.5 rounded-full shadow-lg font-plusJakartaSans text-sm font-medium border border-outline-variant/10 backdrop-blur-md transition-all active:scale-95">
+            Compare Fabrics
+        </button>
+<button class="bg-tertiary-fixed text-on-tertiary-fixed px-6 py-2.5 rounded-full shadow-lg font-plusJakartaSans text-sm font-medium border border-outline-variant/10 backdrop-blur-md transition-all active:scale-95">
+            Lighting Modes
+        </button>
+</div>
+</body></html>

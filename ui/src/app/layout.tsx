@@ -1,23 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Noto_Serif, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 
 import { CopilotKitProviders } from "./CopilotKitProviders";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const editorialSans = Plus_Jakarta_Sans({
+  variable: "--font-editorial-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const editorialSerif = Noto_Serif({
+  variable: "--font-editorial-serif",
+  subsets: ["latin"],
+});
+
+const mono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "IKEA Agent Workspace",
-  description: "Multi-agent IKEA workspace for search, floor-plan intake, and room analysis.",
+  title: "The Curated Home | IKEA Studio",
+  description: "Editorial IKEA workspace for room planning, product curation, and design guidance.",
 };
 
 export default function RootLayout({
@@ -28,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased`}
+        className={`${editorialSans.variable} ${editorialSerif.variable} ${mono.variable} min-h-screen antialiased`}
       >
         <CopilotKitProviders>{children}</CopilotKitProviders>
       </body>

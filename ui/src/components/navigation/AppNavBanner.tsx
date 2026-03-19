@@ -13,6 +13,37 @@ type AppNavBannerProps = {
   agentLoadError?: string | null;
 };
 
+function HeaderGlyph({ kind }: { kind: "grid" | "bell" }): React.ReactElement {
+  if (kind === "bell") {
+    return (
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+        <path
+          d="M10 3.5c-2.1 0-3.8 1.7-3.8 3.8v1.5c0 .9-.3 1.8-.8 2.5l-.7 1h10.6l-.7-1c-.5-.7-.8-1.6-.8-2.5V7.3A3.8 3.8 0 0 0 10 3.5Z"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.4"
+        />
+        <path
+          d="M8.5 14.4a1.7 1.7 0 0 0 3 0"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.4"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="3.2" y="3.2" />
+      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="12.6" y="3.2" />
+      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="3.2" y="12.6" />
+      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="12.6" y="12.6" />
+    </svg>
+  );
+}
+
 export function AppNavBanner({
   currentAgentName,
   agents,
@@ -21,10 +52,7 @@ export function AppNavBanner({
 }: AppNavBannerProps): React.ReactElement {
   const router = useRouter();
   const launcherRef = useRef<HTMLDetailsElement | null>(null);
-  const currentAgentLabel = currentAgentName ? formatAgentName(currentAgentName) : "Launcher";
-  const currentCapability = currentAgentName
-    ? describeAgentCapability(currentAgentName)
-    : "Choose the right workspace for search, planning, or image review.";
+  const currentAgentLabel = currentAgentName ? formatAgentName(currentAgentName) : "Studios";
   const launcherDisabled = isLoadingAgents || (agents.length === 0 && !agentLoadError);
 
   function navigateTo(nextPath: string): void {
@@ -32,151 +60,161 @@ export function AppNavBanner({
     router.push(nextPath);
   }
 
+  function launcherOptionClass(active: boolean): string {
+    return [
+      "flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left transition",
+      active ? "editorial-launcher-option-active" : "editorial-launcher-option",
+    ].join(" ");
+  }
+
   return (
-    <header className="relative z-40 border-b border-slate-200/80 bg-white/75 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
+    <header className="editorial-glass-nav sticky top-0 z-40">
+      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+        <div className="flex min-w-0 items-center gap-6">
           <button
-            className="rounded-2xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+            className="editorial-display text-2xl italic text-[color:var(--primary)] transition hover:opacity-80"
             onClick={() => navigateTo("/")}
             type="button"
           >
-            IKEA Agents
+            The Curated Home
           </button>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Workspace
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight text-slate-950">
-                {currentAgentLabel}
-              </h1>
-              {currentAgentName ? (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900">
-                  Active
-                </span>
-              ) : (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                  Home
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-slate-600">{currentCapability}</p>
-          </div>
+          <nav className="hidden items-center gap-5 md:flex">
+            <button
+              className="border-b-2 border-[color:var(--primary)] pb-1 text-sm font-semibold text-[color:var(--primary)]"
+              onClick={() => navigateTo("/")}
+              type="button"
+            >
+              My Designs
+            </button>
+            <button
+              className="editorial-quiet-copy pb-1 text-sm transition hover:text-[color:var(--primary)]"
+              onClick={() => navigateTo("/agents")}
+              type="button"
+            >
+              Workspaces
+            </button>
+          </nav>
         </div>
 
-        {launcherDisabled ? (
-          <div
-            aria-disabled="true"
-            className="min-w-[280px] rounded-[24px] border border-slate-200 bg-slate-100/80 px-4 py-3 text-left text-slate-500"
-            data-testid="app-nav-agent-launcher"
+        <div className="flex items-center gap-3">
+          <button
+            aria-label="Browse workspaces"
+            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
+            onClick={() => navigateTo("/agents")}
+            type="button"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              My agents
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-700">Loading agent list...</p>
-            <p className="mt-1 text-xs text-slate-500">
-              The launcher becomes interactive once the workspaces are ready.
-            </p>
-          </div>
-        ) : (
-          <details
-            className="relative min-w-[280px]"
-            data-testid="app-nav-agent-launcher"
-            ref={launcherRef}
+            <HeaderGlyph kind="grid" />
+          </button>
+          <button
+            aria-label="Open updates"
+            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
+            onClick={() => navigateTo("/")}
+            type="button"
           >
-            <summary
-              className="list-none rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-[0_14px_40px_-36px_rgba(15,23,42,0.45)] transition hover:border-slate-300"
-              data-testid="app-nav-agent-launcher-trigger"
+            <HeaderGlyph kind="bell" />
+          </button>
+
+          {launcherDisabled ? (
+            <div
+              aria-disabled="true"
+              className="editorial-launcher-shell px-4 py-2.5 text-left text-on-surface-variant"
+              data-testid="app-nav-agent-launcher"
             >
-              <div className="flex cursor-pointer items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    My agents
+              <span className="text-sm font-medium text-primary">Loading agent list...</span>
+            </div>
+          ) : (
+            <details
+              className="relative"
+              data-testid="app-nav-agent-launcher"
+              ref={launcherRef}
+            >
+              <summary
+                aria-label="Open studio menu"
+                className="editorial-launcher-shell cursor-pointer p-1.5"
+                data-testid="app-nav-agent-launcher-trigger"
+              >
+                <div className="flex items-center gap-2 pl-1 pr-2">
+                  <div className="editorial-avatar flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase">
+                    {currentAgentName ? currentAgentLabel.charAt(0) : "T"}
+                  </div>
+                  <span className="hidden text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant sm:block">
+                    Studios
+                  </span>
+                </div>
+              </summary>
+              <div className="editorial-launcher-menu absolute right-0 z-30 mt-3 w-[22rem] rounded-[28px] p-3">
+                {agentLoadError ? (
+                  <p className="rounded-[20px] bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {agentLoadError}
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-950">
+                ) : null}
+                <div className="px-2 pb-2">
+                  <p className="editorial-eyebrow">Studio Menu</p>
+                  <p className="mt-2 text-sm font-semibold text-primary">
                     {currentAgentName ? currentAgentLabel : "Choose a workspace"}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-on-surface-variant">
                     {agents.length} workspace{agents.length === 1 ? "" : "s"} available
                   </p>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                  Open
-                </span>
-              </div>
-            </summary>
-            <div className="absolute right-0 z-30 mt-2 w-full rounded-[24px] border border-slate-200 bg-white p-2 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.5)]">
-              {agentLoadError ? (
-                <p className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {agentLoadError}
-                </p>
-              ) : null}
-              <button
-                className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition ${
-                  currentAgentName === null
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-50 text-slate-900 hover:bg-slate-100"
-                }`}
-                onClick={() => navigateTo("/")}
-                type="button"
-              >
-                <span>
-                  <span className="block text-sm font-semibold">Home</span>
-                  <span
-                    className={`mt-1 block text-xs ${
-                      currentAgentName === null ? "text-slate-200" : "text-slate-500"
-                    }`}
-                  >
-                    Overview and agent launcher
-                  </span>
-                </span>
-                {currentAgentName === null ? (
-                  <span className="text-xs font-semibold text-slate-200">Current</span>
-                ) : null}
-              </button>
-              <div className="mt-2 space-y-2">
-                {agents.map((agent) => {
-                  const active = agent.name === currentAgentName;
-                  return (
-                    <button
-                      className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition ${
-                        active
-                          ? "bg-slate-900 text-white"
-                          : "bg-slate-50 text-slate-900 hover:bg-slate-100"
+                <button
+                  className={launcherOptionClass(currentAgentName === null)}
+                  onClick={() => navigateTo("/")}
+                  type="button"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Home</span>
+                    <span
+                      className={`mt-1 block text-xs ${
+                        currentAgentName === null ? "text-white/75" : "text-on-surface-variant"
                       }`}
-                      key={agent.name}
-                      onClick={() => navigateTo(`/agents/${agent.name}`)}
-                      type="button"
                     >
-                      <span>
-                        <span className="block text-sm font-semibold">
-                          {formatAgentName(agent.name)}
+                      Studio overview and workspace launcher
+                    </span>
+                  </span>
+                  {currentAgentName === null ? (
+                    <span className="text-xs font-semibold text-white/80">Current</span>
+                  ) : null}
+                </button>
+                <div className="mt-2 space-y-2">
+                  {agents.map((agent) => {
+                    const active = agent.name === currentAgentName;
+                    return (
+                      <button
+                        className={launcherOptionClass(active)}
+                        key={agent.name}
+                        onClick={() => navigateTo(`/agents/${agent.name}`)}
+                        type="button"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold">
+                            {formatAgentName(agent.name)}
+                          </span>
+                          <span
+                            className={`mt-1 block text-xs ${
+                              active ? "text-white/75" : "text-on-surface-variant"
+                            }`}
+                          >
+                            {describeAgentCapability(agent.name)}
+                          </span>
                         </span>
                         <span
-                          className={`mt-1 block text-xs ${
-                            active ? "text-slate-200" : "text-slate-500"
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            active
+                              ? "bg-white/14 text-white"
+                              : "bg-tertiary-fixed text-on-surface"
                           }`}
                         >
-                          {describeAgentCapability(agent.name)}
+                          {active ? "Current" : "Open"}
                         </span>
-                      </span>
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                          active
-                            ? "border-white/20 bg-white/10 text-white"
-                            : "border-slate-200 bg-white text-slate-600"
-                        }`}
-                      >
-                        {active ? "Current" : "Open"}
-                      </span>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </details>
-        )}
+            </details>
+          )}
+        </div>
       </div>
     </header>
   );

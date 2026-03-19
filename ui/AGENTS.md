@@ -2,6 +2,14 @@
 
 Local instructions for work inside `ui/`. These rules refine the repo-wide guidance in the root `AGENTS.md` for the Next.js frontend.
 
+## Design source of truth
+
+- For the active redesign, `design_references/stitch_design/` is the authoritative visual direction for the UI workspace.
+- If older local UI guidance conflicts with the Stitch direction, follow the Stitch direction and update this file rather than preserving the older rule.
+- Treat `design_references/stitch_design/DESIGN.md` as the source of truth for system principles.
+- Treat the exported `code.html` files and screenshots as composition, spacing, and copy references.
+- When the exported HTML conflicts with `DESIGN.md`, prefer `DESIGN.md`.
+
 ## Scope
 
 - `ui/` owns product-facing presentation, layout, interaction patterns, and browser-side state management.
@@ -33,7 +41,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - User-facing content comes first.
 - Structured outputs such as bundles, product results, floor-plan previews, and 3D room surfaces are first-class work surfaces, not incidental chat decoration.
 - Prompt text, runtime notes, and debug details are secondary by default and should not dominate the initial page layout.
-- Prefer calm, stable layouts over clever or animated ones.
+- Prefer composed editorial layouts over utility-dashboard layouts.
 
 ## Layout rules
 
@@ -42,7 +50,8 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - On agent pages with side-by-side workspace and chat rails, define an explicit desktop height boundary first, then assign scroll ownership within that boundary.
 - Do not let transcripts, result lists, or nested cards expand page height unexpectedly.
 - If content is long, constrain it and make the scroll region visually obvious.
-- Keep pane boundaries readable. Do not rely on repeated light-gray boxes with nearly identical styling to create hierarchy.
+- Prefer tonal surface changes over repeated border boxes for hierarchy.
+- Use borders only as a low-contrast fallback where accessibility or legibility genuinely needs them.
 
 ## CopilotKit rules
 
@@ -72,6 +81,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Prefer accessible, conventional interaction patterns over custom controls.
 - When the current surface is a workspace switcher or launcher, prefer an intentional button-plus-menu or card treatment over browser-default selects if the default control reads as placeholder-level UI.
 - Keep functions small and typed. Presentation components should receive already-shaped data whenever possible.
+- Prefer editorial primitives such as glass chrome, tonal panels, serif headings, tactile chips, and gradient CTAs over ad hoc utility card styling.
 
 ## Thread and state rules
 
@@ -82,9 +92,10 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 
 ## Styling baseline
 
-- Use Geist as the default UI font unless a deliberate alternative is introduced.
-- Maintain consistent spacing, radius, border, and empty-state language across pages.
-- Improve hierarchy with a small, reusable visual vocabulary rather than a bespoke design-system rewrite.
+- Use `Noto Serif` for display/editorial text and `Plus Jakarta Sans` for functional UI text.
+- The baseline palette is warm neutral with forest-green primary and restrained terracotta accenting.
+- Maintain consistent spacing, radius, surface layering, and empty-state language across pages.
+- Improve hierarchy with a small, reusable editorial visual vocabulary rather than utility-dashboard card treatments.
 - Do not introduce a heavyweight UI library casually. If one is added, document:
   - why it is needed
   - which components are approved
