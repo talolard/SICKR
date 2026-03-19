@@ -6,7 +6,7 @@ usage() {
 Manage Dockerized local dependencies for one worktree slot.
 
 Usage:
-  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|ensure-milvus> \
+  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|ensure-milvus|build-snapshot> \
     [--slot <0-99>] [--canonical-root <path>] [--worktree-root <path>] [--include-global]
 EOF
 }
@@ -216,6 +216,19 @@ force_reseed() {
     --force
 }
 
+build_snapshot() {
+  local snapshot_output_root="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/snapshots"
+  local snapshot_builder_port=$((25432 + SLOT))
+  local snapshot_validator_port=$((26432 + SLOT))
+  local snapshot_project_prefix="ikea-slot-${SLOT_PADDED}-snapshot"
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.build_postgres_snapshot \
+    --repo-root "${WORKTREE_ROOT}" \
+    --output-root "${snapshot_output_root}" \
+    --builder-port "${snapshot_builder_port}" \
+    --validator-port "${snapshot_validator_port}" \
+    --project-prefix "${snapshot_project_prefix}"
+}
+
 case "${COMMAND}" in
   ensure-postgres)
     require_docker
@@ -250,6 +263,10 @@ case "${COMMAND}" in
     compose_milvus up -d milvus
     wait_for_milvus
     force_reseed
+    ;;
+  build-snapshot)
+    require_docker
+    build_snapshot
     ;;
   status)
     require_docker

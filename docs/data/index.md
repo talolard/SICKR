@@ -11,6 +11,7 @@ Active runtime uses Postgres for:
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
 - `app.*` conversation and analysis tables managed by existing runtime migrations
 - `ops.seed_state` (observable seed versions and refresh metadata)
+  - includes `postgres_snapshot` rows after a versioned snapshot artifact is built
 
 ### Shared Milvus (`MILVUS_URI`)
 
@@ -22,6 +23,7 @@ Active runtime uses one shared Milvus collection:
 
 - Runtime schema migrations use Alembic + SQLAlchemy.
 - See [Runtime DB Migrations](migrations.md) for commands and environment overrides.
+- Snapshot artifact build/validation details live in [Postgres Snapshot Builds](postgres_snapshots.md).
 - Local product-image serving and payload enrichment are documented in [Local Product Images](product_images.md).
 
 ## Data Lifecycle

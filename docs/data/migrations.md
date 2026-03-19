@@ -57,6 +57,7 @@ Revision `20260319_0005` adds:
   - seeded product-image metadata used by runtime image lookup
 - `ops.seed_state`
   - observable seed versions and refresh details for local dependency preparation
+  - also stores `postgres_snapshot` version metadata before snapshot dumps are emitted
 
 Revision `20260319_0006` adds:
 
