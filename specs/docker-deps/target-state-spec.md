@@ -9,185 +9,273 @@ Source inputs:
 
 ## Goal
 
-Replace the current per-worktree copied DuckDB and Milvus file model with a Dockerized local dependency model that:
+Replace the current per-worktree copied DuckDB and Milvus file model with a
+Dockerized local dependency model that:
 
-- uses Postgres as the single runtime database
-- uses one shared Milvus service for all local worktrees
-- seeds both systems so startup does not rebuild the world each time
+- uses Postgres as the only active local search database
+- uses `pgvector` for vector retrieval inside Postgres
+- restores a versioned Postgres snapshot during normal bootstrap
+- makes snapshot creation explicit for both local development and CI
 - moves product and image catalog metadata into Postgres
-- fully removes DuckDB from the active local runtime path
+- fully removes Milvus and DuckDB from the active local runtime path
 
 The target experience is:
 
-1. A worktree bootstrap ensures the shared Milvus service exists and is healthy.
-2. The same bootstrap creates or starts a worktree-local Postgres.
-3. Postgres is ready with seeded catalog and image metadata plus migrated app tables.
-4. Milvus is ready with the shared vector index already present in a persistent volume.
-5. Any agent in any worktree can use Postgres, Milvus, and the image service without copying stateful files into the repo.
+1. A worktree bootstrap starts or reaches slot-local Postgres.
+2. Bootstrap restores the published Postgres snapshot when the slot volume is
+   empty, stale, or incompatible.
+3. Postgres is ready with seeded catalog data, pgvector embeddings, image
+   metadata, and migrated app tables.
+4. Any agent in any worktree can perform retrieval and image resolution without
+   copying stateful database files into the repo.
 
 ## Non-Goals
 
-- Replacing Milvus with Postgres vector search in this initiative.
 - Storing image bytes in Postgres.
-- Fully containerizing the app runtime or developer shell as the first milestone.
+- Fully containerizing the app runtime or developer shell as the first
+  milestone.
+- Preserving Milvus as an active runtime dependency.
 
 ## Target System
 
-## Dependency topology
+### Dependency topology
 
-The local system will have two dependency scopes:
+The local system has one required stateful dependency scope for search data:
 
-- one global dependency scope for Milvus
-- one per-worktree dependency scope for Postgres
+- one per-worktree Postgres service and volume
 
-The global scope exists because the vector index is intentionally shared across worktrees.
-The per-worktree scope exists because app development needs isolated mutable database state.
+Optional image-serving infrastructure may exist, but search data access itself
+must require only Postgres.
 
-## Postgres
+### Postgres
 
-Each worktree will have its own Postgres service and its own named volume.
+Each worktree has its own Postgres service and its own named volume.
 
 Postgres becomes the authoritative runtime database for:
 
 - product catalog metadata
+- vector retrieval
 - image catalog metadata
 - app state
-- seed and refresh bookkeeping
+- snapshot and restore bookkeeping
 
 Recommended schema layout:
 
-- `catalog`: seeded read-mostly product and image catalog data
+- `catalog`: seeded read-mostly product, embedding, image, and optional
+  diversification state
 - `app`: evolving runtime and user-generated application state
-- `ops`: optional but recommended operational metadata such as seed versions and refresh status
+- `ops`: operational metadata such as snapshot version and restore status
 
-This split is intentional:
+### Vector search
 
-- `catalog` changes slowly and should be treated as a versioned seeded domain
-- `app` changes quickly and should remain migration-friendly
-- `ops` keeps operational tables out of both product and app domains
+Vector retrieval is Postgres-native.
 
-## Milvus
+Requirements:
 
-There will be exactly one local Milvus service for the machine.
+- `catalog.product_embeddings.embedding_vector` uses `pgvector`
+- the required extension is installed through migrations or deterministic setup
+- the embedding table has the vector index required by the chosen distance
+  metric
+- runtime query construction expresses vector distance through SQLAlchemy, not a
+  separate vector service
 
-That Milvus service will:
+### Image storage and serving
 
-- run in a fixed global Compose project
-- use a persistent named volume
-- expose one stable URI used by all worktrees
-- be seeded or refreshed explicitly, not implicitly by whichever worktree starts first
-
-Milvus remains the vector store in this initiative.
-
-## Image storage and serving
-
-Image catalog metadata moves into Postgres.
+Image catalog metadata lives in Postgres.
 Image bytes do not.
 
-Image bytes will initially remain in one shared read-only local image root. The system will be designed so that image storage can later move elsewhere without another catalog redesign.
+Image bytes initially remain in one shared read-only local image root.
+The metadata contract must support both:
 
-Assume that later image storage could be: S3 or a CDN.
-The catalog contract will store enough information to support both:
-
-- local shared-root serving
+- current local shared-root serving
 - future external or object-store-backed serving
 
-## Bootstrap behavior
+### Snapshot artifact
 
-The worktree bootstrap becomes an orchestration step, not a file-copy step.
+The system defines one explicit versioned Postgres snapshot artifact.
+
+The snapshot contents must include:
+
+- seeded `catalog` tables for products, embeddings, and images
+- any required precomputed diversification structure
+- migrated runtime tables required in a fresh local database
+- `ops` metadata sufficient to identify the snapshot version and build inputs
+
+The snapshot is an artifact, not "whatever happened to exist in a previous local
+volume."
+
+## Snapshot Creation
+
+Snapshot creation is first-class and must be implemented early.
+
+### Local snapshot creation
+
+There must be one explicit local command that:
+
+1. creates an ephemeral Postgres builder instance
+2. installs extensions and applies migrations
+3. loads canonical catalog and image inputs
+4. loads pgvector embeddings
+5. builds any required neighbor or diversification state
+6. validates restore into a fresh Postgres instance
+7. writes the snapshot artifact and manifest into the local snapshot cache
+
+The snapshot builder must live in top-level infra/data tooling, not under
+`src/ikea_agent/`.
+
+### CI snapshot creation
+
+There must be one CI path that:
+
+1. rebuilds the snapshot artifact when relevant inputs change
+2. validates restore into a fresh Postgres instance
+3. validates runtime compatibility for the restored database
+4. versions and publishes the snapshot artifact plus manifest
+
+Relevant inputs include at least:
+
+- migrations
+- canonical catalog sources
+- image catalog import logic
+- snapshot builder logic
+- schema changes that alter snapshot contents
+
+### Snapshot metadata
+
+The manifest or equivalent metadata must include:
+
+- snapshot version
+- migration head
+- input fingerprints
+- builder version
+- build timestamp
+- any embedding-model or distance-metric metadata required for compatibility
+
+## Bootstrap Behavior
+
+The worktree bootstrap becomes an orchestration and restore step, not a
+file-copy or rebuild step.
 
 Bootstrap must:
 
-1. ensure global Milvus is running
-2. fail fast if Milvus cannot be started or reached
-3. create or start the worktree-local Postgres
-4. ensure the worktree-local Postgres seed and migrations are current
-5. write environment for the worktree to consume those services
+1. create or start the worktree-local Postgres
+2. detect whether the local Postgres volume is empty, stale, or incompatible
+3. restore the published snapshot when needed
+4. run migrations or migration verification
+5. write environment for the worktree to consume that Postgres instance
 
 Bootstrap must not:
 
 - copy DuckDB files into the worktree
 - copy Milvus files into the worktree
-- opportunistically reseed the shared Milvus just because one worktree started
-
-## Seeds and persistent volumes
-
-Both Postgres and Milvus will be backed by persistent Docker volumes.
-
-Postgres volume responsibilities:
-
-- store the worktree-local database files
-- contain seeded `catalog` and image catalog data
-- contain migrated `app` tables
-
-Milvus volume responsibilities:
-
-- store the global vector index
-- survive service restarts
-- avoid rehydrating the entire index on each startup
-
-Seeds are explicit artifacts or import flows. Seeds are not equivalent to "whatever files happened to exist locally before startup."
+- rebuild the catalog database from canonical source files during normal startup
 
 ## Testable End States
 
 The initiative is complete when all of the following are true.
 
-1. `scripts/worktree/bootstrap.sh` checks whether the global Milvus service is reachable, attempts to start it if it is not, and fails with a clear error if it still cannot reach it.
-2. `scripts/worktree/bootstrap.sh` creates or starts a worktree-local Postgres service and fails clearly if that Postgres cannot be made healthy.
-3. The bootstrap flow writes worktree-local environment that points to worktree-local Postgres and shared global Milvus, with no worktree-local `milvus_lite.db` or DuckDB file copies.
-4. Postgres has at least the `catalog` and `app` schemas, and optionally `ops`, with those roles documented and enforced by code and migrations.
-5. The `catalog` schema contains seeded product catalog data and seeded image catalog metadata.
-6. The `app` schema contains migrated runtime tables for active application state.
-7. The shared Milvus service has a persistent seeded index in its Docker volume and does not require full rehydration on each startup.
-8. Both Postgres and Milvus have explicit seed version or refresh metadata, so the system can tell whether they are current.
-9. Resetting one worktree's Postgres does not affect another worktree's Postgres or the shared Milvus service.
-10. Stopping and restarting Docker does not require rebuilding the catalog database or Milvus index from scratch if the volumes are still present.
-11. Any agent in any worktree can perform vector retrieval through the shared Milvus service successfully.
-12. Any agent in any worktree can resolve product images successfully through the configured image service path.
-13. Runtime image lookup uses Postgres-backed image catalog queries rather than DuckDB parquet reads.
-14. The active local runtime path no longer depends on DuckDB files or DuckDB query execution.
-15. The image catalog schema can represent both the current shared local image root and a future non-local storage backend without another contract rewrite.
+1. `scripts/worktree/bootstrap.sh` creates or starts a worktree-local Postgres
+   service and fails clearly if that Postgres cannot be made healthy.
+2. Bootstrap writes worktree-local environment that points to slot-local
+   Postgres, with no worktree-local DuckDB or Milvus file copies.
+3. Postgres has `catalog`, `app`, and `ops` schema boundaries documented and
+   enforced by code and migrations.
+4. The `catalog` schema contains seeded product catalog data, pgvector
+   embeddings, image catalog metadata, and any required diversification state.
+5. The `app` schema contains migrated runtime tables for active application
+   state.
+6. Snapshot creation is implemented as an explicit local workflow with one
+   documented developer command.
+7. Snapshot creation is implemented as an explicit CI workflow that rebuilds,
+   validates, versions, and publishes the artifact when relevant inputs change.
+8. A fresh Postgres volume can be restored from the published snapshot without
+   rebuilding from canonical source files.
+9. Snapshot metadata is explicit enough for bootstrap and runtime to determine
+   which snapshot version is present.
+10. Resetting one worktree's Postgres does not affect another worktree's
+   Postgres.
+11. Stopping and restarting Docker does not require rebuilding the catalog
+   database if the slot volume or restorable snapshot is still current.
+12. Any agent in any worktree can perform vector retrieval through Postgres
+   successfully.
+13. Any agent in any worktree can resolve product images successfully through
+   the configured image service path.
+14. Runtime image lookup uses Postgres-backed image catalog queries rather than
+   DuckDB parquet reads.
+15. The active local runtime path no longer depends on Milvus or DuckDB files,
+   services, or query execution.
+16. The active retrieval implementation uses SQLAlchemy query construction
+   instead of the old split Milvus-plus-hydration model.
+17. The image catalog schema can represent both the current shared local image
+   root and a future non-local storage backend without another contract rewrite.
 
 ## Functional Spec
 
-## Service layout
+### Service layout
 
-The repo will define:
+The repo defines:
 
-- one global Compose stack for Milvus
 - one per-worktree Compose stack for Postgres
+- optional image-serving support when needed
 
-Milvus will use a fixed project name, for example `ikea-global`.
-Postgres will use a slot or worktree-specific project name, for example `ikea-slot-07`.
+It does not define an active shared Milvus runtime dependency.
 
-## Postgres data model
+### Postgres data model
 
-Postgres will contain:
+Postgres contains:
 
 - a seeded read-mostly `catalog` schema
 - a mutable `app` schema
-- optional `ops` schema for operational metadata
+- an `ops` schema for operational metadata
 
-`catalog` will include at least:
+`catalog` includes at least:
 
 - product rows
-- embedding snapshot source rows needed to seed or refresh Milvus
+- pgvector-backed embedding rows
 - image catalog rows
+- optional persisted diversification state
 
-`app` will include at least:
+`app` includes at least:
 
 - current runtime persistence tables already managed by Alembic
-- any future mutable per-thread, per-run, or per-user tables
+- future mutable per-thread, per-run, or per-user tables
 
-`ops` will include, if adopted:
+`ops` includes at least:
 
-- Postgres seed version metadata
-- image catalog refresh metadata
-- any operational timestamps or bookkeeping needed for refresh logic
+- snapshot version metadata
+- restore bookkeeping
+- compatibility markers needed for bootstrap decisions
 
-## Image catalog contract
+### Retrieval contract
 
-The Postgres-backed image catalog must store enough metadata to drive runtime lookup and future image relocation.
+The main search path is:
+
+1. embed query text
+2. execute one Postgres repository query
+3. return hydrated retrieval results
+
+The active retrieval path must:
+
+- apply structured filters in Postgres
+- rank by pgvector similarity in Postgres
+- avoid the old "candidate keys first, relational hydration later" split
+
+### Diversification contract
+
+Diversification, if retained, must be Postgres-native.
+
+The repo may choose either:
+
+- on-the-fly pgvector neighbor queries
+- or one explicit persisted neighbor structure refreshed on demand
+
+If persisted, that structure is part of the snapshot or explicit maintenance
+refresh model.
+
+### Image catalog contract
+
+The Postgres-backed image catalog must store enough metadata to drive runtime
+lookup and future image relocation.
 
 At minimum, each cataloged image needs:
 
@@ -199,149 +287,55 @@ At minimum, each cataloged image needs:
 - storage locator
 - public serving URL or URL template when applicable
 - optional local filesystem path for local shared-root serving
-- timestamps and refresh version metadata
+- timestamps and refresh or snapshot version metadata
 
-The universal contract must not assume a local filesystem path is always present.
-
-## Milvus contract
-
-Milvus remains the active vector store.
-
-The system must provide:
-
-- one stable Milvus URI for all worktrees
-- one explicit global prepare or refresh path
-- one persistent volume containing the shared index
-
-Normal app startup must not be the place where shared Milvus is rebuilt from scratch.
-
-## Image service contract
-
-There will be one image-serving path usable by all worktrees.
-
-The initial implementation may keep FastAPI serving images from a shared read-only root.
-The important requirement is that:
-
-- the serving strategy is configurable
-- the lookup metadata lives in Postgres
-- the contract does not prevent later migration to a dedicated static service or remote object store
+The universal contract must not assume a local filesystem path is always
+present.
 
 ## Units Of Work
 
-## Epic 1: Compose And Bootstrap Orchestration
+### Epic 1: Rewrite spec and plan
 
 Goal:
-Replace file-copy bootstrap with dependency orchestration.
+Replace the earlier Milvus-preserving architecture with the corrected
+Postgres-only contract.
 
-Tasks:
-
-- Define a global Compose stack for Milvus.
-- Define a per-worktree Compose stack for Postgres.
-- Add health checks and readiness waits for both services.
-- Update `scripts/worktree/bootstrap.sh` to ensure global Milvus, then ensure local Postgres.
-- Remove worktree-local copying of DuckDB and Milvus files from bootstrap.
-- Write worktree environment variables for shared Milvus and local Postgres.
-- Add `make` targets for dependency up, down, reset, reseed, and diagnostics.
-
-## Epic 2: Postgres Database Foundation
+### Epic 2: Move snapshot and bootstrap tooling out of the application package
 
 Goal:
-Make Postgres the single active runtime database.
+Ensure snapshot build and restore logic lives in top-level infra/data tooling,
+not under `src/ikea_agent/`.
 
-Tasks:
-
-- Introduce a real `DATABASE_URL`-style configuration path.
-- Add Postgres engine creation and switch runtime wiring away from DuckDB-only engine helpers.
-- Update Alembic configuration to support Postgres as the default local path.
-- Move retrieval schema ownership out of runtime bootstrap and into migrations or explicit seed/bootstrap steps.
-- Define and document the `catalog`, `app`, and optional `ops` schema boundaries.
-- Add tests that exercise Postgres-backed runtime setup.
-
-## Epic 3: Seed Model And Operational Metadata
+### Epic 3: Add pgvector schema and indexing
 
 Goal:
-Make both databases reproducibly seedable and inspectable.
+Make Postgres the actual vector search backend.
 
-Tasks:
-
-- Define the Postgres seed artifact or import flow.
-- Define the Milvus seed or refresh flow.
-- Add explicit seed-version metadata for Postgres.
-- Add explicit seed-version or refresh metadata for Milvus.
-- Add commands or one-shot services for seed, reseed, and refresh operations.
-- Define failure behavior when a seed is missing, stale, or incompatible.
-
-## Epic 4: Milvus Centralization
+### Epic 4: Implement snapshot creation locally and in CI
 
 Goal:
-Keep Milvus, but stop treating it as a per-worktree file.
+Create the versioned Postgres artifact before restore/bootstrap work depends on
+it.
 
-Tasks:
-
-- Run Milvus in a single global local dependency stack.
-- Give Milvus a persistent shared volume.
-- Change app config to use a shared Milvus URI.
-- Remove normal worktree startup behavior that hydrates Milvus if empty.
-- Introduce an explicit administrative prepare or refresh path for the shared Milvus index.
-- Validate concurrent access from multiple worktrees.
-
-## Epic 5: Image Catalog Migration To Postgres
+### Epic 5: Implement snapshot restore during bootstrap
 
 Goal:
-Retire DuckDB from the image lookup path and make Postgres authoritative.
+Make normal startup restore the published artifact instead of rebuilding from
+source.
 
-Tasks:
-
-- Design Postgres image catalog tables under the `catalog` schema.
-- Add migrations for those tables.
-- Build a loader that imports current sidecar catalog outputs into Postgres.
-- Replace runtime DuckDB/parquet image catalog queries with typed Postgres queries.
-- Add refresh metadata so future image catalog updates are traceable.
-- Remove the runtime need for DuckDB in the image-catalog path.
-
-## Epic 6: Image Serving Contract Cleanup
+### Epic 6: Collapse retrieval into direct Postgres queries
 
 Goal:
-Keep image serving working now while enabling a later move of the underlying image storage.
+Remove the split Milvus-plus-relational retrieval architecture.
 
-Tasks:
-
-- Make image base URL or image serving strategy configurable.
-- Ensure agents resolve images through catalog metadata instead of implicit backend-local conventions.
-- Keep local shared-root serving working for development.
-- Define the storage backend abstraction in the catalog schema, including local and future remote backends.
-- Optionally introduce one dedicated image service if the current backend route becomes a bottleneck or coupling problem.
-
-## Epic 7: Validation, Docs, And Rollout
+### Epic 7: Remove Milvus and DuckDB from active runtime paths
 
 Goal:
-Make the new model operable and trustworthy.
+Finish deleting the old dependency surfaces after the Postgres-native search
+path exists.
 
-Tasks:
+### Epic 8: Validation and docs
 
-- Update local workflow docs and worktree bootstrap docs.
-- Add smoke tests covering bootstrap, Postgres readiness, Milvus readiness, and image resolution.
-- Add checks proving no DuckDB or per-worktree Milvus copies are required in the active runtime path.
-- Add reset and recovery runbooks for local failures.
-- Define the final cutover point where DuckDB is no longer part of supported local development.
-
-## Suggested Execution Order
-
-1. Epic 1: Compose And Bootstrap Orchestration
-2. Epic 2: Postgres Database Foundation
-3. Epic 3: Seed Model And Operational Metadata
-4. Epic 4: Milvus Centralization
-5. Epic 5: Image Catalog Migration To Postgres
-6. Epic 6: Image Serving Contract Cleanup
-7. Epic 7: Validation, Docs, And Rollout
-
-## Exit Criteria
-
-This spec is satisfied when:
-
-- bootstrap no longer copies DuckDB or Milvus files into worktrees
-- Postgres is the only runtime database
-- Milvus is one shared healthy local service with a persistent seeded volume
-- product and image catalog metadata live in Postgres
-- image bytes remain resolvable locally and the catalog can later point elsewhere
-- all active worktrees can use the same global Milvus and their own local Postgres concurrently
+Goal:
+Bring tests, smoke coverage, docs, and PR messaging into sync with the corrected
+single-database architecture.
