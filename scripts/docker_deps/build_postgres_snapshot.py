@@ -355,6 +355,8 @@ def _materialize_neighbor_rows(
     embedding_model: str,
     neighbor_limit: int,
 ) -> int:
+    """Materialize legacy neighbor rows only when a build explicitly requests them."""
+
     repository = EmbeddingSnapshotRepository(engine)
     if neighbor_limit <= 0:
         repository.replace_neighbor_rows(embedding_model=embedding_model, rows=())
@@ -419,7 +421,9 @@ def _build_manifest_payload(
         "neighbor_state": {
             "limit": neighbor_limit,
             "materialized_row_count": neighbor_count,
-            "strategy": "precomputed" if neighbor_limit > 0 else "on_demand_runtime_fallback",
+            "strategy": "legacy_precomputed"
+            if neighbor_limit > 0
+            else "pgvector_candidate_set_runtime",
         },
         "row_counts": {
             "embeddings_count": seed_summary.embeddings_count,

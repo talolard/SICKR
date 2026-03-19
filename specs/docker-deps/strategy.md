@@ -246,18 +246,19 @@ This split is still useful in the corrected architecture because:
 The previous plan carried forward `product_embedding_neighbors` plus a Python
 cosine fallback from the Milvus-era world.
 
-The corrected strategy should choose one Postgres-native diversification shape:
+The chosen strategy is direct pgvector similarity over the already-small
+candidate set selected for rerank/MMR.
 
-- either direct pgvector neighbor lookup when runtime cost is acceptable
-- or one explicit persisted neighbor structure in Postgres, refreshed on demand
+That means:
 
-If persisted, that structure should be:
+- active runtime reads pairwise candidate similarities directly from
+  `catalog.product_embeddings`
+- the HNSW cosine index on `catalog.product_embeddings.embedding_vector` remains
+  the primary retrieval index
+- precomputed neighbor rows are optional legacy data only and are not required
+  for the active path
 
-- built as part of snapshot creation or explicit maintenance refresh
-- indexed for efficient lookup
-- documented as part of the snapshot contents
-
-It should not remain a half-runtime, half-fallback hybrid.
+The active system must not remain a half-runtime, half-fallback hybrid.
 
 ## Image Serving Strategy
 

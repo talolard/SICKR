@@ -7,6 +7,7 @@ from sqlalchemy.dialects import postgresql
 
 from ikea_agent.retrieval.catalog_repository import (
     CatalogRepository,
+    _build_postgres_neighbor_similarity_statement,
     _build_postgres_search_statement,
 )
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
@@ -167,3 +168,15 @@ def test_postgres_search_statement_uses_pgvector_distance_and_sqlalchemy_filters
     assert "catalog.products_canonical.price_eur >= %(price_min_eur)s" in compiled
     assert "catalog.products_canonical.width_cm >= %(width_min_cm)s" in compiled
     assert "LIKE '%%' || %(include_keyword)s || '%%'" in compiled
+
+
+def test_postgres_neighbor_similarity_statement_uses_pgvector_pair_distance() -> None:
+    compiled = str(
+        _build_postgres_neighbor_similarity_statement().compile(dialect=postgresql.dialect())
+    )
+
+    assert "source_embeddings.embedding_vector <=> neighbor_embeddings.embedding_vector" in compiled
+    assert "source_embeddings.canonical_product_key IN (__[POSTCOMPILE_source_keys])" in compiled
+    assert (
+        "neighbor_embeddings.canonical_product_key IN (__[POSTCOMPILE_neighbor_keys])" in compiled
+    )

@@ -7,7 +7,7 @@
 Active runtime uses Postgres for:
 - `catalog.products_canonical` (seeded catalog metadata)
 - `catalog.product_embeddings` (seeded embedding snapshots used directly by pgvector retrieval)
-- `catalog.product_embedding_neighbors` (optional precomputed cosine neighbors for MMR)
+- `catalog.product_embedding_neighbors` (optional legacy precomputed neighbor rows; active MMR no longer depends on them)
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
 - `app.*` conversation and analysis tables managed by existing runtime migrations
 - `ops.seed_state` (observable seed versions and refresh metadata)
@@ -39,10 +39,8 @@ Milvus is still present as a transitional local dependency surface and data-prep
    rebuild from canonical inputs is needed.
 5. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
    restored `catalog.product_embeddings` rows and writes a local Milvus seed-state JSON file.
-6. Query flow retrieves semantic matches directly from Postgres pgvector tables, then reads
-   neighbor similarities from
-   `catalog.product_embedding_neighbors` when present or computes them from stored embeddings when
-   neighbor rows are absent.
+6. Query flow retrieves semantic matches directly from Postgres pgvector tables, then derives the
+   candidate-set pair similarities for MMR directly in Postgres from `catalog.product_embeddings`.
 7. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
    direct public URLs based on config.
 

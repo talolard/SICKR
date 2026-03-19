@@ -12,7 +12,7 @@ The snapshot artifact is a `pg_dump --format=custom` dump that already contains:
 - `catalog.products_canonical`
 - `catalog.product_embeddings` with pgvector data
 - `catalog.product_images`
-- `catalog.product_embedding_neighbors` when precomputed
+- `catalog.product_embedding_neighbors` only when explicitly materialized for legacy analysis flows
 - `ops.seed_state`, including a `postgres_snapshot` version row
 
 ## Local Build
@@ -99,7 +99,7 @@ Snapshot versions are deterministic fingerprints over:
 - image catalog seed fingerprint
 - snapshot-builder logic fingerprint
 - embedding model
-- configured neighbor-precompute limit
+- optional legacy neighbor-precompute limit when such rows are explicitly materialized
 
 The manifest also records:
 
@@ -109,6 +109,7 @@ The manifest also records:
 - input fingerprints
 - embedding model
 - distance metric
+- neighbor-state strategy metadata
 - row counts
 - artifact checksum and size
 - restore-validation results

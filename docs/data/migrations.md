@@ -52,7 +52,8 @@ Revision `20260319_0005` adds:
 - `catalog.product_embeddings`
   - embedding snapshot source used to populate the shared Milvus collection
 - `catalog.product_embedding_neighbors`
-  - optional precomputed neighbor similarities for MMR diversification
+  - optional legacy precomputed neighbor similarities; active MMR now derives candidate-set
+    similarities directly from `catalog.product_embeddings`
 - `catalog.product_images`
   - seeded product-image metadata used by runtime image lookup
 - `ops.seed_state`

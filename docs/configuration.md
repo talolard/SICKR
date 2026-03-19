@@ -14,7 +14,7 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `ALLOW_MODEL_REQUESTS` default: `1`
 - `MMR_LAMBDA` default: `0.8`
 - `MMR_PRESELECT_LIMIT` default: `30`
-- `EMBEDDING_NEIGHBOR_LIMIT` default: `0` (`0` means store all pairwise neighbors)
+- `EMBEDDING_NEIGHBOR_LIMIT` default: `0` (legacy/precompute-only knob; active Postgres diversification ignores it)
 - `IMAGE_SERVING_STRATEGY` default: `backend_proxy`
 - `IMAGE_SERVICE_BASE_URL` default: unset
 - `IKEA_IMAGE_CATALOG_RUN_ID` default: unset

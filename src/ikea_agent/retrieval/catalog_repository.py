@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from math import sqrt
 from typing import Any, cast
 
-from sqlalchemy import Engine, Row, bindparam, func, select, text
+from sqlalchemy import Engine, Row, and_, bindparam, func, select, text
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Select
 
@@ -216,16 +216,33 @@ class CatalogRepository:
         normalized_keys = [key for key in dict.fromkeys(product_keys) if key]
         if len(normalized_keys) < _MIN_PAIRWISE_KEY_COUNT:
             return {}
+        if self._engine.dialect.name == "postgresql":
+            return self._read_neighbor_similarities_postgres(
+                embedding_model=embedding_model,
+                product_keys=normalized_keys,
+            )
+        return self._read_neighbor_similarities_legacy(
+            embedding_model=embedding_model,
+            product_keys=normalized_keys,
+        )
+
+    def _read_neighbor_similarities_postgres(
+        self,
+        *,
+        embedding_model: str,
+        product_keys: Sequence[str],
+    ) -> dict[tuple[str, str], float]:
+        """Compute candidate-set pair similarities directly in Postgres."""
 
         with self._engine.connect() as connection:
             rows = cast(
                 "list[tuple[object, ...]]",
                 connection.execute(
-                    _NEIGHBOR_SIMILARITIES_QUERY,
+                    _build_postgres_neighbor_similarity_statement(),
                     {
                         "embedding_model": embedding_model,
-                        "source_keys": normalized_keys,
-                        "neighbor_keys": normalized_keys,
+                        "source_keys": product_keys,
+                        "neighbor_keys": product_keys,
                     },
                 ).fetchall(),
             )
@@ -237,11 +254,40 @@ class CatalogRepository:
             if source_key is None or neighbor_key is None or similarity is None:
                 continue
             lookup[(source_key, neighbor_key)] = similarity
+        return lookup
 
+    def _read_neighbor_similarities_legacy(
+        self,
+        *,
+        embedding_model: str,
+        product_keys: Sequence[str],
+    ) -> dict[tuple[str, str], float]:
+        """Support non-Postgres test engines until the old compatibility layer is deleted."""
+
+        with self._engine.connect() as connection:
+            rows = cast(
+                "list[tuple[object, ...]]",
+                connection.execute(
+                    _NEIGHBOR_SIMILARITIES_QUERY,
+                    {
+                        "embedding_model": embedding_model,
+                        "source_keys": product_keys,
+                        "neighbor_keys": product_keys,
+                    },
+                ).fetchall(),
+            )
+        lookup: dict[tuple[str, str], float] = {}
+        for row in rows:
+            source_key = _str_or_none(row[0])
+            neighbor_key = _str_or_none(row[1])
+            similarity = _float_or_none(row[2])
+            if source_key is None or neighbor_key is None or similarity is None:
+                continue
+            lookup[(source_key, neighbor_key)] = similarity
         computed_lookup = _compute_neighbor_similarities_from_embeddings(
             engine=self._engine,
             embedding_model=embedding_model,
-            product_keys=normalized_keys,
+            product_keys=product_keys,
         )
         for key_pair, similarity in computed_lookup.items():
             lookup.setdefault(key_pair, similarity)
@@ -492,6 +538,40 @@ def _build_postgres_search_statement(filters: RetrievalFilters) -> Select[tuple[
 
     return statement.order_by(*_search_order_by(filters.sort, semantic_distance)).limit(
         bindparam("result_limit")
+    )
+
+
+def _build_postgres_neighbor_similarity_statement() -> Select[Any]:
+    source_embeddings = product_embeddings.alias("source_embeddings")
+    neighbor_embeddings = product_embeddings.alias("neighbor_embeddings")
+    return (
+        select(
+            source_embeddings.c.canonical_product_key.label("source_product_key"),
+            neighbor_embeddings.c.canonical_product_key.label("neighbor_product_key"),
+            (
+                1.0
+                - source_embeddings.c.embedding_vector.cosine_distance(
+                    neighbor_embeddings.c.embedding_vector
+                )
+            ).label("cosine_similarity"),
+        )
+        .select_from(
+            source_embeddings.join(
+                neighbor_embeddings,
+                and_(
+                    source_embeddings.c.embedding_model == neighbor_embeddings.c.embedding_model,
+                    source_embeddings.c.canonical_product_key
+                    != neighbor_embeddings.c.canonical_product_key,
+                ),
+            )
+        )
+        .where(
+            source_embeddings.c.embedding_model == bindparam("embedding_model"),
+            source_embeddings.c.canonical_product_key.in_(bindparam("source_keys", expanding=True)),
+            neighbor_embeddings.c.canonical_product_key.in_(
+                bindparam("neighbor_keys", expanding=True)
+            ),
+        )
     )
 
 

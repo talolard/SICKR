@@ -33,8 +33,9 @@ deployments should stay on the lexical backend.
 - Embedding vectors at runtime: Postgres `catalog.product_embeddings` with pgvector.
 - Embedding source-of-truth snapshots: Postgres `catalog.product_embeddings`, plus canonical parquet
   artifacts in `data/parquet/`.
-- Neighbor similarities: Postgres `catalog.product_embedding_neighbors` when seeded; otherwise the
-  repository computes cosine similarities from stored embeddings on demand.
+- Neighbor similarities: Postgres computes pairwise candidate-set similarities directly from
+  `catalog.product_embeddings` with pgvector distance expressions; `catalog.product_embedding_neighbors`
+  is now an optional legacy surface only.
 
 ## Legacy State Clarification
 
