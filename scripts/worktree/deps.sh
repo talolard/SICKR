@@ -191,7 +191,7 @@ ensure_postgres() {
   compose_postgres up -d postgres
   wait_for_postgres
   migrate_postgres
-  env -u VIRTUAL_ENV uv run python -m ikea_agent.docker_deps.seed_postgres \
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
     --database-url "${POSTGRES_DATABASE_URL}" \
     --repo-root "${CANONICAL_ROOT}"
 }
@@ -199,18 +199,18 @@ ensure_postgres() {
 ensure_milvus() {
   compose_milvus up -d milvus
   wait_for_milvus
-  env -u VIRTUAL_ENV uv run python -m ikea_agent.docker_deps.prepare_milvus \
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.prepare_milvus \
     --database-url "${POSTGRES_DATABASE_URL}" \
     --state-file "${MILVUS_STATE_FILE}"
 }
 
 force_reseed() {
   migrate_postgres
-  env -u VIRTUAL_ENV uv run python -m ikea_agent.docker_deps.seed_postgres \
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
     --database-url "${POSTGRES_DATABASE_URL}" \
     --repo-root "${CANONICAL_ROOT}" \
     --force
-  env -u VIRTUAL_ENV uv run python -m ikea_agent.docker_deps.prepare_milvus \
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.prepare_milvus \
     --database-url "${POSTGRES_DATABASE_URL}" \
     --state-file "${MILVUS_STATE_FILE}" \
     --force

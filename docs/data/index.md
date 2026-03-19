@@ -28,9 +28,9 @@ Active runtime uses one shared Milvus collection:
 
 1. Canonical parquet artifacts under `data/parquet/` and the shared image-catalog output root are
    the local seed inputs.
-2. `ikea_agent.docker_deps.seed_postgres` loads those inputs into `catalog.*` and records seed
+2. `scripts.docker_deps.seed_postgres` loads those inputs into `catalog.*` and records seed
    versions in `ops.seed_state`.
-3. `ikea_agent.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
+3. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
    `catalog.product_embeddings` and writes a local Milvus seed-state JSON file.
 4. Query flow retrieves vector candidates from Milvus.
 5. Postgres hydrates and filters candidates, then reads neighbor similarities from
@@ -38,6 +38,9 @@ Active runtime uses one shared Milvus collection:
    neighbor rows are absent.
 6. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
    direct public URLs based on config.
+
+The build/bootstrap tooling above is intentionally outside `src/ikea_agent/`; application runtime
+code consumes the prepared database state but does not own local dependency construction.
 
 ## Tool Sample Inputs
 - Floor planner sample inputs live in typed tests under `tests/tools/test_floor_planner_*.py`.

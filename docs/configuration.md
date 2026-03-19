@@ -29,9 +29,11 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - Worktree bootstrap writes `DATABASE_URL` and `MILVUS_URI` into
   `.tmp_untracked/worktree.env` and uses `scripts/worktree/deps.sh` to ensure both services.
 - `MILVUS_LITE_URI` is still accepted as a legacy alias for `MILVUS_URI`.
-- Use `uv run python -m ikea_agent.docker_deps.seed_postgres` to seed Postgres from canonical
+- Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the
+  application package.
+- Use `uv run python -m scripts.docker_deps.seed_postgres` to seed Postgres from canonical
   parquet and image-catalog inputs.
-- Use `uv run python -m ikea_agent.docker_deps.prepare_milvus --state-file <path>` to refresh
+- Use `uv run python -m scripts.docker_deps.prepare_milvus --state-file <path>` to refresh
   the shared Milvus collection from `catalog.product_embeddings`.
 
 ## Agent Model Overrides
