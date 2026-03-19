@@ -10,8 +10,6 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "alembic>=1.17.1",
-  "duckdb>=1.4.0",
-  "duckdb-engine>=0.17.0",
   "fal-client>=0.9.0",
   "fastapi>=0.127.1",
   "httpx>=0.28.1",
@@ -29,6 +27,7 @@ dependencies = [
   "uvicorn>=0.40.0",
   "pydantic-evals>=1.67.0",
   "pgvector>=0.4.2",
+  "pyarrow>=23.0.1",
 ]
 
 [dependency-groups]

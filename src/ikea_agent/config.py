@@ -65,7 +65,6 @@ class AppSettings(BaseSettings):
         default="postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent",
         validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
-    duckdb_path: str | None = Field(default=None)
     artifact_root_dir: str = Field(default="data/artifacts")
     ikea_image_catalog_root_dir: str = Field(
         default="/Users/tal/dev/tal_maria_ikea/.tmp_untracked/ikea_image_catalog"

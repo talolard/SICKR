@@ -128,10 +128,7 @@ def build_chat_runtime() -> ChatRuntime:
     """Build chat runtime with Postgres-backed retrieval dependencies."""
 
     settings = get_settings()
-    database_url = resolve_database_url(
-        database_url=settings.database_url,
-        duckdb_path=settings.duckdb_path,
-    )
+    database_url = resolve_database_url(database_url=settings.database_url)
     sqlalchemy_engine = create_database_engine(database_url)
     session_factory = create_session_factory(sqlalchemy_engine)
 

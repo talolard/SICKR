@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-import duckdb
+import pyarrow as pa
 import pytest
 from fastapi.testclient import TestClient
+from pyarrow import parquet as pq
 
 from ikea_agent.chat.product_images import (
     IndexedProductImage,
@@ -42,18 +43,8 @@ def _write_catalog_parquet(
 ) -> Path:
     run_dir = root / "runs" / run_id
     run_dir.mkdir(parents=True)
-    jsonl_path = _write_catalog_jsonl(root=root, run_id=f"{run_id}-json", rows=rows)
     parquet_path = run_dir / "catalog.parquet"
-    connection = duckdb.connect()
-    try:
-        connection.execute(
-            "CREATE TABLE source AS SELECT * FROM read_json_auto(?)",
-            [str(jsonl_path)],
-        )
-        relation = connection.table("source")
-        relation.write_parquet(str(parquet_path))
-    finally:
-        connection.close()
+    pq.write_table(pa.Table.from_pylist(rows), parquet_path)
     return parquet_path
 
 

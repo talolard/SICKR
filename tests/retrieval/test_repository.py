@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlalchemy.dialects import postgresql
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.retrieval.catalog_repository import (
     CatalogRepository,
     _build_postgres_neighbor_similarity_statement,
     _build_postgres_search_statement,
 )
+from ikea_agent.retrieval.schema import product_embeddings, products_canonical
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
@@ -26,69 +28,84 @@ def _setup_schema(engine: Engine) -> None:
 
 def _seed_products(engine: Engine) -> None:
     with engine.begin() as connection:
-        connection.exec_driver_sql(
-            """
-            INSERT INTO catalog.products_canonical (
-                canonical_product_key,
-                product_id,
-                unique_id,
-                country,
-                product_name,
-                display_title,
-                product_type,
-                description_text,
-                main_category,
-                sub_category,
-                dimensions_text,
-                width_cm,
-                depth_cm,
-                height_cm,
-                price_eur,
-                currency,
-                rating,
-                rating_count,
-                badge,
-                online_sellable,
-                url,
-                source_updated_at
-            ) VALUES
-                (
-                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One',
-                    'Desk One Compact Workstation', 'Desk', 'Work desk',
-                    'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
-                    4.0, 10, 'none', true, 'https://example.com/1', now()
-                ),
-                (
-                    '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', null, 'Desk', 'Compact desk',
-                    'tables-desks', 'desks', '100x50x74 cm', 100, 50, 74, 80, 'EUR',
-                    4.5, 20, 'none', true, 'https://example.com/2', now()
-                )
-            """
+        connection.execute(
+            products_canonical.insert(),
+            [
+                {
+                    "canonical_product_key": "1-DE",
+                    "product_id": 1,
+                    "unique_id": "1-Germany",
+                    "country": "Germany",
+                    "product_name": "Desk One",
+                    "display_title": "Desk One Compact Workstation",
+                    "product_type": "Desk",
+                    "description_text": "Work desk",
+                    "main_category": "tables-desks",
+                    "sub_category": "desks",
+                    "dimensions_text": "120x60x75 cm",
+                    "width_cm": 120.0,
+                    "depth_cm": 60.0,
+                    "height_cm": 75.0,
+                    "price_eur": 100.0,
+                    "currency": "EUR",
+                    "rating": 4.0,
+                    "rating_count": 10,
+                    "badge": "none",
+                    "online_sellable": True,
+                    "url": "https://example.com/1",
+                    "source_updated_at": datetime.now(UTC),
+                },
+                {
+                    "canonical_product_key": "2-DE",
+                    "product_id": 2,
+                    "unique_id": "2-Germany",
+                    "country": "Germany",
+                    "product_name": "Desk Two",
+                    "display_title": None,
+                    "product_type": "Desk",
+                    "description_text": "Compact desk",
+                    "main_category": "tables-desks",
+                    "sub_category": "desks",
+                    "dimensions_text": "100x50x74 cm",
+                    "width_cm": 100.0,
+                    "depth_cm": 50.0,
+                    "height_cm": 74.0,
+                    "price_eur": 80.0,
+                    "currency": "EUR",
+                    "rating": 4.5,
+                    "rating_count": 20,
+                    "badge": "none",
+                    "online_sellable": True,
+                    "url": "https://example.com/2",
+                    "source_updated_at": datetime.now(UTC),
+                },
+            ],
         )
-        connection.exec_driver_sql(
-            """
-            INSERT INTO catalog.product_embeddings (
-                canonical_product_key,
-                embedding_model,
-                run_id,
-                embedding_vector,
-                embedded_text,
-                embedded_at
-            ) VALUES
-                (
-                    '1-DE', 'gemini-embedding-001', 'run-1',
-                    [1.0, 0.0], 'line1\\nline2', now()
-                ),
-                (
-                    '2-DE', 'gemini-embedding-001', 'run-1',
-                    [0.0, 1.0], 'desk two', now()
-                )
-            """
+        connection.execute(
+            product_embeddings.insert(),
+            [
+                {
+                    "canonical_product_key": "1-DE",
+                    "embedding_model": "gemini-embedding-001",
+                    "run_id": "run-1",
+                    "embedding_vector": [1.0, 0.0],
+                    "embedded_text": "line1\\nline2",
+                    "embedded_at": datetime.now(UTC),
+                },
+                {
+                    "canonical_product_key": "2-DE",
+                    "embedding_model": "gemini-embedding-001",
+                    "run_id": "run-1",
+                    "embedding_vector": [0.0, 1.0],
+                    "embedded_text": "desk two",
+                    "embedded_at": datetime.now(UTC),
+                },
+            ],
         )
 
 
 def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_1.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_1.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 
@@ -113,7 +130,7 @@ def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> N
 
 
 def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Path) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_2.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_2.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 
@@ -138,7 +155,7 @@ def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Pat
 def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
     tmp_path: Path,
 ) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_3.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_3.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 

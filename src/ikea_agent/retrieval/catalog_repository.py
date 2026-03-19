@@ -156,62 +156,50 @@ class CatalogRepository:
 
         if not candidates:
             return []
+        candidate_scores = {
+            item.canonical_product_key: item.semantic_score
+            for item in candidates
+            if item.canonical_product_key
+        }
+        candidate_ranks = {
+            item.canonical_product_key: rank
+            for rank, item in enumerate(candidates, start=1)
+            if item.canonical_product_key
+        }
+        if not candidate_scores:
+            return []
 
-        rows: list[tuple[object, ...]]
-        with self._engine.begin() as connection:
-            connection.execute(text("DROP TABLE IF EXISTS temp_candidate_scores"))
-            connection.execute(
-                text(
-                    """
-                    CREATE TEMPORARY TABLE temp_candidate_scores (
-                        canonical_product_key VARCHAR,
-                        semantic_score DOUBLE PRECISION,
-                        candidate_rank BIGINT
-                    )
-                    """
-                )
-            )
-            connection.execute(
-                text(
-                    """
-                    INSERT INTO temp_candidate_scores (
-                        canonical_product_key,
-                        semantic_score,
-                        candidate_rank
-                    ) VALUES (
-                        :canonical_product_key,
-                        :semantic_score,
-                        :candidate_rank
-                    )
-                    """
-                ),
-                [
-                    {
-                        "canonical_product_key": item.canonical_product_key,
-                        "semantic_score": item.semantic_score,
-                        "candidate_rank": rank,
-                    }
-                    for rank, item in enumerate(candidates, start=1)
-                ],
-            )
+        with self._engine.connect() as connection:
             rows = cast(
-                "list[tuple[object, ...]]",
+                "list[Row[tuple[object, ...]]]",
                 connection.execute(
-                    text(_hydration_query(filters.sort)),
+                    _build_legacy_hydration_statement(filters),
                     {
                         **_filter_params(filters),
-                        "result_limit": result_limit,
+                        "candidate_keys": list(candidate_scores),
                     },
                 ).fetchall(),
             )
-
         hydrated_results: list[RetrievalResult] = []
         for row in rows:
-            semantic_score = _float_or_none(row[14])
+            canonical_product_key = str(row[0])
+            semantic_score = candidate_scores.get(canonical_product_key)
             if semantic_score is None:
                 continue
-            hydrated_results.append(_legacy_row_to_result(row, semantic_score=semantic_score))
-        return hydrated_results
+            hydrated_results.append(
+                _legacy_row_to_result(
+                    row,
+                    semantic_score=semantic_score,
+                )
+            )
+        hydrated_results.sort(
+            key=lambda item: _legacy_result_sort_key(
+                result=item,
+                sort_mode=filters.sort,
+                candidate_rank=candidate_ranks.get(item.canonical_product_key, result_limit + 1),
+            )
+        )
+        return hydrated_results[:result_limit]
 
     def read_neighbor_similarities(
         self,
@@ -341,7 +329,7 @@ class CatalogRepository:
         filters: RetrievalFilters,
         result_limit: int,
     ) -> list[RetrievalResult]:
-        """Fallback for non-Postgres test engines until active DuckDB paths are removed."""
+        """Fallback for non-Postgres test engines."""
 
         candidates = _rank_embedding_rows(
             rows=EmbeddingSnapshotRepository(self._engine).read_embedding_rows(embedding_model),
@@ -401,101 +389,6 @@ class EmbeddingSnapshotRepository:
                 ],
             )
         return len(rows)
-
-
-def _hydration_query(sort_mode: str) -> str:
-    order_by = "ORDER BY t.semantic_score DESC, t.candidate_rank ASC"
-    if sort_mode == "price_asc":
-        order_by = "ORDER BY c.price_eur ASC NULLS LAST, t.candidate_rank ASC"
-    elif sort_mode == "price_desc":
-        order_by = "ORDER BY c.price_eur DESC NULLS LAST, t.candidate_rank ASC"
-    elif sort_mode == "size":
-        order_by = (
-            "ORDER BY (coalesce(c.width_cm, 0) * coalesce(c.depth_cm, 0) * "
-            "coalesce(c.height_cm, 0)) DESC NULLS LAST, t.candidate_rank ASC"
-        )
-
-    query = """
-        SELECT
-            c.canonical_product_key,
-            c.product_name,
-            c.product_type,
-            c.description_text,
-            e.embedded_text,
-            c.main_category,
-            c.sub_category,
-            c.dimensions_text,
-            c.width_cm,
-            c.depth_cm,
-            c.height_cm,
-            c.price_eur,
-            c.url,
-            c.display_title,
-            t.semantic_score
-        FROM temp_candidate_scores AS t
-        JOIN catalog.products_canonical AS c
-          ON c.canonical_product_key = t.canonical_product_key
-        LEFT JOIN catalog.product_embeddings AS e
-          ON e.canonical_product_key = c.canonical_product_key
-        WHERE c.country = 'Germany'
-          AND (:category IS NULL OR c.main_category = :category)
-          AND (
-            :price_min_eur IS NULL
-            OR c.price_eur IS NOT NULL AND c.price_eur >= :price_min_eur
-          )
-          AND (
-            :price_max_eur IS NULL
-            OR c.price_eur IS NOT NULL AND c.price_eur <= :price_max_eur
-          )
-          AND (:width_exact_cm IS NULL OR c.width_cm = :width_exact_cm)
-          AND (:depth_exact_cm IS NULL OR c.depth_cm = :depth_exact_cm)
-          AND (:height_exact_cm IS NULL OR c.height_cm = :height_exact_cm)
-          AND (:width_min_cm IS NULL OR c.width_cm IS NOT NULL AND c.width_cm >= :width_min_cm)
-          AND (:width_max_cm IS NULL OR c.width_cm IS NOT NULL AND c.width_cm <= :width_max_cm)
-          AND (:depth_min_cm IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm >= :depth_min_cm)
-          AND (:depth_max_cm IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm <= :depth_max_cm)
-          AND (
-            :height_min_cm IS NULL
-            OR c.height_cm IS NOT NULL AND c.height_cm >= :height_min_cm
-          )
-          AND (
-            :height_max_cm IS NULL
-            OR c.height_cm IS NOT NULL AND c.height_cm <= :height_max_cm
-          )
-          AND (
-            :include_keyword IS NULL
-            OR strpos(
-              lower(
-                concat_ws(
-                  ' ',
-                  c.product_name,
-                  coalesce(c.description_text, ''),
-                  coalesce(c.main_category, ''),
-                  coalesce(c.sub_category, ''),
-                  coalesce(e.embedded_text, '')
-                )
-              ),
-              lower(:include_keyword)
-            ) > 0
-          )
-          AND (
-            :exclude_keyword IS NULL
-            OR strpos(
-              lower(
-                concat_ws(
-                  ' ',
-                  c.product_name,
-                  coalesce(c.description_text, ''),
-                  coalesce(c.main_category, ''),
-                  coalesce(c.sub_category, ''),
-                  coalesce(e.embedded_text, '')
-                )
-              ),
-              lower(:exclude_keyword)
-            ) = 0
-          )
-    """
-    return query + order_by + " LIMIT :result_limit"
 
 
 def _build_postgres_search_statement(filters: RetrievalFilters) -> Select[tuple[object, ...]]:
@@ -654,14 +547,15 @@ def _search_order_by(
 
 def _build_search_text_expression() -> ColumnElement[str]:
     return func.lower(
-        func.concat_ws(
-            " ",
-            products_canonical.c.product_name,
-            func.coalesce(products_canonical.c.description_text, ""),
-            func.coalesce(products_canonical.c.main_category, ""),
-            func.coalesce(products_canonical.c.sub_category, ""),
-            func.coalesce(product_embeddings.c.embedded_text, ""),
-        )
+        func.coalesce(products_canonical.c.product_name, "")
+        + " "
+        + func.coalesce(products_canonical.c.description_text, "")
+        + " "
+        + func.coalesce(products_canonical.c.main_category, "")
+        + " "
+        + func.coalesce(products_canonical.c.sub_category, "")
+        + " "
+        + func.coalesce(product_embeddings.c.embedded_text, "")
     )
 
 
@@ -671,6 +565,74 @@ def _size_volume_expression() -> ColumnElement[float]:
         * func.coalesce(products_canonical.c.depth_cm, 0.0)
         * func.coalesce(products_canonical.c.height_cm, 0.0)
     )
+
+
+def _build_legacy_hydration_statement(filters: RetrievalFilters) -> Select[tuple[object, ...]]:
+    search_text = _build_search_text_expression()
+    statement = (
+        select(
+            products_canonical.c.canonical_product_key,
+            products_canonical.c.product_name,
+            products_canonical.c.product_type,
+            products_canonical.c.description_text,
+            product_embeddings.c.embedded_text,
+            products_canonical.c.main_category,
+            products_canonical.c.sub_category,
+            products_canonical.c.dimensions_text,
+            products_canonical.c.width_cm,
+            products_canonical.c.depth_cm,
+            products_canonical.c.height_cm,
+            products_canonical.c.price_eur,
+            products_canonical.c.url,
+            products_canonical.c.display_title,
+        )
+        .select_from(
+            products_canonical.outerjoin(
+                product_embeddings,
+                product_embeddings.c.canonical_product_key
+                == products_canonical.c.canonical_product_key,
+            )
+        )
+        .where(
+            products_canonical.c.country == _DEFAULT_COUNTRY,
+            products_canonical.c.canonical_product_key.in_(
+                bindparam("candidate_keys", expanding=True)
+            ),
+        )
+    )
+    statement = _apply_numeric_filters(statement=statement, filters=filters)
+    if filters.category is not None:
+        statement = statement.where(products_canonical.c.main_category == bindparam("category"))
+    if filters.include_keyword is not None:
+        statement = statement.where(search_text.contains(bindparam("include_keyword")))
+    if filters.exclude_keyword is not None:
+        statement = statement.where(~search_text.contains(bindparam("exclude_keyword")))
+    return statement
+
+
+def _legacy_result_sort_key(
+    *,
+    result: RetrievalResult,
+    sort_mode: str,
+    candidate_rank: int,
+) -> tuple[float, int] | tuple[int, int] | tuple[float, int, str]:
+    if sort_mode == "price_asc":
+        return (
+            result.price_eur if result.price_eur is not None else float("inf"),
+            candidate_rank,
+        )
+    if sort_mode == "price_desc":
+        return (
+            -(result.price_eur if result.price_eur is not None else float("-inf")),
+            candidate_rank,
+        )
+    if sort_mode == "size":
+        return (
+            -((result.width_cm or 0.0) * (result.depth_cm or 0.0) * (result.height_cm or 0.0)),
+            candidate_rank,
+            result.canonical_product_key,
+        )
+    return (-result.semantic_score, candidate_rank, result.canonical_product_key)
 
 
 def _filter_params(filters: RetrievalFilters) -> dict[str, object]:

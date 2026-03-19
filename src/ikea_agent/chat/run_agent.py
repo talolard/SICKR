@@ -22,7 +22,6 @@ from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire
-from ikea_agent.shared.sqlalchemy_db import build_duckdb_sqlalchemy_url
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 DEFAULT_PROMPT = "I have a 7x2 meter hallway with no natural light and two doors one on each end"
@@ -51,11 +50,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "--database-url",
         default=None,
         help="Optional DATABASE_URL override for one CLI run.",
-    )
-    parser.add_argument(
-        "--duckdb-path",
-        default=None,
-        help="Legacy compatibility alias that maps to a DuckDB-backed DATABASE_URL.",
     )
     return parser
 
@@ -96,13 +90,10 @@ async def _run_once(
     prompt: str,
     session_id: str,
     database_url: str | None,
-    duckdb_path: str | None,
 ) -> str:
     if database_url:
         os.environ["DATABASE_URL"] = database_url
-    if duckdb_path:
-        os.environ["DATABASE_URL"] = build_duckdb_sqlalchemy_url(duckdb_path)
-    if database_url or duckdb_path:
+    if database_url:
         get_settings.cache_clear()
     settings = get_settings()
     configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
@@ -131,7 +122,6 @@ def main() -> None:
             prompt=args.prompt,
             session_id=args.session_id,
             database_url=args.database_url,
-            duckdb_path=args.duckdb_path,
         )
     )
     print(output)

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.persistence.analysis_repository import AnalysisRepository
@@ -14,12 +15,11 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     ensure_persistence_schema,
 )
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
-    engine = create_duckdb_engine(str(tmp_path / "analysis_repository_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "analysis_repository_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

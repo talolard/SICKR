@@ -5,7 +5,6 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 ## Core Settings
 
 - `DATABASE_URL` default: `postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent`
-- `DUCKDB_PATH` default: unset
 - `EMBEDDING_MODEL_URI` default: `google-gla:gemini-embedding-001`
 - `EMBEDDING_DIMENSIONS` default: `256` (fixed to match the current pgvector column shape)
 - `GEMINI_GENERATION_MODEL` default: `gemini-3.1-flash-lite-preview`

@@ -49,7 +49,7 @@ def test_build_chat_runtime_uses_prepared_dependencies(
     monkeypatch.setattr(
         runtime_module,
         "resolve_database_url",
-        lambda *, database_url, duckdb_path: database_url or duckdb_path,
+        lambda *, database_url: database_url,
     )
     monkeypatch.setattr(runtime_module, "create_database_engine", lambda _url: engine)
     monkeypatch.setattr(runtime_module, "create_session_factory", lambda _engine: session_factory)

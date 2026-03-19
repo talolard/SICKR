@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    ARRAY,
     BIGINT,
     BOOLEAN,
     DOUBLE,
-    FLOAT,
+    JSON,
     TIMESTAMP,
     VARCHAR,
     Column,
@@ -25,7 +24,7 @@ from ikea_agent.shared.db_contract import (
 )
 
 retrieval_metadata = MetaData(schema=CATALOG_SCHEMA)
-_embedding_vector_type = Vector(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(ARRAY(FLOAT), "duckdb")
+_embedding_vector_type = Vector(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(JSON(), "sqlite")
 
 products_canonical = Table(
     "products_canonical",

@@ -9,7 +9,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
-import duckdb
+from pyarrow import parquet as pq
 from sqlalchemy import Engine, text
 
 logger = getLogger(__name__)
@@ -254,27 +254,10 @@ def _load_indexed_images(*, catalog_path: Path) -> tuple[IndexedProductImage, ..
 
 
 def _load_indexed_images_from_parquet(*, catalog_path: Path) -> tuple[IndexedProductImage, ...]:
-    connection = duckdb.connect()
-    try:
-        rows = connection.execute(
-            """
-            SELECT
-                CAST(product_id AS VARCHAR),
-                local_path,
-                image_rank,
-                COALESCE(is_og_image, FALSE),
-                canonical_image_url
-            FROM read_parquet(?)
-            WHERE local_path IS NOT NULL
-            """,
-            [str(catalog_path)],
-        ).fetchall()
-    finally:
-        connection.close()
     return tuple(
         indexed_image
-        for row in rows
-        if (indexed_image := _indexed_image_from_row(row=row)) is not None
+        for mapping in _read_parquet_rows(catalog_path=catalog_path)
+        if (indexed_image := _indexed_image_from_mapping(mapping=mapping)) is not None
     )
 
 
@@ -294,16 +277,9 @@ def _load_indexed_images_from_jsonl(*, catalog_path: Path) -> tuple[IndexedProdu
     return tuple(indexed_images)
 
 
-def _indexed_image_from_row(*, row: tuple[object, ...]) -> IndexedProductImage | None:
-    return _indexed_image_from_mapping(
-        mapping={
-            "product_id": row[0],
-            "local_path": row[1],
-            "image_rank": row[2],
-            "is_og_image": row[3],
-            "canonical_image_url": row[4],
-        }
-    )
+def _read_parquet_rows(*, catalog_path: Path) -> tuple[dict[str, object], ...]:
+    table = pq.read_table(catalog_path)
+    return tuple(dict(row) for row in table.to_pylist() if isinstance(row, dict))
 
 
 def _indexed_image_from_mapping(*, mapping: dict[str, object]) -> IndexedProductImage | None:

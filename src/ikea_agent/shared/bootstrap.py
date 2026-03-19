@@ -15,9 +15,11 @@ def ensure_runtime_schema(engine: Engine) -> None:
     with engine.begin() as connection:
         if engine.dialect.name == "postgresql":
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {CATALOG_SCHEMA}"))
-        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {OPS_SCHEMA}"))
+            connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {CATALOG_SCHEMA}"))
+            connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {OPS_SCHEMA}"))
     retrieval_metadata.create_all(engine, checkfirst=True)
+    if engine.dialect.name != "postgresql":
+        return
     with engine.begin() as connection:
         connection.execute(
             text(

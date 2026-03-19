@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.shared.sqlite_db import create_sqlite_engine
+
 from ikea_agent.retrieval.catalog_repository import CatalogRepository, EmbeddingSnapshotRepository
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
 def test_replace_and_read_neighbor_similarities(tmp_path: Path) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "embedding_neighbors.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "embedding_neighbors.sqlite")
     ensure_runtime_schema(engine)
 
     snapshot_repository = EmbeddingSnapshotRepository(engine)

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
+
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.retrieval.catalog_repository import CatalogRepository
 from ikea_agent.retrieval.display_titles import (
     backfill_product_display_titles,
     derive_display_title,
 )
+from ikea_agent.retrieval.schema import products_canonical
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
 def test_derive_display_title_prefers_specific_slug_metadata() -> None:
@@ -79,33 +82,28 @@ def test_derive_display_title_ignores_non_product_urls() -> None:
 
 
 def test_backfill_product_display_titles_updates_catalog_rows_and_runtime_reads() -> None:
-    engine = create_duckdb_engine(str(Path(".tmp_untracked/test_display_titles.duckdb")))
+    engine = create_sqlite_engine(Path(".tmp_untracked/test_display_titles.sqlite"))
     ensure_runtime_schema(engine)
 
     with engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM catalog.products_canonical")
-        connection.exec_driver_sql(
-            """
-            INSERT INTO catalog.products_canonical (
-                canonical_product_key,
-                product_id,
-                unique_id,
-                country,
-                product_name,
-                description_text,
-                url,
-                source_updated_at
-            ) VALUES (
-                'fejka-1-DE',
-                1,
-                'fejka-1-Germany',
-                'Germany',
-                'FEJKA',
-                'Artificial potted plant, indoor/outdoor monstera',
-                'https://www.ikea.com/de/de/p/fejka-kuenstliche-topfpflanze-drinnen-draussen-monstera-30582542/',
-                now()
-            )
-            """
+        connection.execute(products_canonical.delete())
+        connection.execute(
+            products_canonical.insert(),
+            [
+                {
+                    "canonical_product_key": "fejka-1-DE",
+                    "product_id": "1",
+                    "unique_id": "fejka-1-Germany",
+                    "country": "Germany",
+                    "product_name": "FEJKA",
+                    "description_text": "Artificial potted plant, indoor/outdoor monstera",
+                    "url": (
+                        "https://www.ikea.com/de/de/p/"
+                        "fejka-kuenstliche-topfpflanze-drinnen-draussen-monstera-30582542/"
+                    ),
+                    "source_updated_at": datetime.now(UTC),
+                }
+            ],
         )
 
     updated_count = backfill_product_display_titles(engine)
@@ -120,35 +118,26 @@ def test_backfill_product_display_titles_updates_catalog_rows_and_runtime_reads(
 
 
 def test_backfill_product_display_titles_skips_rows_with_existing_titles() -> None:
-    engine = create_duckdb_engine(str(Path(".tmp_untracked/test_display_titles_existing.duckdb")))
+    engine = create_sqlite_engine(Path(".tmp_untracked/test_display_titles_existing.sqlite"))
     ensure_runtime_schema(engine)
 
     with engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM catalog.products_canonical")
-        connection.exec_driver_sql(
-            """
-            INSERT INTO catalog.products_canonical (
-                canonical_product_key,
-                product_id,
-                unique_id,
-                country,
-                product_name,
-                description_text,
-                url,
-                display_title,
-                source_updated_at
-            ) VALUES (
-                'besta-1-DE',
-                1,
-                'besta-1-Germany',
-                'Germany',
-                'BESTA',
-                'Storage combination',
-                'https://www.ikea.com/de/de/p/besta-storage-combination-12345678/',
-                'Custom title',
-                now()
-            )
-            """
+        connection.execute(products_canonical.delete())
+        connection.execute(
+            products_canonical.insert(),
+            [
+                {
+                    "canonical_product_key": "besta-1-DE",
+                    "product_id": "1",
+                    "unique_id": "besta-1-Germany",
+                    "country": "Germany",
+                    "product_name": "BESTA",
+                    "description_text": "Storage combination",
+                    "url": "https://www.ikea.com/de/de/p/besta-storage-combination-12345678/",
+                    "display_title": "Custom title",
+                    "source_updated_at": datetime.now(UTC),
+                }
+            ],
         )
 
     assert backfill_product_display_titles(engine) == 0

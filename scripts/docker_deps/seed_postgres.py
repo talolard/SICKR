@@ -10,7 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-import duckdb
+from pyarrow import parquet as pq
 from sqlalchemy import Connection, Engine, text
 from sqlalchemy.sql.base import Executable
 
@@ -121,10 +121,7 @@ def main() -> None:
         args.image_catalog_root or settings.ikea_image_catalog_root_dir
     ).expanduser()
     image_catalog_run_id = args.image_catalog_run_id or settings.ikea_image_catalog_run_id
-    database_url = resolve_database_url(
-        database_url=args.database_url or settings.database_url,
-        duckdb_path=settings.duckdb_path,
-    )
+    database_url = resolve_database_url(database_url=args.database_url or settings.database_url)
     engine = create_database_engine(database_url)
     summary = seed_postgres_database(
         engine=engine,
@@ -333,134 +330,89 @@ def seed_postgres_database(
 
 
 def _load_product_rows(*, products_parquet: Path) -> list[dict[str, object]]:
-    connection = duckdb.connect()
-    try:
-        rows = connection.execute(
-            """
-            SELECT
-                canonical_product_key,
-                CAST(product_id AS VARCHAR),
-                unique_id,
-                country,
-                product_name,
-                product_type,
-                description_text,
-                main_category,
-                sub_category,
-                dimensions_text,
-                width_cm,
-                depth_cm,
-                height_cm,
-                price_eur,
-                currency,
-                rating,
-                rating_count,
-                badge,
-                online_sellable,
-                url,
-                source_updated_at
-            FROM read_parquet(?)
-            WHERE country = 'Germany'
-            ORDER BY canonical_product_key
-            """,
-            [str(products_parquet)],
-        ).fetchall()
-    finally:
-        connection.close()
     product_rows: list[dict[str, object]] = []
+    rows = sorted(
+        (
+            row
+            for row in _read_parquet_rows(parquet_path=products_parquet)
+            if _str_or_none(row.get("country")) == "Germany"
+        ),
+        key=lambda row: _str_or_none(row.get("canonical_product_key")) or "",
+    )
     for row in rows:
-        product_name = _str_or_none(row[4]) or ""
-        description_text = _str_or_none(row[6])
-        url = _str_or_none(row[19])
+        product_name = _str_or_none(row.get("product_name")) or ""
+        description_text = _str_or_none(row.get("description_text"))
+        url = _str_or_none(row.get("url"))
         product_rows.append(
             {
-                "canonical_product_key": str(row[0]),
-                "product_id": _str_or_none(row[1]),
-                "unique_id": _str_or_none(row[2]),
-                "country": _str_or_none(row[3]),
+                "canonical_product_key": str(row["canonical_product_key"]),
+                "product_id": _str_or_none(row.get("product_id")),
+                "unique_id": _str_or_none(row.get("unique_id")),
+                "country": _str_or_none(row.get("country")),
                 "product_name": product_name,
                 "display_title": derive_display_title(
                     product_name=product_name,
                     description_text=description_text,
                     url=url,
                 ),
-                "product_type": _str_or_none(row[5]),
+                "product_type": _str_or_none(row.get("product_type")),
                 "description_text": description_text,
-                "main_category": _str_or_none(row[7]),
-                "sub_category": _str_or_none(row[8]),
-                "dimensions_text": _str_or_none(row[9]),
-                "width_cm": _float_or_none(row[10]),
-                "depth_cm": _float_or_none(row[11]),
-                "height_cm": _float_or_none(row[12]),
-                "price_eur": _float_or_none(row[13]),
-                "currency": _str_or_none(row[14]),
-                "rating": _float_or_none(row[15]),
-                "rating_count": _int_or_none(row[16]),
-                "badge": _str_or_none(row[17]),
-                "online_sellable": bool(row[18]),
+                "main_category": _str_or_none(row.get("main_category")),
+                "sub_category": _str_or_none(row.get("sub_category")),
+                "dimensions_text": _str_or_none(row.get("dimensions_text")),
+                "width_cm": _float_or_none(row.get("width_cm")),
+                "depth_cm": _float_or_none(row.get("depth_cm")),
+                "height_cm": _float_or_none(row.get("height_cm")),
+                "price_eur": _float_or_none(row.get("price_eur")),
+                "currency": _str_or_none(row.get("currency")),
+                "rating": _float_or_none(row.get("rating")),
+                "rating_count": _int_or_none(row.get("rating_count")),
+                "badge": _str_or_none(row.get("badge")),
+                "online_sellable": bool(row.get("online_sellable")),
                 "url": url,
-                "source_updated_at": row[20],
+                "source_updated_at": row.get("source_updated_at"),
             }
         )
     return product_rows
 
 
 def _load_embedding_rows(*, embeddings_parquet: Path) -> list[dict[str, object]]:
-    connection = duckdb.connect()
-    try:
-        rows = connection.execute(
-            """
-            SELECT
-                canonical_product_key,
-                embedding_model,
-                run_id,
-                embedding_vector,
-                embedded_text,
-                embedded_at
-            FROM read_parquet(?)
-            ORDER BY canonical_product_key, embedding_model
-            """,
-            [str(embeddings_parquet)],
-        ).fetchall()
-    finally:
-        connection.close()
+    rows = sorted(
+        _read_parquet_rows(parquet_path=embeddings_parquet),
+        key=lambda row: (
+            _str_or_none(row.get("canonical_product_key")) or "",
+            _str_or_none(row.get("embedding_model")) or "",
+        ),
+    )
     return [
         {
-            "canonical_product_key": str(row[0]),
-            "embedding_model": str(row[1]),
-            "run_id": _str_or_none(row[2]),
+            "canonical_product_key": str(row["canonical_product_key"]),
+            "embedding_model": str(row["embedding_model"]),
+            "run_id": _str_or_none(row.get("run_id")),
             "embedding_vector": tuple(
-                float(item) for item in row[3] if isinstance(item, int | float)
+                float(item)
+                for item in _sequence_or_empty(row.get("embedding_vector"))
+                if isinstance(item, int | float)
             )
-            if isinstance(row[3], list | tuple)
-            else (),
-            "embedded_text": _str_or_none(row[4]),
-            "embedded_at": row[5],
+            or (),
+            "embedded_text": _str_or_none(row.get("embedded_text")),
+            "embedded_at": row.get("embedded_at"),
         }
         for row in rows
     ]
 
 
 def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
-    connection = duckdb.connect()
-    try:
-        rows = connection.execute(
-            _image_catalog_query(catalog_source),
-            [str(catalog_source)],
-        ).fetchall()
-    finally:
-        connection.close()
-
     deduped_rows: dict[str, dict[str, object]] = {}
-    for row in rows:
-        image_asset_key = _str_or_none(row[0])
-        canonical_product_key = _str_or_none(row[1])
-        product_id = _str_or_none(row[2])
+    for row in _read_image_rows(catalog_source=catalog_source):
+        image_asset_key = _str_or_none(row.get("image_asset_key"))
+        canonical_product_key = _str_or_none(row.get("repo_canonical_product_key"))
+        product_id = _str_or_none(row.get("product_id"))
         if image_asset_key is None or canonical_product_key is None or product_id is None:
             continue
-        local_path = _str_or_none(row[6])
-        canonical_image_url = _str_or_none(row[7])
-        storage_locator = _str_or_none(row[8]) or canonical_image_url or local_path
+        local_path = _str_or_none(row.get("local_path"))
+        canonical_image_url = _str_or_none(row.get("canonical_image_url"))
+        storage_locator = _str_or_none(row.get("storage_uri")) or canonical_image_url or local_path
         if storage_locator is None:
             continue
         storage_backend_kind = (
@@ -470,30 +422,49 @@ def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
             "image_asset_key": image_asset_key,
             "canonical_product_key": canonical_product_key,
             "product_id": product_id,
-            "image_rank": _int_or_none(row[3]),
-            "is_og_image": bool(row[4]),
-            "image_role": _str_or_none(row[5]),
+            "image_rank": _int_or_none(row.get("image_rank")),
+            "is_og_image": bool(row.get("is_og_image")),
+            "image_role": _str_or_none(row.get("image_role")),
             "storage_backend_kind": storage_backend_kind,
             "storage_locator": storage_locator,
             "public_url": canonical_image_url,
             "local_path": local_path,
             "canonical_image_url": canonical_image_url,
-            "provenance": _str_or_none(row[9]),
-            "crawl_run_id": _str_or_none(row[10]),
-            "source_page_url": _str_or_none(row[11]),
-            "sha256": _str_or_none(row[12]),
-            "content_type": _str_or_none(row[13]),
-            "width_px": _int_or_none(row[14]),
-            "height_px": _int_or_none(row[15]),
-            "refreshed_at": _datetime_or_none(row[16]) or _datetime_or_none(row[17]),
+            "provenance": _str_or_none(row.get("extraction_source")),
+            "crawl_run_id": _str_or_none(row.get("crawl_run_id")),
+            "source_page_url": _str_or_none(row.get("source_page_url")),
+            "sha256": _str_or_none(row.get("sha256")),
+            "content_type": _str_or_none(row.get("content_type")),
+            "width_px": _int_or_none(row.get("width_px")),
+            "height_px": _int_or_none(row.get("height_px")),
+            "refreshed_at": _datetime_or_none(row.get("scraped_at"))
+            or _datetime_or_none(row.get("downloaded_at")),
         }
     return list(deduped_rows.values())
 
 
-def _image_catalog_query(catalog_source: Path) -> str:
+def _read_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
     if catalog_source.suffix == ".parquet":
-        return _READ_PARQUET_IMAGE_QUERY
-    return _READ_JSON_IMAGE_QUERY
+        return _read_parquet_rows(parquet_path=catalog_source)
+    return _read_jsonl_rows(jsonl_path=catalog_source)
+
+
+def _read_parquet_rows(*, parquet_path: Path) -> list[dict[str, object]]:
+    table = pq.read_table(parquet_path)
+    return [dict(row) for row in table.to_pylist() if isinstance(row, dict)]
+
+
+def _read_jsonl_rows(*, jsonl_path: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    with jsonl_path.open(encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            loaded = json.loads(line)
+            if isinstance(loaded, dict):
+                rows.append(loaded)
+    return rows
 
 
 def _select_image_catalog_source(*, image_catalog_root: Path, run_id: str | None) -> Path:
@@ -684,6 +655,16 @@ def _datetime_or_none(value: object) -> datetime | None:
         normalized = value.replace("Z", "+00:00")
         return datetime.fromisoformat(normalized)
     return None
+
+
+def _sequence_or_empty(value: object) -> tuple[object, ...]:
+    if value is None:
+        return ()
+    if hasattr(value, "tolist"):
+        return _sequence_or_empty(value.tolist())
+    if isinstance(value, list | tuple):
+        return tuple(value)
+    return ()
 
 
 if __name__ == "__main__":
