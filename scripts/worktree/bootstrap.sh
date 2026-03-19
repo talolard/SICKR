@@ -64,14 +64,15 @@ if ! [[ "${SLOT}" =~ ^[0-9]+$ ]] || (( SLOT < 0 || SLOT > 99 )); then
   exit 1
 fi
 
-if [[ -z "${CANONICAL_ROOT}" ]]; then
-  CANONICAL_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+WORKTREE_ROOT="$(git -C "${SCRIPT_DIR}/../.." rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${WORKTREE_ROOT}" ]]; then
+  printf 'Unable to determine worktree root from %s.\n' "${SCRIPT_DIR}" >&2
+  exit 1
 fi
 
-WORKTREE_ROOT="$(git rev-parse --show-toplevel)"
-if [[ -z "${WORKTREE_ROOT}" ]]; then
-  printf 'Unable to determine worktree root.\n' >&2
-  exit 1
+if [[ -z "${CANONICAL_ROOT}" ]]; then
+  CANONICAL_ROOT="${WORKTREE_ROOT}"
 fi
 
 cd "${WORKTREE_ROOT}"
