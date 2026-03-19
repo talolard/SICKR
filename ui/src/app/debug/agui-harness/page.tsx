@@ -81,6 +81,12 @@ function parseSseChunk(
   });
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export default function Home(): ReactElement {
   const [useMockMode, setUseMockMode] = useState<boolean>(useMockAgent);
   const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
@@ -184,6 +190,23 @@ export default function Home(): ReactElement {
   };
 
   const uploadAttachment = async (localId: string, file: File): Promise<void> => {
+    if (useMockMode) {
+      await sleep(150);
+      setAttachmentProgress(localId, 28);
+      await sleep(250);
+      setAttachmentProgress(localId, 61);
+      await sleep(250);
+      setAttachmentReady(localId, {
+        attachment_id: crypto.randomUUID(),
+        mime_type: file.type || "application/octet-stream",
+        uri: "/attachments/mock",
+        width: null,
+        height: null,
+        file_name: file.name,
+      });
+      return;
+    }
+
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/attachments");
@@ -234,7 +257,9 @@ export default function Home(): ReactElement {
     nextAttachments.forEach((attachment, index) => {
       const file = files[index];
       if (file) {
-        void uploadAttachment(attachment.localId, file);
+        setTimeout(() => {
+          void uploadAttachment(attachment.localId, file);
+        }, 0);
       }
     });
   };
@@ -361,6 +386,20 @@ export default function Home(): ReactElement {
                       : undefined,
                 }),
               );
+              if (status === "executing") {
+                setToolProgressById((current) =>
+                  current[toolCallId]
+                    ? current
+                    : {
+                        ...current,
+                        [toolCallId]: {
+                          percent: 0,
+                          label:
+                            toolName === "run_search_graph" ? "Searching catalog" : "Working",
+                        },
+                      },
+                );
+              }
             }
           }
           if (message.event === "tool_result") {
