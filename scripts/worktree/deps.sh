@@ -111,6 +111,8 @@ GLOBAL_ENV_DIR="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/global"
 POSTGRES_ENV_FILE="${POSTGRES_ENV_DIR}/compose.env"
 MILVUS_ENV_FILE="${GLOBAL_ENV_DIR}/compose.env"
 MILVUS_STATE_FILE="${GLOBAL_ENV_DIR}/milvus_seed_state.json"
+SNAPSHOT_ROOT="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/snapshots"
+SNAPSHOT_LATEST_FILE="${SNAPSHOT_ROOT}/latest.json"
 POSTGRES_DATABASE_URL="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 POSTGRES_COMPOSE_FILE="${WORKTREE_ROOT}/docker/compose.postgres.yml"
 MILVUS_COMPOSE_FILE="${WORKTREE_ROOT}/docker/compose.milvus.yml"
@@ -187,13 +189,111 @@ migrate_postgres() {
     env -u VIRTUAL_ENV uv run alembic upgrade head
 }
 
+snapshot_field() {
+  local field="$1"
+  env -u VIRTUAL_ENV uv run python -c 'import json, sys; print(json.loads(open(sys.argv[1], encoding="utf-8").read())[sys.argv[2]])' \
+    "${SNAPSHOT_LATEST_FILE}" \
+    "${field}"
+}
+
+require_snapshot_artifact() {
+  if [[ ! -f "${SNAPSHOT_LATEST_FILE}" ]]; then
+    printf 'Missing snapshot metadata at %s. Build it first with scripts/worktree/deps.sh build-snapshot --slot %s.\n' \
+      "${SNAPSHOT_LATEST_FILE}" \
+      "${SLOT}" >&2
+    exit 1
+  fi
+}
+
+latest_snapshot_version() {
+  require_snapshot_artifact
+  snapshot_field "snapshot_version"
+}
+
+latest_snapshot_artifact_path() {
+  require_snapshot_artifact
+  snapshot_field "artifact_path"
+}
+
+current_snapshot_version() {
+  compose_postgres exec -T postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Atqc \
+    "SELECT version FROM ops.seed_state WHERE system_name = 'postgres_snapshot'" 2>/dev/null || true
+}
+
+catalog_row_count() {
+  local row_count=""
+  row_count="$(
+    compose_postgres exec -T postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Atqc \
+      "SELECT count(*) FROM catalog.products_canonical" 2>/dev/null || true
+  )"
+  if [[ -z "${row_count}" ]]; then
+    row_count=0
+  fi
+  printf '%s\n' "${row_count}"
+}
+
+clear_snapshot_state() {
+  compose_postgres exec -T postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Atqc \
+    "DELETE FROM ops.seed_state WHERE system_name = 'postgres_snapshot'" >/dev/null 2>&1 || true
+}
+
+postgres_requires_snapshot_restore() {
+  local latest_version=""
+  local current_version=""
+  local row_count=""
+  latest_version="$(latest_snapshot_version)"
+  current_version="$(current_snapshot_version)"
+  row_count="$(catalog_row_count)"
+  if [[ "${current_version}" != "${latest_version}" ]]; then
+    return 0
+  fi
+  if [[ "${row_count}" == "0" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+restore_postgres_snapshot() {
+  local artifact_path=""
+  local container_id=""
+  local restored_version=""
+  local snapshot_version=""
+  artifact_path="$(latest_snapshot_artifact_path)"
+  snapshot_version="$(latest_snapshot_version)"
+  if [[ ! -f "${artifact_path}" ]]; then
+    printf 'Snapshot artifact is missing: %s\n' "${artifact_path}" >&2
+    exit 1
+  fi
+  container_id="$(compose_postgres ps -q postgres | tr -d '\n')"
+  if [[ -z "${container_id}" ]]; then
+    printf 'Could not resolve the slot-local Postgres container for restore.\n' >&2
+    exit 1
+  fi
+  docker cp "${artifact_path}" "${container_id}:/tmp/postgres.dump"
+  compose_postgres exec -T postgres pg_restore \
+    --clean \
+    --if-exists \
+    --no-owner \
+    --no-privileges \
+    -U "${POSTGRES_USER}" \
+    -d "${POSTGRES_DB}" \
+    /tmp/postgres.dump
+  restored_version="$(current_snapshot_version)"
+  if [[ "${restored_version}" != "${snapshot_version}" ]]; then
+    printf 'Snapshot restore completed, but expected version %s and found %s.\n' \
+      "${snapshot_version}" \
+      "${restored_version}" >&2
+    exit 1
+  fi
+}
+
 ensure_postgres() {
   compose_postgres up -d postgres
   wait_for_postgres
+  if postgres_requires_snapshot_restore; then
+    restore_postgres_snapshot
+  fi
   migrate_postgres
-  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
-    --database-url "${POSTGRES_DATABASE_URL}" \
-    --repo-root "${CANONICAL_ROOT}"
 }
 
 ensure_milvus() {
@@ -214,6 +314,7 @@ force_reseed() {
     --database-url "${POSTGRES_DATABASE_URL}" \
     --state-file "${MILVUS_STATE_FILE}" \
     --force
+  clear_snapshot_state
 }
 
 build_snapshot() {
@@ -276,6 +377,10 @@ case "${COMMAND}" in
     printf 'Backend/UI ports: %s / %s\n' "${BACKEND_PORT}" "${UI_PORT}"
     printf 'DATABASE_URL: %s\n' "${POSTGRES_DATABASE_URL}"
     printf 'MILVUS_URI: http://127.0.0.1:%s\n' "${MILVUS_PORT}"
+    if [[ -f "${SNAPSHOT_LATEST_FILE}" ]]; then
+      printf 'Latest snapshot version: %s\n' "$(latest_snapshot_version)"
+    fi
+    printf 'Current DB snapshot version: %s\n' "$(current_snapshot_version)"
     compose_postgres ps || true
     compose_milvus ps || true
     if [[ -f "${MILVUS_STATE_FILE}" ]]; then

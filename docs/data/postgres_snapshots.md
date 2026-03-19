@@ -49,6 +49,32 @@ The builder:
 6. restores that dump into a second fresh Postgres validator stack
 7. checks counts, typed embedding reads, and image-catalog indexing
 
+## Normal Restore
+
+Normal local startup now restores from the latest published local snapshot instead
+of reseeding from canonical files.
+
+Primary entrypoint:
+
+```bash
+bash scripts/worktree/deps.sh ensure-postgres --slot 7
+```
+
+Restore behavior:
+
+1. starts the slot-local Postgres container
+2. reads `latest.json` from the shared snapshot cache
+3. compares the expected snapshot version with the local database's
+   `ops.seed_state` row for `postgres_snapshot`
+4. restores the dump when the slot is empty, stale, or missing snapshot metadata
+5. runs Alembic `upgrade head` after restore verification
+
+Explicit rebuild-from-source remains:
+
+```bash
+bash scripts/worktree/deps.sh reseed --slot 7
+```
+
 ## CI Build
 
 CI runs the same snapshot builder but uses the repo-local fixture image catalog

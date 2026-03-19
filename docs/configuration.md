@@ -29,6 +29,11 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
 - Worktree bootstrap writes `DATABASE_URL` and `MILVUS_URI` into
   `.tmp_untracked/worktree.env` and uses `scripts/worktree/deps.sh` to ensure both services.
+- Normal `ensure-postgres` and bootstrap flows now restore the latest versioned snapshot from
+  `<CANONICAL_ROOT>/.tmp_untracked/docker-deps/snapshots/latest.json` instead of reseeding from
+  canonical parquet and image inputs.
+- `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit rebuild-from-source
+  maintenance path.
 - `MILVUS_LITE_URI` is still accepted as a legacy alias for `MILVUS_URI`.
 - Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the
   application package.

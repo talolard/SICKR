@@ -28,17 +28,22 @@ Active runtime uses one shared Milvus collection:
 
 ## Data Lifecycle
 
-1. Canonical parquet artifacts under `data/parquet/` and the shared image-catalog output root are
-   the local seed inputs.
-2. `scripts.docker_deps.seed_postgres` loads those inputs into `catalog.*` and records seed
-   versions in `ops.seed_state`.
-3. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
-   `catalog.product_embeddings` and writes a local Milvus seed-state JSON file.
-4. Query flow retrieves vector candidates from Milvus.
-5. Postgres hydrates and filters candidates, then reads neighbor similarities from
+1. `scripts/worktree/deps.sh build-snapshot --slot <n>` is the explicit rebuild-from-source path.
+2. The snapshot builder loads canonical parquet and image-catalog inputs into `catalog.*`, records
+   seed versions in `ops.seed_state`, writes one `postgres_snapshot` metadata row, and emits a
+   versioned `pg_dump` artifact plus manifest.
+3. Normal `scripts/worktree/deps.sh ensure-postgres` and worktree bootstrap restore the latest
+   snapshot artifact into a fresh slot-local Postgres volume instead of reseeding from canonical
+   files.
+4. `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit maintenance workflow when a
+   rebuild from canonical inputs is needed.
+5. `scripts.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
+   restored `catalog.product_embeddings` rows and writes a local Milvus seed-state JSON file.
+6. Query flow retrieves vector candidates from Milvus.
+7. Postgres hydrates and filters candidates, then reads neighbor similarities from
    `catalog.product_embedding_neighbors` when present or computes them from stored embeddings when
    neighbor rows are absent.
-6. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
+8. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
    direct public URLs based on config.
 
 The build/bootstrap tooling above is intentionally outside `src/ikea_agent/`; application runtime
