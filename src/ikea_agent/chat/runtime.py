@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from logging import getLogger
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingSettings
@@ -15,18 +14,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.chat.product_images import ProductImageCatalog
 from ikea_agent.config import AppSettings, get_settings
-from ikea_agent.retrieval.catalog_repository import (
-    CatalogRepository,
-    EmbeddingSnapshotRepository,
-)
-from ikea_agent.retrieval.display_titles import backfill_product_display_titles
+from ikea_agent.retrieval.catalog_repository import CatalogRepository
 from ikea_agent.retrieval.reranker import Reranker, RerankerBackend, get_reranker
 from ikea_agent.retrieval.service import MilvusAccessService, VectorMatch
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine, create_session_factory
+from ikea_agent.shared.sqlalchemy_db import (
+    create_database_engine,
+    create_session_factory,
+    resolve_database_url,
+)
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
-
-logger = getLogger(__name__)
 
 GoogleEmbeddingTaskType = Literal[
     "TASK_TYPE_UNSPECIFIED",
@@ -57,42 +53,6 @@ def build_google_embedding_settings(*, dimensions: int) -> GoogleEmbeddingSettin
         dimensions=dimensions,
         google_task_type="RETRIEVAL_QUERY",
     )
-
-
-class EmbeddingRowsRepository(Protocol):
-    """Minimal surface needed to load persisted embeddings for Milvus hydration."""
-
-    def read_embedding_rows(
-        self, *, embedding_model: str
-    ) -> list[tuple[str, str, tuple[float, ...]]]:
-        """Return embedding rows keyed by sku and embedding model."""
-
-
-class MilvusHydrationService(Protocol):
-    """Minimal surface needed to hydrate Milvus from persisted embeddings."""
-
-    def row_count(self) -> int:
-        """Return current row count for the active collection."""
-
-    def upsert_rows(self, rows: list[tuple[str, str, tuple[float, ...]]]) -> None:
-        """Upsert embedding rows into the active collection."""
-
-
-def sync_milvus_from_snapshot_if_empty(
-    *,
-    repository: EmbeddingRowsRepository,
-    milvus_service: MilvusHydrationService,
-    embedding_model: str,
-) -> int:
-    """Hydrate Milvus from DuckDB embeddings when collection has no vectors."""
-
-    if milvus_service.row_count() > 0:
-        return 0
-
-    rows = repository.read_embedding_rows(embedding_model=embedding_model)
-    milvus_service.upsert_rows(rows)
-    logger.info("milvus_hydrated_from_snapshot", extra={"row_count": len(rows)})
-    return len(rows)
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +108,7 @@ def search_candidates(
     filters: RetrievalFilters,
     result_limit: int,
 ) -> list[RetrievalResult]:
-    """Run Milvus search then hydrate typed product rows from DuckDB."""
+    """Run Milvus search then hydrate typed product rows from Postgres."""
 
     candidate_limit = max(result_limit * 10, runtime.settings.retrieval_candidate_limit)
     candidates: list[VectorMatch] = runtime.milvus_service.search(
@@ -172,14 +132,15 @@ def resolve_reranker_backend(settings: AppSettings) -> RerankerBackend:
 
 
 def build_chat_runtime() -> ChatRuntime:
-    """Build chat runtime with schema bootstrap and service dependencies."""
+    """Build chat runtime with Postgres and shared-Milvus dependencies."""
 
     settings = get_settings()
-    sqlalchemy_engine = create_duckdb_engine(settings.duckdb_path)
+    database_url = resolve_database_url(
+        database_url=settings.database_url,
+        duckdb_path=settings.duckdb_path,
+    )
+    sqlalchemy_engine = create_database_engine(database_url)
     session_factory = create_session_factory(sqlalchemy_engine)
-    ensure_runtime_schema(sqlalchemy_engine)
-    backfill_product_display_titles(sqlalchemy_engine)
-    snapshot_repository = EmbeddingSnapshotRepository(sqlalchemy_engine)
 
     embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)
     embedder = Embedder(
@@ -187,12 +148,7 @@ def build_chat_runtime() -> ChatRuntime:
         settings=embedding_settings,
     )
     milvus_service = MilvusAccessService(settings)
-    milvus_service.ensure_collection()
-    sync_milvus_from_snapshot_if_empty(
-        repository=snapshot_repository,
-        milvus_service=milvus_service,
-        embedding_model=settings.gemini_model,
-    )
+    milvus_service.require_collection()
 
     backend = resolve_reranker_backend(settings)
 
@@ -204,7 +160,10 @@ def build_chat_runtime() -> ChatRuntime:
         milvus_service=milvus_service,
         catalog_repository=CatalogRepository(sqlalchemy_engine),
         reranker=get_reranker(backend, settings),
-        product_image_catalog=ProductImageCatalog.from_output_root(
-            output_root=Path(settings.ikea_image_catalog_root_dir)
+        product_image_catalog=ProductImageCatalog.from_database(
+            engine=sqlalchemy_engine,
+            output_root=Path(settings.ikea_image_catalog_root_dir),
+            serving_strategy=settings.image_serving_strategy,
+            base_url=settings.image_service_base_url,
         ),
     )

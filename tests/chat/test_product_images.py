@@ -155,7 +155,8 @@ def test_create_app_serves_indexed_product_images(
                     local_path=image_path.resolve(),
                     image_rank=1,
                     is_og_image=True,
-                    canonical_image_url=None,
+                    public_url=None,
+                    storage_backend_kind="local_shared_root",
                 ),
             )
         },

@@ -59,11 +59,16 @@ class AppSettings(BaseSettings):
     )
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
-    duckdb_path: str = Field(default="data/ikea.duckdb")
+    database_url: str | None = Field(
+        default="postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent",
+        validation_alias=AliasChoices("DATABASE_URL", "database_url"),
+    )
+    duckdb_path: str | None = Field(default=None)
     artifact_root_dir: str = Field(default="data/artifacts")
     ikea_image_catalog_root_dir: str = Field(
         default="/Users/tal/dev/tal_maria_ikea/.tmp_untracked/ikea_image_catalog"
     )
+    ikea_image_catalog_run_id: str | None = Field(default=None)
     feedback_capture_enabled: bool = Field(default=False)
     feedback_root_dir: str = Field(default="comments")
     trace_capture_enabled: bool = Field(default=False)
@@ -73,8 +78,15 @@ class AppSettings(BaseSettings):
     embedding_dimensions: int = Field(default=256, ge=64, le=3072)
     retrieval_candidate_limit: int = Field(default=250, ge=50, le=2000)
 
-    milvus_lite_uri: str = Field(default="data/milvus_lite.db")
+    milvus_uri: str = Field(
+        default="http://127.0.0.1:19530",
+        validation_alias=AliasChoices("MILVUS_URI", "MILVUS_LITE_URI"),
+    )
     milvus_collection: str = Field(default="ikea_product_embeddings")
+    image_serving_strategy: Literal["backend_proxy", "direct_public_url"] = Field(
+        default="backend_proxy"
+    )
+    image_service_base_url: str | None = Field(default=None)
 
     rerank_enabled: bool = Field(default=True)
     rerank_backend: Literal["lexical", "transformer"] = Field(default="lexical")

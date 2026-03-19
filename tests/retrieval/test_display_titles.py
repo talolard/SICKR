@@ -83,10 +83,10 @@ def test_backfill_product_display_titles_updates_catalog_rows_and_runtime_reads(
     ensure_runtime_schema(engine)
 
     with engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM app.products_canonical")
+        connection.exec_driver_sql("DELETE FROM catalog.products_canonical")
         connection.exec_driver_sql(
             """
-            INSERT INTO app.products_canonical (
+            INSERT INTO catalog.products_canonical (
                 canonical_product_key,
                 product_id,
                 unique_id,
@@ -124,10 +124,10 @@ def test_backfill_product_display_titles_skips_rows_with_existing_titles() -> No
     ensure_runtime_schema(engine)
 
     with engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM app.products_canonical")
+        connection.exec_driver_sql("DELETE FROM catalog.products_canonical")
         connection.exec_driver_sql(
             """
-            INSERT INTO app.products_canonical (
+            INSERT INTO catalog.products_canonical (
                 canonical_product_key,
                 product_id,
                 unique_id,

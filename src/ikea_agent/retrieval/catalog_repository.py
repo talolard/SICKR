@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from math import sqrt
 from typing import cast
 
 from sqlalchemy import Engine, bindparam, text
@@ -11,6 +12,85 @@ from ikea_agent.retrieval.service import VectorMatch
 from ikea_agent.shared.types import RetrievalFilters, RetrievalResult
 
 _MIN_PAIRWISE_KEY_COUNT = 2
+_NEIGHBOR_SIMILARITIES_QUERY = text(
+    """
+    SELECT source_product_key, neighbor_product_key, cosine_similarity
+    FROM catalog.product_embedding_neighbors
+    WHERE embedding_model = :embedding_model
+      AND source_product_key IN :source_keys
+      AND neighbor_product_key IN :neighbor_keys
+    """
+).bindparams(
+    bindparam("source_keys", expanding=True),
+    bindparam("neighbor_keys", expanding=True),
+)
+_READ_PRODUCT_BY_KEY_QUERY = text(
+    """
+    SELECT
+        c.canonical_product_key,
+        c.product_name,
+        c.product_type,
+        c.description_text,
+        e.embedded_text,
+        c.main_category,
+        c.sub_category,
+        c.dimensions_text,
+        c.width_cm,
+        c.depth_cm,
+        c.height_cm,
+        c.price_eur,
+        c.url,
+        c.display_title
+    FROM catalog.products_canonical AS c
+    LEFT JOIN catalog.product_embeddings AS e
+      ON e.canonical_product_key = c.canonical_product_key
+    WHERE c.country = 'Germany'
+      AND c.canonical_product_key = :canonical_product_key
+    LIMIT 1
+    """
+)
+_READ_EMBEDDING_ROWS_QUERY = text(
+    """
+    SELECT
+        canonical_product_key,
+        embedding_model,
+        embedding_vector
+    FROM catalog.product_embeddings
+    WHERE embedding_model = :embedding_model
+    ORDER BY canonical_product_key
+    """
+)
+_DELETE_NEIGHBOR_ROWS_QUERY = text(
+    """
+    DELETE FROM catalog.product_embedding_neighbors
+    WHERE embedding_model = :embedding_model
+    """
+)
+_INSERT_NEIGHBOR_ROWS_QUERY = text(
+    """
+    INSERT INTO catalog.product_embedding_neighbors (
+        embedding_model,
+        source_product_key,
+        neighbor_product_key,
+        neighbor_rank,
+        cosine_similarity
+    ) VALUES (
+        :embedding_model,
+        :source_product_key,
+        :neighbor_product_key,
+        :neighbor_rank,
+        :cosine_similarity
+    )
+    """
+)
+_READ_EMBEDDINGS_FOR_SIMILARITY_QUERY = text(
+    """
+    SELECT canonical_product_key, embedding_vector
+    FROM catalog.product_embeddings
+    WHERE embedding_model = :embedding_model
+      AND canonical_product_key IN :product_keys
+    """
+).bindparams(bindparam("product_keys", expanding=True))
 
 
 class CatalogRepository:
@@ -26,41 +106,56 @@ class CatalogRepository:
         filters: RetrievalFilters,
         result_limit: int,
     ) -> list[RetrievalResult]:
-        """Apply filters and hydrate vector hits with product metadata."""
+        """Apply filters and hydrate vector hits with typed catalog rows."""
 
         if not candidates:
             return []
 
         rows: list[tuple[object, ...]]
         with self._engine.begin() as connection:
-            connection.exec_driver_sql("DROP TABLE IF EXISTS temp_candidate_scores")
-            connection.exec_driver_sql(
-                """
-                CREATE TEMP TABLE temp_candidate_scores (
-                    canonical_product_key VARCHAR,
-                    semantic_score DOUBLE,
-                    candidate_rank BIGINT
+            connection.execute(text("DROP TABLE IF EXISTS temp_candidate_scores"))
+            connection.execute(
+                text(
+                    """
+                    CREATE TEMPORARY TABLE temp_candidate_scores (
+                        canonical_product_key VARCHAR,
+                        semantic_score DOUBLE PRECISION,
+                        candidate_rank BIGINT
+                    )
+                    """
                 )
-                """
             )
-            connection.exec_driver_sql(
-                """
-                INSERT INTO temp_candidate_scores (
-                    canonical_product_key,
-                    semantic_score,
-                    candidate_rank
-                ) VALUES (?, ?, ?)
-                """,
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO temp_candidate_scores (
+                        canonical_product_key,
+                        semantic_score,
+                        candidate_rank
+                    ) VALUES (
+                        :canonical_product_key,
+                        :semantic_score,
+                        :candidate_rank
+                    )
+                    """
+                ),
                 [
-                    (item.canonical_product_key, item.semantic_score, rank)
+                    {
+                        "canonical_product_key": item.canonical_product_key,
+                        "semantic_score": item.semantic_score,
+                        "candidate_rank": rank,
+                    }
                     for rank, item in enumerate(candidates, start=1)
                 ],
             )
             rows = cast(
                 "list[tuple[object, ...]]",
-                connection.exec_driver_sql(
-                    _hydration_query(filters.sort),
-                    (*_filter_params(filters), result_limit),
+                connection.execute(
+                    text(_hydration_query(filters.sort)),
+                    {
+                        **_filter_params(filters),
+                        "result_limit": result_limit,
+                    },
                 ).fetchall(),
             )
 
@@ -98,27 +193,17 @@ class CatalogRepository:
         embedding_model: str,
         product_keys: Sequence[str],
     ) -> dict[tuple[str, str], float]:
-        """Read precomputed pairwise cosine similarities for a candidate key set."""
+        """Read pairwise cosine similarities for a candidate key set."""
 
         normalized_keys = [key for key in dict.fromkeys(product_keys) if key]
         if len(normalized_keys) < _MIN_PAIRWISE_KEY_COUNT:
             return {}
 
-        query = text(
-            "SELECT source_product_key, neighbor_product_key, cosine_similarity "
-            "FROM app.product_embedding_neighbors "
-            "WHERE embedding_model = :embedding_model "
-            "AND source_product_key IN :source_keys "
-            "AND neighbor_product_key IN :neighbor_keys"
-        ).bindparams(
-            bindparam("source_keys", expanding=True),
-            bindparam("neighbor_keys", expanding=True),
-        )
         with self._engine.connect() as connection:
             rows = cast(
                 "list[tuple[object, ...]]",
                 connection.execute(
-                    query,
+                    _NEIGHBOR_SIMILARITIES_QUERY,
                     {
                         "embedding_model": embedding_model,
                         "source_keys": normalized_keys,
@@ -134,6 +219,14 @@ class CatalogRepository:
             if source_key is None or neighbor_key is None or similarity is None:
                 continue
             lookup[(source_key, neighbor_key)] = similarity
+
+        computed_lookup = _compute_neighbor_similarities_from_embeddings(
+            engine=self._engine,
+            embedding_model=embedding_model,
+            product_keys=normalized_keys,
+        )
+        for key_pair, similarity in computed_lookup.items():
+            lookup.setdefault(key_pair, similarity)
         return lookup
 
     def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
@@ -142,31 +235,9 @@ class CatalogRepository:
         if not product_key:
             return None
         with self._engine.connect() as connection:
-            row = connection.exec_driver_sql(
-                """
-                SELECT
-                    c.canonical_product_key,
-                    c.product_name,
-                    c.product_type,
-                    c.description_text,
-                    e.embedded_text,
-                    c.main_category,
-                    c.sub_category,
-                    c.dimensions_text,
-                    c.width_cm,
-                    c.depth_cm,
-                    c.height_cm,
-                    c.price_eur,
-                    c.url,
-                    c.display_title
-                FROM app.products_canonical AS c
-                LEFT JOIN app.product_embeddings AS e
-                  ON e.canonical_product_key = c.canonical_product_key
-                WHERE c.country = 'Germany'
-                  AND c.canonical_product_key = ?
-                LIMIT 1
-                """,
-                (product_key,),
+            row = connection.execute(
+                _READ_PRODUCT_BY_KEY_QUERY,
+                {"canonical_product_key": product_key},
             ).fetchone()
         if row is None:
             return None
@@ -192,26 +263,18 @@ class CatalogRepository:
 
 
 class EmbeddingSnapshotRepository:
-    """Load embedding snapshot rows for external Milvus hydration scripts."""
+    """Load embedding snapshot rows for shared Milvus preparation scripts."""
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
 
     def read_embedding_rows(self, embedding_model: str) -> list[tuple[str, str, tuple[float, ...]]]:
-        """Read embedding rows from DuckDB snapshot tables."""
+        """Read embedding rows from seeded catalog snapshot tables."""
 
         with self._engine.connect() as connection:
-            rows = connection.exec_driver_sql(
-                """
-                SELECT
-                    canonical_product_key,
-                    embedding_model,
-                    embedding_vector
-                FROM app.product_embeddings
-                WHERE embedding_model = ?
-                ORDER BY canonical_product_key
-                """,
-                (embedding_model,),
+            rows = connection.execute(
+                _READ_EMBEDDING_ROWS_QUERY,
+                {"embedding_model": embedding_model},
             ).fetchall()
         return [
             (str(row[0]), str(row[1]), _vector_from_value(row[2]))
@@ -228,24 +291,19 @@ class EmbeddingSnapshotRepository:
         """Replace precomputed neighbor rows for one embedding model in one batch."""
 
         with self._engine.begin() as connection:
-            connection.exec_driver_sql(
-                "DELETE FROM app.product_embedding_neighbors WHERE embedding_model = ?",
-                (embedding_model,),
-            )
+            connection.execute(_DELETE_NEIGHBOR_ROWS_QUERY, {"embedding_model": embedding_model})
             if not rows:
                 return 0
-            connection.exec_driver_sql(
-                """
-                INSERT INTO app.product_embedding_neighbors (
-                    embedding_model,
-                    source_product_key,
-                    neighbor_product_key,
-                    neighbor_rank,
-                    cosine_similarity
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
+            connection.execute(
+                _INSERT_NEIGHBOR_ROWS_QUERY,
                 [
-                    (embedding_model, source_key, neighbor_key, rank, similarity)
+                    {
+                        "embedding_model": embedding_model,
+                        "source_product_key": source_key,
+                        "neighbor_product_key": neighbor_key,
+                        "neighbor_rank": rank,
+                        "cosine_similarity": similarity,
+                    }
                     for source_key, neighbor_key, rank, similarity in rows
                 ],
             )
@@ -264,71 +322,146 @@ def _hydration_query(sort_mode: str) -> str:
             "coalesce(c.height_cm, 0)) DESC NULLS LAST, t.candidate_rank ASC"
         )
 
-    query = (
-        "SELECT "
-        "c.canonical_product_key, c.product_name, c.product_type, c.description_text, "
-        "e.embedded_text, c.main_category, c.sub_category, c.dimensions_text, "
-        "c.width_cm, c.depth_cm, c.height_cm, c.price_eur, c.url, c.display_title, "
-        "t.semantic_score "
-        "FROM temp_candidate_scores AS t "
-        "JOIN app.products_canonical AS c "
-        "ON c.canonical_product_key = t.canonical_product_key "
-        "LEFT JOIN app.product_embeddings AS e "
-        "ON e.canonical_product_key = c.canonical_product_key "
-        "WHERE c.country = 'Germany' "
-        "AND (? IS NULL OR c.main_category = ?) "
-        "AND (? IS NULL OR c.price_eur IS NOT NULL AND c.price_eur >= ?) "
-        "AND (? IS NULL OR c.price_eur IS NOT NULL AND c.price_eur <= ?) "
-        "AND (? IS NULL OR c.width_cm = ?) "
-        "AND (? IS NULL OR c.depth_cm = ?) "
-        "AND (? IS NULL OR c.height_cm = ?) "
-        "AND (? IS NULL OR c.width_cm IS NOT NULL AND c.width_cm >= ?) "
-        "AND (? IS NULL OR c.width_cm IS NOT NULL AND c.width_cm <= ?) "
-        "AND (? IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm >= ?) "
-        "AND (? IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm <= ?) "
-        "AND (? IS NULL OR c.height_cm IS NOT NULL AND c.height_cm >= ?) "
-        "AND (? IS NULL OR c.height_cm IS NOT NULL AND c.height_cm <= ?) "
-        "AND (? IS NULL OR strpos(lower(concat_ws(' ', c.product_name, "
-        "coalesce(c.description_text, ''), coalesce(c.main_category, ''), "
-        "coalesce(c.sub_category, ''), coalesce(e.embedded_text, ''))), lower(?)) > 0) "
-        "AND (? IS NULL OR strpos(lower(concat_ws(' ', c.product_name, "
-        "coalesce(c.description_text, ''), coalesce(c.main_category, ''), "
-        "coalesce(c.sub_category, ''), coalesce(e.embedded_text, ''))), lower(?)) = 0) "
-    )
-    return query + order_by + " LIMIT ?"
+    query = """
+        SELECT
+            c.canonical_product_key,
+            c.product_name,
+            c.product_type,
+            c.description_text,
+            e.embedded_text,
+            c.main_category,
+            c.sub_category,
+            c.dimensions_text,
+            c.width_cm,
+            c.depth_cm,
+            c.height_cm,
+            c.price_eur,
+            c.url,
+            c.display_title,
+            t.semantic_score
+        FROM temp_candidate_scores AS t
+        JOIN catalog.products_canonical AS c
+          ON c.canonical_product_key = t.canonical_product_key
+        LEFT JOIN catalog.product_embeddings AS e
+          ON e.canonical_product_key = c.canonical_product_key
+        WHERE c.country = 'Germany'
+          AND (:category IS NULL OR c.main_category = :category)
+          AND (
+            :price_min_eur IS NULL
+            OR c.price_eur IS NOT NULL AND c.price_eur >= :price_min_eur
+          )
+          AND (
+            :price_max_eur IS NULL
+            OR c.price_eur IS NOT NULL AND c.price_eur <= :price_max_eur
+          )
+          AND (:width_exact_cm IS NULL OR c.width_cm = :width_exact_cm)
+          AND (:depth_exact_cm IS NULL OR c.depth_cm = :depth_exact_cm)
+          AND (:height_exact_cm IS NULL OR c.height_cm = :height_exact_cm)
+          AND (:width_min_cm IS NULL OR c.width_cm IS NOT NULL AND c.width_cm >= :width_min_cm)
+          AND (:width_max_cm IS NULL OR c.width_cm IS NOT NULL AND c.width_cm <= :width_max_cm)
+          AND (:depth_min_cm IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm >= :depth_min_cm)
+          AND (:depth_max_cm IS NULL OR c.depth_cm IS NOT NULL AND c.depth_cm <= :depth_max_cm)
+          AND (
+            :height_min_cm IS NULL
+            OR c.height_cm IS NOT NULL AND c.height_cm >= :height_min_cm
+          )
+          AND (
+            :height_max_cm IS NULL
+            OR c.height_cm IS NOT NULL AND c.height_cm <= :height_max_cm
+          )
+          AND (
+            :include_keyword IS NULL
+            OR strpos(
+              lower(
+                concat_ws(
+                  ' ',
+                  c.product_name,
+                  coalesce(c.description_text, ''),
+                  coalesce(c.main_category, ''),
+                  coalesce(c.sub_category, ''),
+                  coalesce(e.embedded_text, '')
+                )
+              ),
+              lower(:include_keyword)
+            ) > 0
+          )
+          AND (
+            :exclude_keyword IS NULL
+            OR strpos(
+              lower(
+                concat_ws(
+                  ' ',
+                  c.product_name,
+                  coalesce(c.description_text, ''),
+                  coalesce(c.main_category, ''),
+                  coalesce(c.sub_category, ''),
+                  coalesce(e.embedded_text, '')
+                )
+              ),
+              lower(:exclude_keyword)
+            ) = 0
+          )
+    """
+    return query + order_by + " LIMIT :result_limit"
 
 
-def _filter_params(filters: RetrievalFilters) -> tuple[object, ...]:
-    return (
-        filters.category,
-        filters.category,
-        filters.price.min_eur,
-        filters.price.min_eur,
-        filters.price.max_eur,
-        filters.price.max_eur,
-        filters.dimensions.width.exact_cm,
-        filters.dimensions.width.exact_cm,
-        filters.dimensions.depth.exact_cm,
-        filters.dimensions.depth.exact_cm,
-        filters.dimensions.height.exact_cm,
-        filters.dimensions.height.exact_cm,
-        filters.dimensions.width.min_cm,
-        filters.dimensions.width.min_cm,
-        filters.dimensions.width.max_cm,
-        filters.dimensions.width.max_cm,
-        filters.dimensions.depth.min_cm,
-        filters.dimensions.depth.min_cm,
-        filters.dimensions.depth.max_cm,
-        filters.dimensions.depth.max_cm,
-        filters.dimensions.height.min_cm,
-        filters.dimensions.height.min_cm,
-        filters.dimensions.height.max_cm,
-        filters.dimensions.height.max_cm,
-        filters.include_keyword,
-        filters.include_keyword,
-        filters.exclude_keyword,
-        filters.exclude_keyword,
-    )
+def _filter_params(filters: RetrievalFilters) -> dict[str, object]:
+    return {
+        "category": filters.category,
+        "price_min_eur": filters.price.min_eur,
+        "price_max_eur": filters.price.max_eur,
+        "width_exact_cm": filters.dimensions.width.exact_cm,
+        "depth_exact_cm": filters.dimensions.depth.exact_cm,
+        "height_exact_cm": filters.dimensions.height.exact_cm,
+        "width_min_cm": filters.dimensions.width.min_cm,
+        "width_max_cm": filters.dimensions.width.max_cm,
+        "depth_min_cm": filters.dimensions.depth.min_cm,
+        "depth_max_cm": filters.dimensions.depth.max_cm,
+        "height_min_cm": filters.dimensions.height.min_cm,
+        "height_max_cm": filters.dimensions.height.max_cm,
+        "include_keyword": filters.include_keyword,
+        "exclude_keyword": filters.exclude_keyword,
+    }
+
+
+def _compute_neighbor_similarities_from_embeddings(
+    *,
+    engine: Engine,
+    embedding_model: str,
+    product_keys: Sequence[str],
+) -> dict[tuple[str, str], float]:
+    normalized_keys = [key for key in dict.fromkeys(product_keys) if key]
+    if len(normalized_keys) < _MIN_PAIRWISE_KEY_COUNT:
+        return {}
+    with engine.connect() as connection:
+        rows = connection.execute(
+            _READ_EMBEDDINGS_FOR_SIMILARITY_QUERY,
+            {
+                "embedding_model": embedding_model,
+                "product_keys": normalized_keys,
+            },
+        ).fetchall()
+    vectors_by_key = {
+        str(row[0]): _normalize_vector(_vector_from_value(row[1]))
+        for row in rows
+        if row[1] is not None
+    }
+    lookup: dict[tuple[str, str], float] = {}
+    for source_key in normalized_keys:
+        source_vector = vectors_by_key.get(source_key)
+        if not source_vector:
+            continue
+        for neighbor_key in normalized_keys:
+            if source_key == neighbor_key:
+                continue
+            neighbor_vector = vectors_by_key.get(neighbor_key)
+            if not neighbor_vector:
+                continue
+            lookup[(source_key, neighbor_key)] = _cosine_similarity(
+                source_vector=source_vector,
+                neighbor_vector=neighbor_vector,
+            )
+    return lookup
 
 
 def _str_or_none(value: object) -> str | None:
@@ -348,10 +481,10 @@ def _float_or_none(value: object) -> float | None:
 
 
 def _format_embedding_text(value: object) -> str | None:
-    text = _str_or_none(value)
-    if text is None:
+    text_value = _str_or_none(value)
+    if text_value is None:
         return None
-    return text.replace("\\n", "\n")
+    return text_value.replace("\\n", "\n")
 
 
 def _vector_from_value(value: object) -> tuple[float, ...]:
@@ -360,3 +493,23 @@ def _vector_from_value(value: object) -> tuple[float, ...]:
     if isinstance(value, tuple):
         return tuple(float(item) for item in value if isinstance(item, int | float))
     return ()
+
+
+def _normalize_vector(vector: tuple[float, ...]) -> tuple[float, ...]:
+    if not vector:
+        return ()
+    norm = sqrt(sum(value * value for value in vector))
+    if norm <= 0.0:
+        return tuple(0.0 for _ in vector)
+    return tuple(value / norm for value in vector)
+
+
+def _cosine_similarity(
+    *,
+    source_vector: tuple[float, ...],
+    neighbor_vector: tuple[float, ...],
+) -> float:
+    length = min(len(source_vector), len(neighbor_vector))
+    if length == 0:
+        return 0.0
+    return float(sum(source_vector[index] * neighbor_vector[index] for index in range(length)))

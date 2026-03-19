@@ -73,7 +73,7 @@ Instead it uses two explicit seams:
 
 The search toolset now accepts a small `SearchToolsetServices` dataclass.
 The eval injects a stub `run_search_batch` implementation so the agent can call
-`run_search_graph` without needing Milvus, embeddings, or DuckDB.
+`run_search_graph` without needing Milvus, embeddings, or Postgres.
 
 For bundle-stage cases, that stub reads seeded results from
 [`evals/search/fixtures.py`](../evals/search/fixtures.py) so the live model can decide

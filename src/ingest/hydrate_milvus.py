@@ -1,12 +1,11 @@
-"""Hydrate Milvus Lite collection from DuckDB embedding snapshots."""
+"""Hydrate the configured Milvus collection from seeded catalog embeddings."""
 
 from __future__ import annotations
 
 from ikea_agent.config import get_settings
 from ikea_agent.retrieval.catalog_repository import EmbeddingSnapshotRepository
 from ikea_agent.retrieval.service import MilvusAccessService
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
+from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
 from ingest.precompute_embedding_neighbors import build_neighbor_rows
 
 
@@ -14,8 +13,12 @@ def main() -> None:
     """Load embedding rows into Milvus and precompute similarity neighbors."""
 
     settings = get_settings()
-    engine = create_duckdb_engine(settings.duckdb_path)
-    ensure_runtime_schema(engine)
+    engine = create_database_engine(
+        resolve_database_url(
+            database_url=settings.database_url,
+            duckdb_path=settings.duckdb_path,
+        )
+    )
 
     repository = EmbeddingSnapshotRepository(engine)
     rows = repository.read_embedding_rows(embedding_model=settings.gemini_model)
@@ -36,7 +39,7 @@ def main() -> None:
         total_inserted += inserted
     print(
         f"Hydrated {len(rows)} embeddings to Milvus and {total_inserted} precomputed "
-        "embedding-neighbor rows to DuckDB."
+        "embedding-neighbor rows to the catalog database."
     )
 
 

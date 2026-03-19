@@ -19,12 +19,12 @@ class VectorMatch:
 
 
 class MilvusAccessService:
-    """Thin wrapper around Milvus Lite collection search operations."""
+    """Thin wrapper around Milvus collection search operations."""
 
     def __init__(self, settings: AppSettings) -> None:
         self._settings = settings
         self._collection_name = settings.milvus_collection
-        self._client = MilvusClient(uri=settings.milvus_lite_uri)
+        self._client = MilvusClient(uri=settings.milvus_uri)
 
     def ensure_collection(self) -> None:
         """Create collection if missing with cosine metric and required fields."""
@@ -37,6 +37,16 @@ class MilvusAccessService:
             metric_type="COSINE",
             consistency_level="Strong",
         )
+
+    def require_collection(self) -> None:
+        """Fail when the shared Milvus collection has not been prepared."""
+
+        if not self._client.has_collection(collection_name=self._collection_name):
+            msg = (
+                "Milvus collection is missing. Prepare the shared Milvus dependency "
+                "before starting the runtime."
+            )
+            raise RuntimeError(msg)
 
     def upsert_rows(self, rows: list[tuple[str, str, tuple[float, ...]]]) -> None:
         """Replace collection contents with provided embedding rows."""

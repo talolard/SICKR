@@ -20,6 +20,7 @@ dependencies = [
   "pymilvus[milvus-lite]>=2.6.0",
   "pydantic-ai-slim[ag-ui,google,vertexai,logfire]>=1.66.0",
   "pydantic-settings>=2.10.1",
+  "psycopg[binary]>=3.2.10",
   "pyyaml>=6.0",
   "python-dotenv>=1.1.1",
   "renovation>=0.1.1",

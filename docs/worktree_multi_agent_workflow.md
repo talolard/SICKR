@@ -16,6 +16,7 @@ After bootstrap:
 
 - plain `make` targets automatically load `.tmp_untracked/worktree.env`
 - slot claims are rejected if another worktree or running process is already using that slot's ports
+- bootstrap ensures the shared Milvus dependency and the slot-scoped Postgres dependency are prepared before dev servers start
 
 ## Rules
 
@@ -31,22 +32,28 @@ After bootstrap:
 
 Per-worktree writable paths:
 
-- `DUCKDB_PATH=.tmp_untracked/runtime/ikea.duckdb`
-- `MILVUS_LITE_URI=.tmp_untracked/runtime/milvus_lite.db`
+- `DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:1543x/ikea_agent`
+- `MILVUS_URI=http://127.0.0.1:19530`
 - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
 - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
+- `TRACE_ROOT_DIR=.tmp_untracked/traces`
 
-Canonical dataset under `data/parquet` remains shared read-only.
+Dependency scopes:
+
+- one global Milvus Docker volume and service shared by all worktrees
+- one worktree-local Postgres Docker volume and service per slot
+- canonical catalog parquet under `data/parquet` remains shared read-only
 
 ## Lifecycle Checklist
 
 1. Claim task/epic in beads (`bd update <id> --status in_progress --json`).
 2. Start worktree via `make agent-start ...`.
 3. Execute all related implementation in that worktree branch.
-4. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; run `make ui-test-e2e-real-ui-smoke` separately when the change touches runtime/UI behavior.
-5. Commit task-scoped changes.
-6. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
-7. Retire worktree after merge verification.
+4. Use `make deps-status SLOT=<slot>` or `scripts/worktree/deps.sh status --slot <slot>` when dependency diagnostics are needed.
+5. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; run `make ui-test-e2e-real-ui-smoke` separately when the change touches runtime/UI behavior.
+6. Commit task-scoped changes.
+7. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
+8. Retire worktree after merge verification.
 
 ## Beads Sync Branch Recovery
 

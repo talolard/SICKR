@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ReactElement } from "react";
 import { useAgent } from "@copilotkit/react-core/v2";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";
@@ -72,6 +72,12 @@ export default function AgentChatPage(): ReactElement {
   const searchAgent = isSearchAgent(currentAgent);
   const floorPlanAgent = isFloorPlanAgent(currentAgent);
   const imageAttachmentSupport = supportsImageAttachments(currentAgent);
+  const replaceMessages = useCallback(
+    (nextMessages: unknown[]): void => {
+      setMessages(nextMessages as typeof messages);
+    },
+    [setMessages],
+  );
 
   useCopilotAgentStateSync({
     agent,
@@ -84,9 +90,7 @@ export default function AgentChatPage(): ReactElement {
     agentKey,
     threadId,
     messages: messages as unknown[],
-    replaceMessages: (nextMessages) => {
-      setMessages(nextMessages as typeof messages);
-    },
+    replaceMessages,
   });
 
   const toolRenderers = (

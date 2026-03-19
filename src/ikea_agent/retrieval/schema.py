@@ -16,9 +16,9 @@ from sqlalchemy import (
     Table,
 )
 
-APP_SCHEMA = "app"
+from ikea_agent.shared.db_contract import CATALOG_SCHEMA
 
-retrieval_metadata = MetaData(schema=APP_SCHEMA)
+retrieval_metadata = MetaData(schema=CATALOG_SCHEMA)
 
 products_canonical = Table(
     "products_canonical",

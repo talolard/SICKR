@@ -24,7 +24,7 @@ def _seed_products(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(
             """
-            INSERT INTO app.products_canonical (
+            INSERT INTO catalog.products_canonical (
                 canonical_product_key,
                 product_id,
                 unique_id,
@@ -63,7 +63,7 @@ def _seed_products(engine: Engine) -> None:
         )
         connection.exec_driver_sql(
             """
-            INSERT INTO app.product_embeddings (
+            INSERT INTO catalog.product_embeddings (
                 canonical_product_key,
                 embedding_model,
                 run_id,

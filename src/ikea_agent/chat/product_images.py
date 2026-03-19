@@ -1,9 +1,4 @@
-"""Local product image catalog lookup for search and bundle rendering.
-
-The sidecar writes image catalogs under a shared `.tmp_untracked` root outside
-the worktree. This module loads completed catalog outputs, ranks the available
-local files per product, and exposes stable FastAPI-served URLs for the UI.
-"""
+"""Product image catalog lookup for search and bundle rendering."""
 
 from __future__ import annotations
 
@@ -12,9 +7,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 import duckdb
+from sqlalchemy import Engine, text
 
 logger = getLogger(__name__)
 
@@ -23,20 +19,21 @@ _DEFAULT_PRODUCT_IMAGE_ORDINAL = 1
 
 @dataclass(frozen=True, slots=True)
 class IndexedProductImage:
-    """One local image file ranked for a raw IKEA product id."""
+    """One local or remotely served image ranked for a raw IKEA product id."""
 
     product_id: str
-    local_path: Path
+    local_path: Path | None
     image_rank: int | None
     is_og_image: bool
-    canonical_image_url: str | None
+    public_url: str | None
+    storage_backend_kind: str
 
 
 class ProductImageLookup(Protocol):
     """Minimal image lookup surface used by runtime helpers and routes."""
 
     def image_urls_for_canonical_key(self, *, canonical_product_key: str) -> tuple[str, ...]:
-        """Return FastAPI-served URLs for one canonical product key."""
+        """Return image URLs for one canonical product key."""
 
     def resolve_image_path(self, *, product_id: str, ordinal: int | None = None) -> Path | None:
         """Return one local image path for a product and optional ordinal."""
@@ -44,10 +41,12 @@ class ProductImageLookup(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ProductImageCatalog:
-    """In-memory index of local product images keyed by raw `product_id`."""
+    """In-memory index of product images keyed by raw `product_id`."""
 
     output_root: Path
     images_by_product_id: dict[str, tuple[IndexedProductImage, ...]]
+    serving_strategy: Literal["backend_proxy", "direct_public_url"] = "backend_proxy"
+    base_url: str | None = None
 
     @classmethod
     def empty(cls, *, output_root: Path) -> ProductImageCatalog:
@@ -56,8 +55,68 @@ class ProductImageCatalog:
         return cls(output_root=output_root, images_by_product_id={})
 
     @classmethod
+    def from_database(
+        cls,
+        *,
+        engine: Engine,
+        output_root: Path,
+        serving_strategy: Literal["backend_proxy", "direct_public_url"],
+        base_url: str | None,
+    ) -> ProductImageCatalog:
+        """Build an index from the seeded Postgres image catalog tables."""
+
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT
+                        product_id,
+                        local_path,
+                        image_rank,
+                        is_og_image,
+                        public_url,
+                        storage_backend_kind
+                    FROM catalog.product_images
+                    ORDER BY product_id, image_rank NULLS LAST, image_asset_key
+                    """
+                )
+            ).fetchall()
+
+        images_by_product_id: dict[str, list[IndexedProductImage]] = defaultdict(list)
+        for row in rows:
+            product_id = _str_or_none(row[0])
+            if product_id is None:
+                continue
+            local_path_value = _str_or_none(row[1])
+            local_path = None
+            if local_path_value is not None:
+                candidate = Path(local_path_value).expanduser()
+                if candidate.exists():
+                    local_path = candidate.resolve()
+            images_by_product_id[product_id].append(
+                IndexedProductImage(
+                    product_id=product_id,
+                    local_path=local_path,
+                    image_rank=_int_or_none(row[2]),
+                    is_og_image=bool(row[3]),
+                    public_url=_str_or_none(row[4]),
+                    storage_backend_kind=_str_or_none(row[5]) or "local_shared_root",
+                )
+            )
+
+        return cls(
+            output_root=output_root,
+            images_by_product_id={
+                product_id: tuple(sorted(images, key=_image_sort_key))
+                for product_id, images in images_by_product_id.items()
+            },
+            serving_strategy=serving_strategy,
+            base_url=base_url,
+        )
+
+    @classmethod
     def from_output_root(cls, *, output_root: Path) -> ProductImageCatalog:
-        """Build an index from completed sidecar run outputs under one root."""
+        """Build a legacy file-backed index from completed sidecar run outputs."""
 
         run_catalog_paths = _discover_catalog_paths(output_root=output_root)
         if not run_catalog_paths:
@@ -71,13 +130,12 @@ class ProductImageCatalog:
         indexed_row_count = 0
         for catalog_path in run_catalog_paths:
             for indexed_image in _load_indexed_images(catalog_path=catalog_path):
-                current = images_by_product_id[indexed_image.product_id].get(
-                    indexed_image.local_path
-                )
+                local_path = indexed_image.local_path
+                if local_path is None:
+                    continue
+                current = images_by_product_id[indexed_image.product_id].get(local_path)
                 if current is None or _image_sort_key(indexed_image) < _image_sort_key(current):
-                    images_by_product_id[indexed_image.product_id][indexed_image.local_path] = (
-                        indexed_image
-                    )
+                    images_by_product_id[indexed_image.product_id][local_path] = indexed_image
                 indexed_row_count += 1
 
         finalized: dict[str, tuple[IndexedProductImage, ...]] = {}
@@ -108,12 +166,16 @@ class ProductImageCatalog:
         indexed_images = self.images_by_product_id.get(product_id, ())
         if not indexed_images:
             return ()
-        urls = [build_primary_image_url(product_id=product_id)]
-        urls.extend(
-            build_ranked_image_url(product_id=product_id, ordinal=ordinal)
-            for ordinal in range(2, len(indexed_images) + 1)
+        return tuple(
+            _build_image_url(
+                indexed_image=indexed_image,
+                product_id=product_id,
+                ordinal=ordinal,
+                serving_strategy=self.serving_strategy,
+                base_url=self.base_url,
+            )
+            for ordinal, indexed_image in enumerate(indexed_images, start=1)
         )
-        return tuple(urls)
 
     def resolve_image_path(self, *, product_id: str, ordinal: int | None = None) -> Path | None:
         """Resolve one local file path for a product and optional 1-based ordinal."""
@@ -127,16 +189,19 @@ class ProductImageCatalog:
         return indexed_images[target_ordinal - 1].local_path
 
 
-def build_primary_image_url(*, product_id: str) -> str:
+def build_primary_image_url(*, product_id: str, base_url: str | None = None) -> str:
     """Return the stable route for a product's primary image."""
 
-    return f"/static/product-images/{product_id}"
+    return _join_base_url(base_url=base_url, path=f"/static/product-images/{product_id}")
 
 
-def build_ranked_image_url(*, product_id: str, ordinal: int) -> str:
+def build_ranked_image_url(*, product_id: str, ordinal: int, base_url: str | None = None) -> str:
     """Return the stable route for a product image at a given 1-based ordinal."""
 
-    return f"/static/product-images/{product_id}/{ordinal}"
+    return _join_base_url(
+        base_url=base_url,
+        path=f"/static/product-images/{product_id}/{ordinal}",
+    )
 
 
 def image_urls_for_runtime(
@@ -158,14 +223,10 @@ def image_urls_for_runtime(
 
 
 def product_id_from_canonical_key(canonical_product_key: str) -> str:
-    """Derive raw IKEA `product_id` from the repo canonical key.
+    """Derive raw IKEA `product_id` from the repo canonical key."""
 
-    The current canonical key format is `<product_id>-<country>`, for example
-    `28508-DE`. If the delimiter is absent, return the original value unchanged.
-    """
-
-    head, separator, _tail = canonical_product_key.rpartition("-")
-    if separator and _tail.isalpha() and len(_tail) in {2, 3}:
+    head, separator, tail = canonical_product_key.rpartition("-")
+    if separator and tail.isalpha() and len(tail) in {2, 3}:
         return head
     return canonical_product_key
 
@@ -258,7 +319,8 @@ def _indexed_image_from_mapping(*, mapping: dict[str, object]) -> IndexedProduct
         local_path=local_path.resolve(),
         image_rank=_int_or_none(mapping.get("image_rank")),
         is_og_image=bool(mapping.get("is_og_image")),
-        canonical_image_url=_str_or_none(mapping.get("canonical_image_url")),
+        public_url=_str_or_none(mapping.get("canonical_image_url")),
+        storage_backend_kind="local_shared_root",
     )
 
 
@@ -266,7 +328,7 @@ def _image_sort_key(indexed_image: IndexedProductImage) -> tuple[int, int, str]:
     return (
         0 if indexed_image.is_og_image else 1,
         indexed_image.image_rank if indexed_image.image_rank is not None else 2**31 - 1,
-        indexed_image.canonical_image_url or "",
+        indexed_image.public_url or "",
     )
 
 
@@ -288,3 +350,24 @@ def _str_or_none(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _join_base_url(*, base_url: str | None, path: str) -> str:
+    if not base_url:
+        return path
+    return f"{base_url.rstrip('/')}{path}"
+
+
+def _build_image_url(
+    *,
+    indexed_image: IndexedProductImage,
+    product_id: str,
+    ordinal: int,
+    serving_strategy: Literal["backend_proxy", "direct_public_url"],
+    base_url: str | None,
+) -> str:
+    if serving_strategy == "direct_public_url" and indexed_image.public_url:
+        return indexed_image.public_url
+    if ordinal == 1:
+        return build_primary_image_url(product_id=product_id, base_url=base_url)
+    return build_ranked_image_url(product_id=product_id, ordinal=ordinal, base_url=base_url)

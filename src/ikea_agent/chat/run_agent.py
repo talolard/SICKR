@@ -1,18 +1,11 @@
-"""CLI utility to run one named first-class agent from a terminal session.
-
-This runner is for quick local prompt/tool validation without starting FastAPI.
-It constructs the same runtime + deps types used by the web app and executes
-exactly one user prompt.
-"""
+"""CLI utility to run one named first-class agent from a terminal session."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import os
-import shutil
 from pathlib import Path
-from tempfile import gettempdir
 from uuid import uuid4
 
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
@@ -26,9 +19,10 @@ from ikea_agent.chat.agents.state import (
 )
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.attachments import AttachmentStore
-from ikea_agent.config import AppSettings, get_settings
+from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire
+from ikea_agent.shared.sqlalchemy_db import build_duckdb_sqlalchemy_url
 from ikea_agent.tools.floorplanner.scene_store import FloorPlanSceneStore
 
 DEFAULT_PROMPT = "I have a 7x2 meter hallway with no natural light and two doors one on each end"
@@ -54,44 +48,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Session id attached to agent state and telemetry.",
     )
     parser.add_argument(
-        "--duckdb-path",
+        "--database-url",
         default=None,
-        help=(
-            "Optional DuckDB path override. Useful when the default DB is locked by "
-            "another running process."
-        ),
+        help="Optional DATABASE_URL override for one CLI run.",
     )
     parser.add_argument(
-        "--milvus-lite-uri",
+        "--milvus-uri",
         default=None,
-        help=(
-            "Optional Milvus Lite URI override. Defaults to an isolated temp file to avoid "
-            "lock conflicts with running services."
-        ),
+        help="Optional shared Milvus URI override for one CLI run.",
+    )
+    parser.add_argument(
+        "--duckdb-path",
+        default=None,
+        help="Legacy compatibility alias that maps to a DuckDB-backed DATABASE_URL.",
     )
     return parser
-
-
-def _build_runtime_with_fallback(settings: AppSettings) -> ChatRuntime:
-    """Build runtime and fall back to a temp DuckDB copy when default DB is locked."""
-
-    try:
-        return build_chat_runtime()
-    except Exception as exc:  # pragma: no cover - exercised in local lock scenarios
-        message = str(exc)
-        if "Could not set lock on file" not in message:
-            raise
-        source = Path(settings.duckdb_path)
-        fallback = Path(gettempdir()) / "ikea_agent" / f"duckdb_cli_{uuid4().hex[:8]}.duckdb"
-        fallback.parent.mkdir(parents=True, exist_ok=True)
-        if source.exists():
-            shutil.copy2(source, fallback)
-        else:
-            fallback.touch()
-        print(f"DuckDB locked at {source}; retrying with isolated copy: {fallback}")
-        os.environ["DUCKDB_PATH"] = str(fallback)
-        get_settings.cache_clear()
-        return build_chat_runtime()
 
 
 def _build_deps(
@@ -129,24 +100,23 @@ async def _run_once(
     agent_name: str,
     prompt: str,
     session_id: str,
+    database_url: str | None,
+    milvus_uri: str | None,
     duckdb_path: str | None,
-    milvus_lite_uri: str | None,
 ) -> str:
+    if database_url:
+        os.environ["DATABASE_URL"] = database_url
+    if milvus_uri:
+        os.environ["MILVUS_URI"] = milvus_uri
     if duckdb_path:
-        os.environ["DUCKDB_PATH"] = duckdb_path
-    if milvus_lite_uri:
-        os.environ["MILVUS_LITE_URI"] = milvus_lite_uri
-    else:
-        isolated_milvus_uri = Path(gettempdir()) / "ikea_agent" / f"milvus_cli_{uuid4().hex[:8]}.db"
-        isolated_milvus_uri.parent.mkdir(parents=True, exist_ok=True)
-        os.environ["MILVUS_LITE_URI"] = str(isolated_milvus_uri)
-    if duckdb_path or milvus_lite_uri:
+        os.environ["DATABASE_URL"] = build_duckdb_sqlalchemy_url(duckdb_path)
+    if database_url or milvus_uri or duckdb_path:
         get_settings.cache_clear()
     settings = get_settings()
     configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
     configure_logfire(settings)
 
-    runtime = _build_runtime_with_fallback(settings)
+    runtime = build_chat_runtime()
     attachment_store = AttachmentStore(Path(settings.artifact_root_dir))
     deps = _build_deps(
         agent_name=agent_name,
@@ -168,8 +138,9 @@ def main() -> None:
             agent_name=args.agent,
             prompt=args.prompt,
             session_id=args.session_id,
+            database_url=args.database_url,
+            milvus_uri=args.milvus_uri,
             duckdb_path=args.duckdb_path,
-            milvus_lite_uri=args.milvus_lite_uri,
         )
     )
     print(output)

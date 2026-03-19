@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import text
 
-APP_SCHEMA = "app"
+from ikea_agent.shared.db_contract import APP_SCHEMA
 
 
 class Base(DeclarativeBase):

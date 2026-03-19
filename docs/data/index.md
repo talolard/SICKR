@@ -2,16 +2,19 @@
 
 ## Active Runtime Stores
 
-### DuckDB (`data/ikea.duckdb`)
+### Postgres (`DATABASE_URL`)
 
-Active runtime uses DuckDB for:
-- `app.products_canonical` (catalog metadata)
-- `app.product_embeddings` (embedding snapshot source used to build Milvus)
-- `app.product_embedding_neighbors` (precomputed cosine neighbors used by MMR diversification)
+Active runtime uses Postgres for:
+- `catalog.products_canonical` (seeded catalog metadata)
+- `catalog.product_embeddings` (seeded embedding snapshots that feed Milvus)
+- `catalog.product_embedding_neighbors` (optional precomputed cosine neighbors for MMR)
+- `catalog.product_images` (seeded image metadata for runtime image lookup)
+- `app.*` conversation and analysis tables managed by existing runtime migrations
+- `ops.seed_state` (observable seed versions and refresh metadata)
 
-### Milvus Lite (`data/milvus_lite.db`)
+### Shared Milvus (`MILVUS_URI`)
 
-Active runtime uses Milvus Lite collection:
+Active runtime uses one shared Milvus collection:
 - `ikea_product_embeddings` (configurable)
 - stores vector records used for semantic candidate retrieval
 
@@ -23,11 +26,18 @@ Active runtime uses Milvus Lite collection:
 
 ## Data Lifecycle
 
-1. Embedding snapshots live in DuckDB/parquet data artifacts.
-2. Ingest hydrates Milvus Lite from DuckDB embeddings.
-3. Ingest precomputes top-k embedding neighbors and stores them in DuckDB.
+1. Canonical parquet artifacts under `data/parquet/` and the shared image-catalog output root are
+   the local seed inputs.
+2. `ikea_agent.docker_deps.seed_postgres` loads those inputs into `catalog.*` and records seed
+   versions in `ops.seed_state`.
+3. `ikea_agent.docker_deps.prepare_milvus` hydrates the shared Milvus collection from
+   `catalog.product_embeddings` and writes a local Milvus seed-state JSON file.
 4. Query flow retrieves vector candidates from Milvus.
-5. DuckDB hydrates/filter candidates and provides neighbor similarities for MMR.
+5. Postgres hydrates and filters candidates, then reads neighbor similarities from
+   `catalog.product_embedding_neighbors` when present or computes them from stored embeddings when
+   neighbor rows are absent.
+6. Product-image lookup reads `catalog.product_images` and serves either backend-proxied URLs or
+   direct public URLs based on config.
 
 ## Tool Sample Inputs
 - Floor planner sample inputs live in typed tests under `tests/tools/test_floor_planner_*.py`.
