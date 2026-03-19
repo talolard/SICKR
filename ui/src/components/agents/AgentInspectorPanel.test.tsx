@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
 import type { KnownFactItem } from "@/lib/api/threadDataClient";
@@ -29,7 +30,7 @@ describe("AgentInspectorPanel", () => {
   it("renders known facts and metadata details when provided", () => {
     render(
       <AgentInspectorPanel
-        error=""
+        metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={knownFacts}
         metadata={metadata}
@@ -38,14 +39,13 @@ describe("AgentInspectorPanel", () => {
 
     expect(screen.getByText("Known facts")).toBeInTheDocument();
     expect(screen.getByText("User has toddlers, keep things elevated.")).toBeInTheDocument();
-    expect(screen.getByText("render_floor_plan")).toBeInTheDocument();
-    expect(screen.getByText("Runtime note here.")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-inspector-debug-details")).not.toHaveAttribute("open");
   });
 
   it("renders an empty known-facts state", () => {
     render(
       <AgentInspectorPanel
-        error=""
+        metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={[]}
         metadata={metadata}
@@ -58,7 +58,7 @@ describe("AgentInspectorPanel", () => {
   it("keeps known facts visible while metadata is still loading", () => {
     render(
       <AgentInspectorPanel
-        error=""
+        metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={knownFacts}
         metadata={null}
@@ -72,7 +72,7 @@ describe("AgentInspectorPanel", () => {
   it("renders error state", () => {
     render(
       <AgentInspectorPanel
-        error="Failed"
+        metadataError="Failed"
         isLoadingKnownFacts={false}
         knownFacts={[]}
         metadata={null}
@@ -80,5 +80,23 @@ describe("AgentInspectorPanel", () => {
     );
 
     expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
+  it("reveals runtime notes and tools behind the debug affordance", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentInspectorPanel
+        metadataError=""
+        isLoadingKnownFacts={false}
+        knownFacts={knownFacts}
+        metadata={metadata}
+      />,
+    );
+
+    await user.click(screen.getByText("Agent instructions and runtime notes"));
+
+    expect(screen.getByText("render_floor_plan")).toBeInTheDocument();
+    expect(screen.getByText("Runtime note here.")).toBeInTheDocument();
   });
 });

@@ -1,0 +1,59 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
+
+import { AppNavBanner } from "./AppNavBanner";
+
+const { pushMock, useRouterMock } = vi.hoisted(() => {
+  const pushMock = vi.fn<(path: string) => void>();
+  const useRouterMock = vi.fn<() => { push: (path: string) => void }>(() => ({
+    push: pushMock,
+  }));
+  return { pushMock, useRouterMock };
+});
+
+vi.mock("next/navigation", () => ({
+  useRouter: useRouterMock,
+}));
+
+describe("AppNavBanner", () => {
+  beforeEach(() => {
+    pushMock.mockReset();
+  });
+
+  it("shows a disabled launcher while agent data is loading", () => {
+    render(<AppNavBanner agents={[]} currentAgentName={null} isLoadingAgents />);
+
+    expect(screen.getByTestId("app-nav-agent-launcher")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Loading agent list...")).toBeInTheDocument();
+  });
+
+  it("navigates to a selected agent from the custom launcher", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppNavBanner
+        agents={[
+          {
+            name: "search",
+            description: "Find products.",
+            agent_key: "agent_search",
+            ag_ui_path: "/ag-ui/agents/search",
+          },
+          {
+            name: "floor_plan_intake",
+            description: "Collect room layout constraints.",
+            agent_key: "agent_floor_plan_intake",
+            ag_ui_path: "/ag-ui/agents/floor_plan_intake",
+          },
+        ]}
+        currentAgentName="search"
+      />,
+    );
+
+    await user.click(screen.getByTestId("app-nav-agent-launcher-trigger"));
+    await user.click(screen.getByRole("button", { name: /Floor Plan Intake/i }));
+
+    expect(pushMock).toHaveBeenCalledWith("/agents/floor_plan_intake");
+  });
+});

@@ -78,6 +78,10 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByText("Scroll to read the full explanation.")).toBeInTheDocument();
     expect(screen.getByTestId("bundle-summary-notes")).toHaveClass("overflow-y-auto");
     expect(screen.getByRole("button", { name: /desk setup/i })).toHaveClass("cursor-pointer");
+    expect(screen.getByRole("button", { name: /desk setup/i })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   it("reveals pricing table details, thumbnails, and rationale when expanded", async () => {
@@ -95,7 +99,7 @@ describe("SearchBundlePanel", () => {
     expect(screen.getAllByText("Unit")).toHaveLength(2);
     expect(screen.getAllByText("Qty")).toHaveLength(2);
     expect(screen.getAllByText("Total")).toHaveLength(3);
-    expect(screen.getByTestId("bundle-items-bundle-1")).toHaveClass("max-h-96", "overflow-y-auto");
+    expect(screen.getByTestId("bundle-items-bundle-1")).toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("bundle-item-bundle-1-chair-1-button")).toBeInTheDocument();
     expect(screen.getByTestId("bundle-item-bundle-1-lamp-1-placeholder")).toBeInTheDocument();
     expect(

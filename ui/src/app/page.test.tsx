@@ -36,7 +36,7 @@ describe("Home page", () => {
 
     render(<Home />);
 
-    expect(await screen.findByRole("link", { name: /floor_plan_intake/i })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: /floor plan intake/i })).toHaveAttribute(
       "href",
       "/agents/floor_plan_intake",
     );

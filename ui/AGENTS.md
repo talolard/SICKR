@@ -39,6 +39,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 
 - Every pane must have one explicit scroll owner.
 - In flex or grid layouts, add `min-h-0` to any child expected to scroll.
+- On agent pages with side-by-side workspace and chat rails, define an explicit desktop height boundary first, then assign scroll ownership within that boundary.
 - Do not let transcripts, result lists, or nested cards expand page height unexpectedly.
 - If content is long, constrain it and make the scroll region visually obvious.
 - Keep pane boundaries readable. Do not rely on repeated light-gray boxes with nearly identical styling to create hierarchy.
@@ -62,12 +63,14 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - prompt text
   - runtime notes
 - If a section is primarily useful for debugging or implementation validation, default it closed or move it behind a secondary affordance.
+- Prompt text, runtime configuration, and raw tool wiring details should usually live behind a labeled debug disclosure rather than in the default reading flow.
 
 ## Component guidance
 
 - Prefer small shared wrappers or helper components for repeated panel, section-header, badge, and empty-state patterns.
 - Avoid duplicating long Tailwind class strings across multiple feature components when a small shared presentation primitive would do.
 - Prefer accessible, conventional interaction patterns over custom controls.
+- When the current surface is a workspace switcher or launcher, prefer an intentional button-plus-menu or card treatment over browser-default selects if the default control reads as placeholder-level UI.
 - Keep functions small and typed. Presentation components should receive already-shaped data whenever possible.
 
 ## Thread and state rules

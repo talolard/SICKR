@@ -157,11 +157,12 @@ export function CopilotKitProviders({
     }),
     [agentKey, agentName, createThread, selectThread, threadId, threadIds, warning],
   );
+  const copilotBoundaryKey = threadId ? `${agentKey}:${threadId}` : `${agentKey}:pending`;
 
   return (
     <ThreadSessionContext.Provider value={contextValue}>
       <CopilotKit
-        key={agentKey}
+        key={copilotBoundaryKey}
         runtimeUrl="/api/copilotkit"
         agent={agentKey}
         {...(threadId ? { threadId } : {})}

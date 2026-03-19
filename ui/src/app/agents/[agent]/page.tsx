@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ReactElement } from "react";
 import { useAgent } from "@copilotkit/react-core/v2";
 import { useCopilotMessagesContext } from "@copilotkit/react-core";
@@ -58,7 +58,8 @@ export default function AgentChatPage(): ReactElement {
   const { messages, setMessages } = useCopilotMessagesContext();
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
   const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
-  const { agents, metadata, error } = useAgentMetadataState(currentAgent);
+  const { agents, metadata, agentListError, isLoadingAgents, metadataError } =
+    useAgentMetadataState(currentAgent);
   const { knownFacts, knownFactsError, isLoadingKnownFacts } = useKnownFactsState(threadId);
   const {
     activeBundleId,
@@ -72,6 +73,9 @@ export default function AgentChatPage(): ReactElement {
   const searchAgent = isSearchAgent(currentAgent);
   const floorPlanAgent = isFloorPlanAgent(currentAgent);
   const imageAttachmentSupport = supportsImageAttachments(currentAgent);
+  const replaceThreadMessages = useCallback((nextMessages: unknown[]) => {
+    setMessages(nextMessages as typeof messages);
+  }, [setMessages]);
 
   useCopilotAgentStateSync({
     agent,
@@ -84,9 +88,7 @@ export default function AgentChatPage(): ReactElement {
     agentKey,
     threadId,
     messages: messages as unknown[],
-    replaceMessages: (nextMessages) => {
-      setMessages(nextMessages as typeof messages);
-    },
+    replaceMessages: replaceThreadMessages,
   });
 
   const toolRenderers = (
@@ -117,8 +119,10 @@ export default function AgentChatPage(): ReactElement {
     <SharedAgentPageShell
       currentAgent={currentAgent}
       agents={agents}
+      agentListError={agentListError}
+      isLoadingAgents={isLoadingAgents}
       metadata={metadata}
-      error={error}
+      metadataError={metadataError}
       knownFacts={knownFacts}
       knownFactsError={knownFactsError}
       isLoadingKnownFacts={isLoadingKnownFacts}
