@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AttachmentRef } from "@/lib/attachments";
 import {
@@ -37,7 +37,9 @@ import {
 export type AgentMetadataState = {
   agents: AgentItem[];
   metadata: AgentMetadata | null;
-  error: string;
+  agentListError: string;
+  isLoadingAgents: boolean;
+  metadataError: string;
 };
 
 export type KnownFactsState = {
@@ -59,6 +61,10 @@ export type CopilotAgentStateBridge = {
   state: unknown;
   setState: (state: Record<string, unknown>) => void;
 };
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value);
+}
 
 export function isSearchAgent(currentAgent: string): boolean {
   return currentAgent === "search";
@@ -85,7 +91,9 @@ export function resolveAttachmentUri(uri: string): string {
 export function useAgentMetadataState(currentAgent: string): AgentMetadataState {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
-  const [error, setError] = useState<string>("");
+  const [agentListError, setAgentListError] = useState<string>("");
+  const [isLoadingAgents, setIsLoadingAgents] = useState<boolean>(true);
+  const [metadataError, setMetadataError] = useState<string>("");
 
   useEffect(() => {
     startFeedbackCapture();
@@ -93,10 +101,16 @@ export function useAgentMetadataState(currentAgent: string): AgentMetadataState 
 
   useEffect(() => {
     void fetchAgents()
-      .then((items) => setAgents(items))
+      .then((items) => {
+        setAgents(items);
+        setAgentListError("");
+      })
       .catch((fetchError: unknown) => {
         const message = fetchError instanceof Error ? fetchError.message : "Failed to load agents.";
-        setError(message);
+        setAgentListError(message);
+      })
+      .finally(() => {
+        setIsLoadingAgents(false);
       });
   }, []);
 
@@ -104,15 +118,15 @@ export function useAgentMetadataState(currentAgent: string): AgentMetadataState 
     void fetchAgentMetadata(currentAgent)
       .then((payload) => {
         setMetadata(payload);
-        setError("");
+        setMetadataError("");
       })
       .catch((fetchError: unknown) => {
         const message = fetchError instanceof Error ? fetchError.message : "Failed to load agent metadata.";
-        setError(message);
+        setMetadataError(message);
       });
   }, [currentAgent]);
 
-  return { agents, metadata, error };
+  return { agents, metadata, agentListError, isLoadingAgents, metadataError };
 }
 
 export function useKnownFactsState(threadId: string | null): KnownFactsState {
@@ -269,16 +283,25 @@ export function useCopilotAgentStateSync(params: {
       return;
     }
     const attachmentsForAgent = supportsImageAttachments(currentAgent) ? imageAttachments : [];
+    const bundleProposalsForAgent = isSearchAgent(currentAgent) ? bundleProposals : [];
     const previousState =
       typeof agent.state === "object" && agent.state !== null
         ? (agent.state as Record<string, unknown>)
         : {};
+    if (
+      previousState.session_id === threadId &&
+      previousState.thread_id === threadId &&
+      stableJson(previousState.attachments ?? []) === stableJson(attachmentsForAgent) &&
+      stableJson(previousState.bundle_proposals ?? []) === stableJson(bundleProposalsForAgent)
+    ) {
+      return;
+    }
     agent.setState({
       ...previousState,
       session_id: threadId,
       thread_id: threadId,
       attachments: attachmentsForAgent,
-      bundle_proposals: isSearchAgent(currentAgent) ? bundleProposals : [],
+      bundle_proposals: bundleProposalsForAgent,
     });
   }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
 }
@@ -290,17 +313,24 @@ export function useThreadSnapshotSync(params: {
   replaceMessages: (messages: unknown[]) => void;
 }): void {
   const { agentKey, threadId, messages, replaceMessages } = params;
+  const skipSaveThreadIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!threadId) {
+      skipSaveThreadIdRef.current = null;
       return;
     }
     const snapshot = loadThreadSnapshot(threadId, agentKey);
+    skipSaveThreadIdRef.current = threadId;
     replaceMessages(snapshot?.copilotMessages ?? []);
   }, [agentKey, replaceMessages, threadId]);
 
   useEffect(() => {
     if (!threadId) {
+      return;
+    }
+    if (skipSaveThreadIdRef.current === threadId) {
+      skipSaveThreadIdRef.current = null;
       return;
     }
     const previousSnapshot = loadThreadSnapshot(threadId, agentKey);

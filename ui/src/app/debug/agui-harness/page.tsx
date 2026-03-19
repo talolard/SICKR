@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { AttachmentComposer } from "@/components/attachments/AttachmentComposer";
 import { RunStatusContainer } from "@/components/containers/RunStatusContainer";
@@ -81,6 +81,12 @@ function parseSseChunk(
   });
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export default function Home(): ReactElement {
   const [useMockMode, setUseMockMode] = useState<boolean>(useMockAgent);
   const [prompt, setPrompt] = useState<string>("Find me storage for a small bedroom");
@@ -96,11 +102,12 @@ export default function Home(): ReactElement {
   >({});
   const [threadId, setThreadId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isBootstrapped, setIsBootstrapped] = useState<boolean>(false);
   const attachmentFilesRef = useRef<Record<string, File>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const url = new URL(window.location.href);
     const mockParam = url.searchParams.get("mock");
     if (mockParam === "1") {
@@ -123,6 +130,7 @@ export default function Home(): ReactElement {
     }
     url.searchParams.set("thread", resolvedThreadId);
     window.history.replaceState({}, "", url.toString());
+    setIsBootstrapped(true);
   }, []);
 
   useEffect(() => {
@@ -184,6 +192,23 @@ export default function Home(): ReactElement {
   };
 
   const uploadAttachment = async (localId: string, file: File): Promise<void> => {
+    if (useMockMode) {
+      await sleep(150);
+      setAttachmentProgress(localId, 28);
+      await sleep(250);
+      setAttachmentProgress(localId, 61);
+      await sleep(250);
+      setAttachmentReady(localId, {
+        attachment_id: crypto.randomUUID(),
+        mime_type: file.type || "application/octet-stream",
+        uri: "/attachments/mock",
+        width: null,
+        height: null,
+        file_name: file.name,
+      });
+      return;
+    }
+
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/attachments");
@@ -234,7 +259,9 @@ export default function Home(): ReactElement {
     nextAttachments.forEach((attachment, index) => {
       const file = files[index];
       if (file) {
-        void uploadAttachment(attachment.localId, file);
+        setTimeout(() => {
+          void uploadAttachment(attachment.localId, file);
+        }, 0);
       }
     });
   };
@@ -361,6 +388,20 @@ export default function Home(): ReactElement {
                       : undefined,
                 }),
               );
+              if (status === "executing") {
+                setToolProgressById((current) =>
+                  current[toolCallId]
+                    ? current
+                    : {
+                        ...current,
+                        [toolCallId]: {
+                          percent: 0,
+                          label:
+                            toolName === "run_search_graph" ? "Searching catalog" : "Working",
+                        },
+                      },
+                );
+              }
             }
           }
           if (message.event === "tool_result") {
@@ -516,10 +557,13 @@ export default function Home(): ReactElement {
       <section className="flex min-h-[360px] flex-col gap-4 rounded border bg-white p-4">
         <h2 className="text-sm font-medium text-gray-700">Chat</h2>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded border bg-gray-50 p-3">
-          {messages.length === 0 ? (
+          {!isBootstrapped ? (
+            <p className="text-sm text-gray-500">Preparing thread session...</p>
+          ) : messages.length === 0 ? (
             <p className="text-sm text-gray-500">Start by sending a message.</p>
           ) : null}
-          {messages.map((message) => (
+          {isBootstrapped
+            ? messages.map((message) => (
             <article
               className={`max-w-[85%] rounded px-3 py-2 ${
                 message.role === "user"
@@ -564,10 +608,12 @@ export default function Home(): ReactElement {
                 </div>
               ) : null}
             </article>
-          ))}
+              ))
+            : null}
         </div>
       </section>
-      <form className="flex flex-col gap-3 rounded border bg-white p-4" onSubmit={handleSubmit}>
+      {isBootstrapped ? (
+        <form className="flex flex-col gap-3 rounded border bg-white p-4" onSubmit={handleSubmit}>
         <label className="flex flex-col gap-1 text-sm">
           Prompt
           <input
@@ -616,22 +662,34 @@ export default function Home(): ReactElement {
             Cancel run
           </button>
         </div>
-      </form>
-      <RunStatusContainer
-        isRunning={isRunning}
-        runningToolCount={
-          Object.values(toolCallsById).filter((toolCall) => toolCall.status === "executing")
-            .length
-        }
-        toolProgressById={toolProgressById}
-      />
-      <AttachmentComposer
-        attachments={attachments}
-        onFilesSelected={handleFilesSelected}
-        onRemoveAttachment={handleRemoveAttachment}
-        onRetryAttachment={handleRetryAttachment}
-      />
-      {pendingUploads ? (
+        </form>
+      ) : (
+        <section
+          className="rounded border bg-white p-4 text-sm text-gray-500"
+          data-testid="bootstrap-loading"
+        >
+          Preparing controls...
+        </section>
+      )}
+      {isBootstrapped ? (
+        <RunStatusContainer
+          isRunning={isRunning}
+          runningToolCount={
+            Object.values(toolCallsById).filter((toolCall) => toolCall.status === "executing")
+              .length
+          }
+          toolProgressById={toolProgressById}
+        />
+      ) : null}
+      {isBootstrapped ? (
+        <AttachmentComposer
+          attachments={attachments}
+          onFilesSelected={handleFilesSelected}
+          onRemoveAttachment={handleRemoveAttachment}
+          onRetryAttachment={handleRetryAttachment}
+        />
+      ) : null}
+      {isBootstrapped && pendingUploads ? (
         <p className="text-sm text-amber-700" data-testid="pending-upload-warning">
           Finish uploading or remove attachments to send.
         </p>

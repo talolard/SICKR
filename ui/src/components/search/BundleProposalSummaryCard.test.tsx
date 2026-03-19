@@ -50,6 +50,7 @@ describe("BundleProposalSummaryCard", () => {
     render(
       <BundleProposalSummaryCard
         actionLabel="Open bundle details"
+        expanded
         highlighted
         onClick={onClick}
         proposal={proposal}
@@ -59,6 +60,7 @@ describe("BundleProposalSummaryCard", () => {
     const button = screen.getByRole("button", { name: /desk setup/i });
     expect(button).toHaveClass("cursor-pointer", "hover:border-slate-300", "hover:shadow-sm");
     expect(button).toHaveClass("border-slate-900");
+    expect(button).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Selected")).toBeInTheDocument();
 
     await user.click(button);
