@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from pydantic_ai.messages import ModelMessage
+
 from evals.base import (
     AgentEvalHarness,
     extract_message_tool_call_captures,
@@ -33,6 +35,7 @@ class _CatalogStub:
     """Catalog stub that keeps optional bundle calls from crashing the run."""
 
     products_by_key: dict[str, RetrievalResult]
+    image_urls_by_key: dict[str, tuple[str, ...]]
 
     def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
         product = self.products_by_key.get(product_key)
@@ -57,10 +60,25 @@ class _CatalogStub:
             rank_explanation="eval stub",
         )
 
+    def read_image_urls_by_product_keys(
+        self,
+        *,
+        canonical_product_keys: list[str],
+        serving_strategy: str,
+        base_url: str | None,
+    ) -> dict[str, tuple[str, ...]]:
+        _ = (serving_strategy, base_url)
+        return {
+            product_key: self.image_urls_by_key.get(product_key, ())
+            for product_key in canonical_product_keys
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class _SettingsStub:
     default_query_limit: int = 25
+    image_serving_strategy: str = "backend_proxy"
+    image_service_base_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +138,10 @@ def _fixture_catalog_products(fixture: SearchEvalFixture | None) -> dict[str, Re
     unique_products: dict[str, RetrievalResult] = {}
     result_sets = [fixture.default_results]
     result_sets.extend(override.results for override in fixture.query_overrides)
+    result_sets.extend(
+        tuple(result for query in batch.queries for result in query.results)
+        for batch in fixture.grounded_batches
+    )
     for result_set in result_sets:
         for product in result_set:
             unique_products[product.product_id] = RetrievalResult(
@@ -135,12 +157,29 @@ def _fixture_catalog_products(fixture: SearchEvalFixture | None) -> dict[str, Re
                 depth_cm=product.depth_cm,
                 height_cm=product.height_cm,
                 price_eur=product.price_eur,
-                url=None,
+                url=product.url,
                 semantic_score=1.0,
                 filter_pass_reasons=(),
                 rank_explanation="eval fixture",
+                display_title=product.display_title,
             )
     return unique_products
+
+
+def _fixture_image_urls(fixture: SearchEvalFixture | None) -> dict[str, tuple[str, ...]]:
+    if fixture is None:
+        return {}
+    image_urls_by_key: dict[str, tuple[str, ...]] = {}
+    result_sets = [fixture.default_results]
+    result_sets.extend(override.results for override in fixture.query_overrides)
+    result_sets.extend(
+        tuple(result for query in batch.queries for result in query.results)
+        for batch in fixture.grounded_batches
+    )
+    for result_set in result_sets:
+        for product in result_set:
+            image_urls_by_key[product.product_id] = product.image_urls
+    return image_urls_by_key
 
 
 def _build_stub_deps(root_dir: Path, *, fixture: SearchEvalFixture | None) -> SearchAgentDeps:
@@ -150,6 +189,7 @@ def _build_stub_deps(root_dir: Path, *, fixture: SearchEvalFixture | None) -> Se
             _RuntimeStub(
                 catalog_repository=_CatalogStub(
                     products_by_key=_fixture_catalog_products(fixture),
+                    image_urls_by_key=_fixture_image_urls(fixture),
                 ),
                 settings=_SettingsStub(),
             ),
@@ -162,6 +202,18 @@ def _build_stub_deps(root_dir: Path, *, fixture: SearchEvalFixture | None) -> Se
     )
 
 
+def _seed_fixture_history(
+    deps: SearchAgentDeps,
+    *,
+    fixture: SearchEvalFixture | None,
+) -> list[ModelMessage]:
+    if fixture is None:
+        return []
+    for batch in fixture.grounded_batches:
+        deps.state.remember_search_batch(batch)
+    return list(fixture.message_history)
+
+
 class SearchAgentEvalHarness(AgentEvalHarness[SearchEvalInput, str]):
     """Run the real search agent with infrastructure replaced at the toolset seam."""
 
@@ -172,8 +224,14 @@ class SearchAgentEvalHarness(AgentEvalHarness[SearchEvalInput, str]):
         agent = build_search_agent(toolset_services=_build_toolset_services(fixture))
         with tempfile.TemporaryDirectory(prefix="search-eval-attachments-") as tmp_dir:
             deps = _build_stub_deps(Path(tmp_dir), fixture=fixture)
-            result = await agent.run(inputs.user_message, deps=deps)
-            messages = result.all_messages()
+            message_history = _seed_fixture_history(deps, fixture=fixture)
+            user_prompt = None if inputs.continue_from_history else inputs.user_message
+            result = await agent.run(
+                user_prompt,
+                deps=deps,
+                message_history=message_history or None,
+            )
+            messages = result.new_messages()
             return SearchEvalRunCapture(
                 final_output=result.output,
                 message_tool_calls=extract_message_tool_call_captures(messages),
