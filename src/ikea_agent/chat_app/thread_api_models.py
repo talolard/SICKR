@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ikea_agent.shared.types import RevealedPreferenceKind
+from ikea_agent.shared.types import KnownFactKind, KnownFactScope, RoomType
 
 
 class ThreadDetailItem(BaseModel):
@@ -14,6 +14,9 @@ class ThreadDetailItem(BaseModel):
 
     thread_id: str
     title: str | None
+    room_id: str
+    room_title: str
+    room_type: RoomType | None
     status: str
     last_activity_at: str | None
     run_count: int
@@ -39,10 +42,11 @@ class AssetListItem(BaseModel):
 
 
 class KnownFactItem(BaseModel):
-    """One thread-scoped durable fact or preference for UI display."""
+    """One durable room- or project-scoped fact for UI display."""
 
-    memory_id: str
-    kind: RevealedPreferenceKind
+    fact_id: str
+    scope: KnownFactScope
+    kind: KnownFactKind
     summary: str
     source_message_text: str
     updated_at: str

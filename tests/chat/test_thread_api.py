@@ -16,7 +16,8 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
-    RevealedPreferenceRecord,
+    ProjectFactRecord,
+    RoomFactRecord,
     SearchRunRecord,
     ThreadRecord,
     ensure_persistence_schema,
@@ -161,14 +162,28 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
             )
         )
         session.add(
-            RevealedPreferenceRecord(
-                revealed_preference_id="rmem-api",
-                thread_id="thread-api",
+            RoomFactRecord(
+                room_fact_id="rfact-api",
+                room_id=hierarchy.room_id,
                 run_id="run-api",
                 signal_key="agent_note",
                 kind="constraint",
                 value="user_has_toddlers",
                 summary="User has toddlers, keep things elevated.",
+                source_message_text="We have a toddler at home.",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ProjectFactRecord(
+                project_fact_id="pfact-api",
+                project_id=hierarchy.project_id,
+                run_id="run-api",
+                signal_key="agent_note",
+                kind="fact",
+                value="household_has_toddler",
+                summary="Household includes a toddler.",
                 source_message_text="We have a toddler at home.",
                 created_at=now,
                 updated_at=now,
@@ -189,6 +204,8 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
 
     assert detail is not None
     assert detail.thread_id == "thread-api"
+    assert detail.room_id == "room-dev-default"
+    assert detail.room_title == "Untitled room"
     assert detail.asset_count == 1
     assert detail.run_count == 1
     assert detail.floor_plan_revision_count == 1
@@ -206,9 +223,11 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert bundles[0].items[0].image_urls == []
     assert bundles[0].validations[0].kind == "budget_max_eur"
 
-    assert len(known_facts) == 1
+    assert len(known_facts) == 2
+    assert known_facts[0].scope == "room"
     assert known_facts[0].kind == "constraint"
     assert known_facts[0].summary == "User has toddlers, keep things elevated."
+    assert known_facts[1].scope == "project"
 
 
 def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path) -> None:

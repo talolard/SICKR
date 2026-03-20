@@ -479,26 +479,62 @@ class BundleProposalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class RevealedPreferenceRecord(Base):
-    """Thread-scoped durable preference memory captured from conversation."""
+class RoomFactRecord(Base):
+    """Room-scoped durable fact memory captured from conversation."""
 
-    __tablename__ = "revealed_preferences"
+    __tablename__ = "room_facts"
     __table_args__ = (
-        Index("ix_revealed_preferences_thread_id", "thread_id"),
-        Index("ix_revealed_preferences_run_id", "run_id"),
+        Index("ix_room_facts_room_id", "room_id"),
+        Index("ix_room_facts_run_id", "run_id"),
         UniqueConstraint(
-            "thread_id",
+            "room_id",
             "signal_key",
             "value",
-            name="uq_revealed_preferences_thread_signal_value",
+            name="uq_room_facts_room_signal_value",
         ),
         {"schema": APP_SCHEMA},
     )
 
-    revealed_preference_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    thread_id: Mapped[str] = mapped_column(
+    room_fact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
         String(64),
-        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    signal_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[str] = mapped_column(String(128), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_message_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectFactRecord(Base):
+    """Project-scoped durable fact memory captured from conversation."""
+
+    __tablename__ = "project_facts"
+    __table_args__ = (
+        Index("ix_project_facts_project_id", "project_id"),
+        Index("ix_project_facts_run_id", "run_id"),
+        UniqueConstraint(
+            "project_id",
+            "signal_key",
+            "value",
+            name="uq_project_facts_project_signal_value",
+        ),
+        {"schema": APP_SCHEMA},
+    )
+
+    project_fact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.projects.project_id"),
         nullable=False,
     )
     run_id: Mapped[str | None] = mapped_column(

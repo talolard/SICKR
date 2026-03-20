@@ -12,6 +12,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import Tool
 from pydantic_ai.usage import RunUsage
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,21 +21,30 @@ from tests.shared.sqlite_db import create_sqlite_engine
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.search.toolset import build_search_toolset
 from ikea_agent.chat.agents.shared import (
-    build_preference_instruction,
-    build_remember_preference_tool,
+    build_known_fact_instruction,
+    build_shared_context_tools,
 )
 from ikea_agent.chat.agents.state import SearchAgentState
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.main import create_app
+from ikea_agent.persistence.context_fact_repository import ContextFactRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
-from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
-from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_PROJECT_ID,
+    DEFAULT_DEV_ROOM_ID,
+    ensure_default_dev_hierarchy_for_session_factory,
+)
 from ikea_agent.shared.sqlalchemy_db import create_session_factory
-from ikea_agent.tools.preferences import PreferenceNoteInput, note_to_memory_input
+from ikea_agent.tools.facts import (
+    FactNoteInput,
+    RenameRoomInput,
+    SetRoomTypeInput,
+    note_to_known_fact_input,
+)
 
-PREFERENCE_INSTRUCTION: Callable[[RunContext[SearchAgentDeps]], str] = cast(
-    "Callable[[RunContext[SearchAgentDeps]], str]", build_preference_instruction()
+KNOWN_FACT_INSTRUCTION: Callable[[RunContext[SearchAgentDeps]], str] = cast(
+    "Callable[[RunContext[SearchAgentDeps]], str]", build_known_fact_instruction()
 )
 
 
@@ -50,11 +60,13 @@ def _set_fake_google_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _runtime(tmp_path: Path) -> _PersistenceRuntime:
-    engine = create_sqlite_engine(tmp_path / "revealed_preference_api_test.sqlite")
+    engine = create_sqlite_engine(tmp_path / "known_fact_api_test.sqlite")
     ensure_persistence_schema(engine)
+    session_factory = create_session_factory(engine)
+    ensure_default_dev_hierarchy_for_session_factory(session_factory)
     return _PersistenceRuntime(
         sqlalchemy_engine=engine,
-        session_factory=create_session_factory(engine),
+        session_factory=session_factory,
     )
 
 
@@ -89,17 +101,17 @@ def _build_capturing_search_agent(captured_prompts: list[str]) -> Agent[SearchAg
         _info: AgentInfo,
     ) -> AsyncIterator[str]:
         captured_prompts.append(_flatten_message_text(messages))
-        yield "memory-aware-response"
+        yield "context-aware-response"
 
     return Agent(
         model=FunctionModel(
             function=_function,
             stream_function=_stream,
-            model_name="preference-test-agent",
+            model_name="known-fact-test-agent",
         ),
         deps_type=SearchAgentDeps,
         output_type=str,
-        instructions=["Base search instructions.", PREFERENCE_INSTRUCTION],
+        instructions=["Base search instructions.", KNOWN_FACT_INSTRUCTION],
         toolsets=[build_search_toolset()],
         name="agent_search_test",
     )
@@ -120,6 +132,10 @@ def _flatten_message_text(messages: list[ModelMessage]) -> str:
     return "\n".join(parts)
 
 
+def _tool_by_name(name: str) -> Tool[SearchAgentDeps]:
+    return next(tool for tool in build_shared_context_tools() if tool.name == name)
+
+
 def test_flatten_message_text_handles_instruction_lists_and_non_text_parts() -> None:
     message = SimpleNamespace(
         instructions=["first", 2, "second"],
@@ -134,49 +150,73 @@ def test_flatten_message_text_handles_instruction_lists_and_non_text_parts() -> 
     assert flattened == "first\nsecond\nbody"
 
 
-def test_remember_preference_tool_persists_summary_and_updates_state(tmp_path: Path) -> None:
+def test_shared_context_tools_persist_facts_and_room_identity(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    repository = RevealedPreferenceRepository(runtime.session_factory)
+    repository = ContextFactRepository(runtime.session_factory)
     attachment_store = AttachmentStore(tmp_path / "attachments")
     deps = SearchAgentDeps(
         runtime=cast("ChatRuntime", runtime),
         attachment_store=attachment_store,
-        state=SearchAgentState(thread_id="thread-pref", run_id="run-1"),
+        state=SearchAgentState(
+            project_id=DEFAULT_DEV_PROJECT_ID,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id="thread-pref",
+            run_id="run-1",
+        ),
     )
     ctx = RunContext[SearchAgentDeps](
         deps=deps,
         model=TestModel(),
         usage=RunUsage(),
-        prompt="remember preference",
-        tool_name="remember_preference",
+        prompt="remember room fact",
+        tool_name="remember_room_fact",
     )
 
-    tool = build_remember_preference_tool()
-    result = tool.function(
+    room_fact_tool = _tool_by_name("remember_room_fact")
+    project_fact_tool = _tool_by_name("remember_project_fact")
+    rename_room_tool = _tool_by_name("rename_room")
+    set_room_type_tool = _tool_by_name("set_room_type")
+
+    room_fact_result = room_fact_tool.function(
         ctx,
-        PreferenceNoteInput(
-            key="user_has_toddlers",
+        FactNoteInput(
+            key="avoid_low_tables",
             kind="constraint",
-            summary="User has toddlers, keep things elevated.",
-            source="They said low tables feel risky around the toddlers.",
+            summary="Avoid recommending low tables because the user has toddlers.",
+            source="Low tables feel risky around the toddlers.",
         ),
     )
+    project_fact_result = project_fact_tool.function(
+        ctx,
+        FactNoteInput(
+            key="avoid_drilling",
+            kind="constraint",
+            summary="User cannot drill into the walls across the project.",
+            source="The rental does not allow drilling.",
+        ),
+    )
+    rename_room_tool.function(ctx, RenameRoomInput(title="Son's room"))
+    set_room_type_tool.function(ctx, SetRoomTypeInput(room_type="bedroom"))
 
-    stored = repository.list_preferences(thread_id="thread-pref")
+    room_context = repository.load_room_context(room_id=DEFAULT_DEV_ROOM_ID)
 
-    assert result.memory.summary == "User has toddlers, keep things elevated."
-    assert len(stored) == 1
-    assert stored[0].signal_key == "agent_note"
-    assert stored[0].value == "user_has_toddlers"
-    assert deps.state.revealed_preferences == stored
+    assert room_fact_result.fact.scope == "room"
+    assert project_fact_result.fact.scope == "project"
+    assert room_context.room_identity.title == "Son's room"
+    assert room_context.room_identity.room_type == "bedroom"
+    assert [item.value for item in room_context.room_facts] == ["avoid_low_tables"]
+    assert [item.value for item in room_context.project_facts] == ["avoid_drilling"]
+    assert deps.state.room_title == "Son's room"
+    assert deps.state.room_type == "bedroom"
+    assert deps.state.project_id == room_context.room_identity.project_id
 
 
-def test_ag_ui_route_does_not_extract_preferences_from_messages(
+def test_ag_ui_route_does_not_extract_facts_from_messages(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
-    repository = RevealedPreferenceRepository(runtime.session_factory)
+    repository = ContextFactRepository(runtime.session_factory)
     captured_prompts: list[str] = []
 
     def _build_agent(
@@ -217,16 +257,18 @@ def test_ag_ui_route_does_not_extract_preferences_from_messages(
         ),
     )
 
+    room_context = repository.load_room_context(room_id=DEFAULT_DEV_ROOM_ID)
     assert response.status_code == 200
-    assert repository.list_preferences(thread_id="thread-pref") == []
+    assert room_context.room_facts == []
+    assert room_context.project_facts == []
 
 
-def test_ag_ui_route_hydrates_revealed_preferences_into_later_agent_runs(
+def test_ag_ui_route_hydrates_room_and_project_facts_into_later_agent_runs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
-    repository = RevealedPreferenceRepository(runtime.session_factory)
+    repository = ContextFactRepository(runtime.session_factory)
     captured_prompts: list[str] = []
 
     def _build_agent(
@@ -251,26 +293,35 @@ def test_ag_ui_route_hydrates_revealed_preferences_into_later_agent_runs(
     )
     monkeypatch.setattr("ikea_agent.chat_app.main.build_agent_ag_ui_agent", _build_agent)
 
-    repository.upsert_preferences(
-        thread_id="thread-pref",
+    room_context = repository.load_room_context(room_id=DEFAULT_DEV_ROOM_ID)
+    repository.rename_room(room_id=DEFAULT_DEV_ROOM_ID, title="Living room")
+    repository.set_room_type(room_id=DEFAULT_DEV_ROOM_ID, room_type="living_room")
+    repository.upsert_room_facts(
+        room_id=DEFAULT_DEV_ROOM_ID,
         run_id=None,
-        preferences=[
-            note_to_memory_input(
-                PreferenceNoteInput(
+        facts=[
+            note_to_known_fact_input(
+                FactNoteInput(
                     key="user_has_toddlers",
                     kind="constraint",
                     summary="User has toddlers, keep things elevated.",
                     source="Low tables feel risky around the toddlers.",
                 )
-            ),
-            note_to_memory_input(
-                PreferenceNoteInput(
+            )
+        ],
+    )
+    repository.upsert_project_facts(
+        project_id=room_context.room_identity.project_id,
+        run_id=None,
+        facts=[
+            note_to_known_fact_input(
+                FactNoteInput(
                     key="avoid_drilling",
                     kind="constraint",
                     summary="User cannot drill into the walls.",
                     source="This rental does not allow drilling.",
                 )
-            ),
+            )
         ],
     )
 
@@ -282,15 +333,19 @@ def test_ag_ui_route_hydrates_revealed_preferences_into_later_agent_runs(
         json=_payload(
             thread_id="thread-pref",
             run_id="run-2",
-            text="Could you suggest a safer second option for the same hallway thread?",
+            text="Could you suggest a safer second option for the same room?",
         ),
     )
 
     assert response.status_code == 200
     assert captured_prompts
-    assert "remember_preference" in captured_prompts[-1]
-    assert (
-        "Thread-scoped revealed preferences from prior conversation turns:" in captured_prompts[-1]
-    )
+    assert "remember_room_fact" in captured_prompts[-1]
+    assert "remember_project_fact" in captured_prompts[-1]
+    assert "rename_room" in captured_prompts[-1]
+    assert "set_room_type" in captured_prompts[-1]
+    assert "Current room profile:" in captured_prompts[-1]
+    assert "Living room" in captured_prompts[-1]
+    assert "Room facts:" in captured_prompts[-1]
+    assert "Project facts:" in captured_prompts[-1]
     assert "User has toddlers, keep things elevated." in captured_prompts[-1]
     assert "User cannot drill into the walls." in captured_prompts[-1]

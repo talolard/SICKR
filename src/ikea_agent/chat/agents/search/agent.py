@@ -17,7 +17,7 @@ from ikea_agent.chat.agents.search.toolset import (
     SearchToolsetServices,
     build_search_toolset,
 )
-from ikea_agent.chat.agents.shared import build_preference_instruction
+from ikea_agent.chat.agents.shared import build_known_fact_instruction
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -26,8 +26,8 @@ DESCRIPTION = "Find IKEA products using retrieval, reranking, and diversity-awar
 PROMPT_PATH = Path(__file__).with_name("prompt.md")
 PROMPT = AgentPrompt(PROMPT_PATH)
 NOTES = "Search-focused agent with retrieval and 3D snapshot context tools."
-PREFERENCE_INSTRUCTION: Callable[[RunContext[SearchAgentDeps]], str] = cast(
-    "Callable[[RunContext[SearchAgentDeps]], str]", build_preference_instruction()
+KNOWN_FACT_INSTRUCTION: Callable[[RunContext[SearchAgentDeps]], str] = cast(
+    "Callable[[RunContext[SearchAgentDeps]], str]", build_known_fact_instruction()
 )
 
 
@@ -69,7 +69,7 @@ def build_search_agent(
     return Agent[SearchAgentDeps, str](
         model=model,
         deps_type=SearchAgentDeps,
-        instructions=[PROMPT.instruction_text(), PREFERENCE_INSTRUCTION],
+        instructions=[PROMPT.instruction_text(), KNOWN_FACT_INSTRUCTION],
         output_type=str,
         name="agent_search",
         toolsets=[build_search_toolset(toolset_services)],

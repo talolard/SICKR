@@ -12,14 +12,15 @@ from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
 
 from ikea_agent.chat.agents.index import AnyAgentDeps, clone_agent_deps_for_request
-from ikea_agent.persistence.revealed_preference_repository import (
-    RevealedPreferenceRepository,
+from ikea_agent.persistence.context_fact_repository import (
+    ContextFactRepository,
+    RoomContextSnapshot,
 )
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
     extract_last_user_prompt,
 )
-from ikea_agent.shared.types import RevealedPreferenceMemory
+from ikea_agent.shared.types import KnownFactMemory, RoomType
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,18 +28,23 @@ class AgUiRunContext:
     """Validated durable request context for one AG-UI run."""
 
     run_id: str
+    project_id: str | None
     room_id: str
+    room_title: str | None
+    room_type: RoomType | None
     thread_id: str
+    room_facts: list[KnownFactMemory]
+    project_facts: list[KnownFactMemory]
 
 
-def _list_revealed_preferences(
-    repository: RevealedPreferenceRepository | None,
+def _load_room_context(
+    repository: ContextFactRepository | None,
     *,
-    thread_id: str,
-) -> list[RevealedPreferenceMemory]:
+    room_id: str,
+) -> RoomContextSnapshot | None:
     if repository is None:
-        return []
-    return repository.list_preferences(thread_id=thread_id)
+        return None
+    return repository.load_room_context(room_id=room_id)
 
 
 def _optional_string(payload: dict[str, object], snake_key: str, camel_key: str) -> str | None:
@@ -73,7 +79,7 @@ async def _parse_and_record_run_context(
     *,
     agent_name: str,
     run_history_repository: RunHistoryRepository | None,
-    revealed_preference_repository: RevealedPreferenceRepository | None,
+    context_fact_repository: ContextFactRepository | None,
 ) -> AgUiRunContext:
     body = await request.body()
     try:
@@ -95,10 +101,10 @@ async def _parse_and_record_run_context(
     messages = message_payload if isinstance(message_payload, list) else []
     structured_messages = [item for item in messages if isinstance(item, dict)]
     user_prompt_text = extract_last_user_prompt(structured_messages)
-    revealed_preferences = _list_revealed_preferences(
-        revealed_preference_repository,
-        thread_id=thread_id,
-    )
+    try:
+        room_context = _load_room_context(context_fact_repository, room_id=room_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if run_history_repository is not None:
         try:
             run_history_repository.record_run_start(
@@ -115,12 +121,37 @@ async def _parse_and_record_run_context(
     normalized_state["room_id"] = room_id
     normalized_state["thread_id"] = thread_id
     normalized_state["run_id"] = run_id
-    normalized_state["revealed_preferences"] = [
-        item.model_dump(mode="json") for item in revealed_preferences
-    ]
+    normalized_state["project_id"] = (
+        room_context.room_identity.project_id if room_context is not None else None
+    )
+    normalized_state["room_title"] = (
+        room_context.room_identity.title if room_context is not None else None
+    )
+    normalized_state["room_type"] = (
+        room_context.room_identity.room_type if room_context is not None else None
+    )
+    normalized_state["room_facts"] = (
+        [item.model_dump(mode="json") for item in room_context.room_facts]
+        if room_context is not None
+        else []
+    )
+    normalized_state["project_facts"] = (
+        [item.model_dump(mode="json") for item in room_context.project_facts]
+        if room_context is not None
+        else []
+    )
     payload["state"] = normalized_state
     request._body = json.dumps(payload).encode("utf-8")  # type: ignore[attr-defined]
-    return AgUiRunContext(run_id=run_id, room_id=room_id, thread_id=thread_id)
+    return AgUiRunContext(
+        run_id=run_id,
+        project_id=room_context.room_identity.project_id if room_context is not None else None,
+        room_id=room_id,
+        room_title=room_context.room_identity.title if room_context is not None else None,
+        room_type=room_context.room_identity.room_type if room_context is not None else None,
+        thread_id=thread_id,
+        room_facts=room_context.room_facts if room_context is not None else [],
+        project_facts=room_context.project_facts if room_context is not None else [],
+    )
 
 
 def _build_on_complete(
@@ -138,18 +169,23 @@ def _build_on_complete(
 def _populate_agent_state(
     deps: AnyAgentDeps,
     *,
+    project_id: str | None,
     room_id: str,
+    room_title: str | None,
+    room_type: RoomType | None,
     thread_id: str,
     run_id: str,
-    revealed_preference_repository: RevealedPreferenceRepository | None,
+    room_facts: list[KnownFactMemory],
+    project_facts: list[KnownFactMemory],
 ) -> None:
+    deps.state.project_id = project_id
     deps.state.room_id = room_id
+    deps.state.room_title = room_title
+    deps.state.room_type = room_type
     deps.state.thread_id = thread_id
     deps.state.run_id = run_id
-    deps.state.revealed_preferences = _list_revealed_preferences(
-        revealed_preference_repository,
-        thread_id=thread_id,
-    )
+    deps.state.room_facts = list(room_facts)
+    deps.state.project_facts = list(project_facts)
 
 
 def _register_ag_ui_routes(
@@ -158,7 +194,7 @@ def _register_ag_ui_routes(
     agents: dict[str, Agent[object, str]],
     deps_by_agent: dict[str, AnyAgentDeps],
     run_history_repository: RunHistoryRepository | None,
-    revealed_preference_repository: RevealedPreferenceRepository | None,
+    context_fact_repository: ContextFactRepository | None,
 ) -> None:
     @app.post("/ag-ui/agents/{agent_name}")
     @app.post("/ag-ui/agents/{agent_name}/")
@@ -173,14 +209,18 @@ def _register_ag_ui_routes(
             request,
             agent_name=agent_name,
             run_history_repository=run_history_repository,
-            revealed_preference_repository=revealed_preference_repository,
+            context_fact_repository=context_fact_repository,
         )
         _populate_agent_state(
             deps,
+            project_id=context.project_id,
             room_id=context.room_id,
+            room_title=context.room_title,
+            room_type=context.room_type,
             thread_id=context.thread_id,
             run_id=context.run_id,
-            revealed_preference_repository=revealed_preference_repository,
+            room_facts=context.room_facts,
+            project_facts=context.project_facts,
         )
         on_complete = _build_on_complete(run_history_repository, run_id=context.run_id)
         try:

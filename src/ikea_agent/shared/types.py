@@ -204,7 +204,8 @@ BundleValidationKind = Literal[
     "duplicate_items",
 ]
 BundleValidationStatus = Literal["pass", "warn", "fail", "unknown"]
-RevealedPreferenceKind = Literal["constraint", "fact", "preference"]
+KnownFactKind = Literal["constraint", "fact", "preference"]
+KnownFactScope = Literal["project", "room"]
 
 
 class BundleProposalItemInput(BaseModel):
@@ -274,14 +275,15 @@ class BundleProposalToolResult(BaseModel):
     run_id: str | None
 
 
-class RevealedPreferenceMemory(BaseModel):
-    """Thread-scoped durable preference or constraint stored for later turns."""
+class KnownFactMemory(BaseModel):
+    """Durable room- or project-scoped fact stored for later turns."""
 
     model_config = ConfigDict(extra="forbid")
 
-    memory_id: str
+    fact_id: str
+    scope: KnownFactScope
     signal_key: str
-    kind: RevealedPreferenceKind
+    kind: KnownFactKind
     value: str
     summary: str
     source_message_text: str
@@ -290,16 +292,36 @@ class RevealedPreferenceMemory(BaseModel):
     run_id: str | None
 
 
-class RevealedPreferenceMemoryInput(BaseModel):
-    """Normalized memory item produced before repository persistence."""
+class KnownFactMemoryInput(BaseModel):
+    """Normalized known-fact item produced before repository persistence."""
 
     model_config = ConfigDict(extra="forbid")
 
     signal_key: str
-    kind: RevealedPreferenceKind
+    kind: KnownFactKind
     value: str
     summary: str
     source_message_text: str
+
+
+class RoomIdentity(BaseModel):
+    """Durable room identity hydrated into agent state and room-aware UIs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_id: str
+    project_id: str
+    title: str
+    room_type: RoomType | None
+
+
+RevealedPreferenceKind = KnownFactKind
+RevealedPreferenceMemory = KnownFactMemory
+RevealedPreferenceMemoryInput = KnownFactMemoryInput
+DurableFactKind = KnownFactKind
+DurableFactScope = KnownFactScope
+DurableFact = KnownFactMemory
+DurableFactInput = KnownFactMemoryInput
 
 
 @dataclass(frozen=True, slots=True)

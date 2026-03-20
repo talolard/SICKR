@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Literal
+from typing import cast as typing_cast
 from uuid import uuid4
 
 from sqlalchemy import String, cast, func, select
@@ -17,6 +18,7 @@ from ikea_agent.chat_app.thread_api_models import (
     KnownFactItem,
     ThreadDetailItem,
 )
+from ikea_agent.persistence.context_fact_repository import ContextFactRepository
 from ikea_agent.persistence.models import (
     AgentRunRecord,
     AnalysisFeedbackRecord,
@@ -24,7 +26,7 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
-    RevealedPreferenceRecord,
+    RoomRecord,
     SearchRunRecord,
     ThreadRecord,
 )
@@ -32,18 +34,10 @@ from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
     BundleValidationResult,
-    RevealedPreferenceKind,
+    RoomType,
 )
 
 AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
-
-
-def _parse_revealed_preference_kind(raw_kind: str) -> RevealedPreferenceKind:
-    """Validate persisted revealed-preference kinds before building API payloads."""
-
-    if raw_kind in ("constraint", "fact", "preference"):
-        return raw_kind
-    raise ValueError(f"Unknown revealed preference kind: {raw_kind}")
 
 
 def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, str]:
@@ -81,10 +75,15 @@ class ThreadQueryRepository:
             row = session.execute(
                 select(
                     ThreadRecord.thread_id,
-                    ThreadRecord.title,
+                    ThreadRecord.title.label("thread_title"),
+                    ThreadRecord.room_id,
+                    RoomRecord.title.label("room_title"),
+                    RoomRecord.room_type.label("room_type"),
                     ThreadRecord.status,
                     cast(ThreadRecord.last_activity_at, String),
-                ).where(ThreadRecord.thread_id == thread_id)
+                )
+                .join(RoomRecord, RoomRecord.room_id == ThreadRecord.room_id)
+                .where(ThreadRecord.thread_id == thread_id)
             ).one_or_none()
             if row is None:
                 return None
@@ -121,7 +120,10 @@ class ThreadQueryRepository:
 
         return ThreadDetailItem(
             thread_id=str(row.thread_id),
-            title=str(row.title) if row.title is not None else None,
+            title=str(row.thread_title) if row.thread_title is not None else None,
+            room_id=str(row.room_id),
+            room_title=str(row.room_title),
+            room_type=typing_cast("RoomType | None", row.room_type),
             status=str(row.status),
             last_activity_at=(
                 str(row.last_activity_at) if row.last_activity_at is not None else None
@@ -210,29 +212,20 @@ class ThreadQueryRepository:
         ]
 
     def list_known_facts(self, *, thread_id: str) -> list[KnownFactItem]:
-        """Return durable revealed facts/preferences for one thread."""
+        """Return room/project facts visible from one thread."""
 
-        with self._session_factory() as session:
-            rows = session.execute(
-                select(
-                    RevealedPreferenceRecord.revealed_preference_id,
-                    RevealedPreferenceRecord.kind,
-                    RevealedPreferenceRecord.summary,
-                    RevealedPreferenceRecord.source_message_text,
-                    cast(RevealedPreferenceRecord.updated_at, String),
-                    RevealedPreferenceRecord.run_id,
-                )
-                .where(RevealedPreferenceRecord.thread_id == thread_id)
-                .order_by(RevealedPreferenceRecord.updated_at.desc())
-            ).all()
+        rows = ContextFactRepository(self._session_factory).list_known_facts_for_thread(
+            thread_id=thread_id
+        )
         return [
             KnownFactItem(
-                memory_id=str(item.revealed_preference_id),
-                kind=_parse_revealed_preference_kind(str(item.kind)),
-                summary=str(item.summary),
-                source_message_text=str(item.source_message_text),
-                updated_at=str(item.updated_at) if item.updated_at is not None else "",
-                run_id=str(item.run_id) if item.run_id is not None else None,
+                fact_id=item.fact_id,
+                scope=item.scope,
+                kind=item.kind,
+                summary=item.summary,
+                source_message_text=item.source_message_text,
+                updated_at=item.updated_at,
+                run_id=item.run_id,
             )
             for item in rows
         ]

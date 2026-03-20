@@ -232,7 +232,7 @@ def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> Non
                 room_id="room-other",
                 project_id=DEFAULT_DEV_PROJECT_ID,
                 title="Other room",
-                room_type="office",
+                room_type="home_office",
                 status="active",
                 created_at=now,
                 updated_at=now,

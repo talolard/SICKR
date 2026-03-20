@@ -17,7 +17,8 @@ const metadata: AgentMetadata = {
 
 const knownFacts: KnownFactItem[] = [
   {
-    memory_id: "rmem-1",
+    fact_id: "rfact-1",
+    scope: "room",
     kind: "constraint",
     summary: "User has toddlers, keep things elevated.",
     source_message_text: "We have a toddler at home.",
@@ -40,6 +41,7 @@ describe("AgentInspectorPanel", () => {
 
     expect(screen.getByText("Known facts")).toBeInTheDocument();
     expect(screen.getByText("User has toddlers, keep things elevated.")).toBeInTheDocument();
+    expect(screen.getByText("room")).toBeInTheDocument();
     expect(screen.getByTestId("agent-inspector-debug-details")).not.toHaveAttribute("open");
   });
 

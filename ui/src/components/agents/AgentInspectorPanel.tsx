@@ -162,7 +162,7 @@ export function AgentInspectorPanel({
         <p className="editorial-eyebrow">Known facts</p>
         <h3 className="mt-3 text-lg font-semibold tracking-tight text-primary">Current brief</h3>
         <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-          Durable context collected across this thread stays here so the room brief remains visible.
+          Durable room and project context stays here so the room brief remains visible.
         </p>
         {metadata?.description ? (
           <div className="mt-4 rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4">
@@ -182,8 +182,7 @@ export function AgentInspectorPanel({
         ) : null}
         {!isLoadingKnownFacts && !knownFactsError && knownFacts.length === 0 ? (
           <p className="mt-4 rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-on-surface-variant">
-            Known facts will appear here after the agent stores durable room constraints or
-            preferences for this thread.
+            Known facts will appear here after the agent stores durable room or project facts.
           </p>
         ) : null}
         {knownFacts.length > 0 ? (
@@ -191,11 +190,16 @@ export function AgentInspectorPanel({
             {knownFacts.map((fact) => (
               <li
                 className="rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4 shadow-[0_14px_30px_rgba(32,27,16,0.06)]"
-                key={fact.memory_id}
+                key={fact.fact_id}
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
-                  Brief note
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+                    Brief note
+                  </p>
+                  <span className="rounded-full bg-[color:var(--surface-container-lowest)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+                    {fact.scope}
+                  </span>
+                </div>
                 <p className="mt-2 text-sm leading-6 text-on-surface">{fact.summary}</p>
               </li>
             ))}

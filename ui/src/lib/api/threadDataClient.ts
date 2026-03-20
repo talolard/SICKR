@@ -3,6 +3,9 @@ import type { BundleProposal } from "@/lib/bundleProposalsStore";
 export type ThreadDetailItem = {
   thread_id: string;
   title: string | null;
+  room_id: string;
+  room_title: string;
+  room_type: string | null;
   status: string;
   last_activity_at: string | null;
   run_count: number;
@@ -26,7 +29,8 @@ export type AssetListItem = {
 };
 
 export type KnownFactItem = {
-  memory_id: string;
+  fact_id: string;
+  scope: "project" | "room";
   kind: "constraint" | "fact" | "preference";
   summary: string;
   source_message_text: string;
