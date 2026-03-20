@@ -70,7 +70,7 @@ export function ProductResultsToolRenderer({
   );
 
   return (
-    <div className="space-y-3" data-testid="product-results">
+    <div className="space-y-2" data-testid="product-results">
       {groups.map((group, index) => {
         const metadata = metadataByQueryId.get(group.queryId);
         const title =
@@ -84,13 +84,13 @@ export function ProductResultsToolRenderer({
 
         return (
           <section
-            className="overflow-hidden rounded-[24px] bg-[color:var(--surface-container-low)] shadow-[var(--panel-shadow)]"
+            className="overflow-hidden rounded-[20px] bg-[color:var(--surface-container-low)] shadow-[var(--panel-shadow)]"
             key={group.queryId}
           >
             <button
               aria-controls={contentId}
               aria-expanded={!isCollapsed}
-              className="flex w-full items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[color:var(--surface-container-high)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(24,36,27,0.2)]"
+              className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[color:var(--surface-container-high)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(24,36,27,0.2)]"
               onClick={() => {
                 setCollapsedQueryIds((current) => {
                   const next = new Set(current);
@@ -102,22 +102,23 @@ export function ProductResultsToolRenderer({
                   return next;
                 });
               }}
+              data-testid={`product-results-toggle-${group.queryId}`}
               type="button"
             >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                     {title}
                   </p>
-                  <span className="rounded-full bg-[color:var(--surface-container-lowest)] px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
+                  <span className="rounded-full bg-[color:var(--surface-container-lowest)] px-2 py-0.5 text-[10px] font-medium text-on-surface-variant">
                     {group.products.length} result{group.products.length === 1 ? "" : "s"}
                   </span>
                 </div>
-                <h3 className="mt-1 text-sm font-medium leading-5 text-primary">
+                <p className="line-clamp-2 text-[12px] font-medium leading-[1.125rem] text-primary">
                   {queryText}
-                </h3>
+                </p>
               </div>
-              <span className="shrink-0 rounded-full bg-[color:var(--surface-container-lowest)] px-2.5 py-1 text-[11px] font-semibold text-on-surface-variant">
+              <span className="shrink-0 rounded-full bg-[color:var(--surface-container-lowest)] px-2 py-0.5 text-[10px] font-semibold text-on-surface-variant">
                 {isCollapsed ? "Expand" : "Collapse"}
               </span>
             </button>

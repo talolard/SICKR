@@ -47,6 +47,7 @@ describe("ProductResultsToolRenderer", () => {
     expect(screen.queryByText("BRIMNES Wardrobe")).not.toBeInTheDocument();
     expect(screen.queryByText("PAX Shelf")).not.toBeInTheDocument();
     expect(screen.queryByTestId("product-results-panel-storage")).not.toBeInTheDocument();
+    expect(screen.getByTestId("product-results-toggle-storage")).toHaveClass("px-3", "py-2.5");
   });
 
   it("collapses and re-expands a query section while keeping the summary visible", async () => {

@@ -45,10 +45,10 @@ function BundleValidationList({ proposal }: { proposal: BundleProposal }): React
   }
 
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
+    <div className="mt-3 flex flex-wrap gap-1.5">
       {visibleValidations.map((validation) => (
         <span
-          className={`rounded-full px-2.5 py-1 text-xs font-medium ${validationTone(validation.status)}`}
+          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${validationTone(validation.status)}`}
           key={`${proposal.bundle_id}-${validation.kind}-${validation.message}`}
         >
           <span className="font-medium">{validationLabel(validation.kind)}:</span> {validation.message}
@@ -129,7 +129,7 @@ export function SearchBundlePanel({
 
   return (
     <section
-      className="editorial-panel-elevated flex h-full min-h-0 flex-col rounded-[30px] p-4"
+      className="editorial-panel-elevated flex h-full min-h-0 flex-col rounded-[30px] p-3.5"
       data-testid="search-bundle-panel-root"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -139,13 +139,13 @@ export function SearchBundlePanel({
         {isLoading ? <p className="text-xs text-on-surface-variant">Syncing saved bundles...</p> : null}
       </div>
       {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-      <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="mt-2.5 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
         {proposals.map((proposal) => {
           const isExpanded = expandedBundleIds.has(proposal.bundle_id);
 
           return (
             <article
-              className="overflow-hidden rounded-[28px] bg-[color:var(--surface-container-low)] shadow-[var(--panel-shadow)]"
+              className="overflow-hidden rounded-[24px] bg-[color:var(--surface-container-low)] shadow-[var(--panel-shadow)]"
               key={proposal.bundle_id}
             >
               <BundleProposalSummaryCard
@@ -159,39 +159,39 @@ export function SearchBundlePanel({
               />
               {isExpanded ? (
                 <div
-                  className="bg-[color:var(--surface-container-lowest)] p-4"
+                  className="bg-[color:var(--surface-container-lowest)] p-3"
                   id={`${bundleSummaryCardId(proposal.bundle_id)}-details`}
                 >
                   <BundleValidationList proposal={proposal} />
                   <div
-                    className="mt-4 max-h-[32rem] space-y-3 overflow-y-auto pr-1"
+                    className="mt-3 max-h-[30rem] space-y-2.5 overflow-y-auto pr-1"
                     data-testid={`bundle-items-${proposal.bundle_id}`}
                   >
                     {proposal.items.map((item) => (
                       <article
-                        className="rounded-[24px] bg-[color:var(--surface-container-low)] p-3"
+                        className="rounded-[20px] bg-[color:var(--surface-container-low)] p-2.5"
                         key={`${proposal.bundle_id}-${item.item_id}`}
                       >
-                        <div className="flex gap-3">
+                        <div className="flex gap-2.5">
                           <ProductImageThumbnail
                             images={item.image_urls}
                             productName={bundleItemDisplayName(item)}
                             testIdPrefix={`bundle-item-${proposal.bundle_id}-${item.item_id}`}
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start justify-between gap-2.5">
                               <div className="min-w-0">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                                   Bundle item
                                 </p>
-                                <h4 className="mt-1 text-sm font-semibold text-primary">
+                                <h4 className="mt-0.5 text-[13px] font-semibold leading-5 text-primary">
                                   {bundleItemDisplayName(item)}
                                 </h4>
-                                <p className="text-[11px] text-on-surface-variant">{item.item_id}</p>
+                                <p className="text-[10px] text-on-surface-variant">{item.item_id}</p>
                                 {item.product_url ? (
                                   <a
                                     aria-label={`Open product page for ${bundleItemDisplayName(item)}`}
-                                    className="mt-1 inline-flex text-xs font-medium text-primary underline underline-offset-2"
+                                    className="mt-1 inline-flex text-[11px] font-medium text-primary underline underline-offset-2"
                                     href={item.product_url}
                                     rel="noreferrer"
                                     target="_blank"
@@ -200,23 +200,23 @@ export function SearchBundlePanel({
                                   </a>
                                 ) : null}
                               </div>
-                              <div className="shrink-0 rounded-[20px] bg-[color:var(--surface-container-lowest)] px-3 py-2 shadow-[var(--panel-shadow)]">
-                                <dl className="grid grid-cols-3 gap-3 text-left text-xs text-on-surface-variant">
+                              <div className="shrink-0 rounded-[18px] bg-[color:var(--surface-container-lowest)] px-2.5 py-1.5 shadow-[var(--panel-shadow)] lg:min-w-[134px]">
+                                <dl className="grid grid-cols-3 gap-2 text-left text-[11px] text-on-surface-variant">
                                   <div>
-                                    <dt className="font-medium uppercase tracking-[0.14em] text-on-surface-variant">Unit</dt>
-                                    <dd className="mt-1 font-medium text-primary">
+                                    <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-on-surface-variant">Unit</dt>
+                                    <dd className="mt-0.5 font-medium text-primary">
                                       {item.price_eur === null
                                         ? "Pending"
                                         : formatBundlePrice(item.price_eur)}
                                     </dd>
                                   </div>
                                   <div>
-                                    <dt className="font-medium uppercase tracking-[0.14em] text-on-surface-variant">Qty</dt>
-                                    <dd className="mt-1 font-medium text-primary">{item.quantity}</dd>
+                                    <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-on-surface-variant">Qty</dt>
+                                    <dd className="mt-0.5 font-medium text-primary">{item.quantity}</dd>
                                   </div>
                                   <div>
-                                    <dt className="font-medium uppercase tracking-[0.14em] text-on-surface-variant">Total</dt>
-                                    <dd className="mt-1 font-medium text-primary">
+                                    <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-on-surface-variant">Total</dt>
+                                    <dd className="mt-0.5 font-medium text-primary">
                                       {item.line_total_eur === null
                                         ? "Pending"
                                         : formatBundlePrice(item.line_total_eur)}
@@ -225,18 +225,20 @@ export function SearchBundlePanel({
                                 </dl>
                               </div>
                             </div>
-                            <dl className="mt-3 grid gap-3 md:grid-cols-2">
+                            <dl className="mt-2.5 grid gap-2.5 md:grid-cols-2">
                               <div>
-                                <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-on-surface-variant">
-                                  Why it is in the bundle
+                                <dt className="text-[10px] font-medium uppercase tracking-[0.16em] text-on-surface-variant">
+                                  Why it fits
                                 </dt>
-                                <dd className="mt-1 text-sm leading-6 text-on-surface">{item.reason}</dd>
+                                <dd className="mt-0.5 text-[13px] leading-5 text-on-surface-variant">
+                                  {item.reason}
+                                </dd>
                               </div>
                               <div>
-                                <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-on-surface-variant">
+                                <dt className="text-[10px] font-medium uppercase tracking-[0.16em] text-on-surface-variant">
                                   Description
                                 </dt>
-                                <dd className="mt-1 text-sm leading-6 text-on-surface-variant">
+                                <dd className="mt-0.5 text-[13px] leading-5 text-on-surface-variant">
                                   {item.description_text ?? "—"}
                                 </dd>
                               </div>
