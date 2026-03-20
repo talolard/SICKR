@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 
 import { ProductImageThumbnail } from "@/components/catalog/ProductImageThumbnail";
 import { formatBundlePrice } from "@/components/search/BundleProposalSummaryCard";
@@ -43,7 +43,23 @@ export function ProductResultsToolRenderer({
   groups,
   queryMetadata,
 }: ProductResultsToolRendererProps): ReactElement {
-  const [collapsedQueryIds, setCollapsedQueryIds] = useState<Set<string>>(() => new Set());
+  const [collapsedQueryIds, setCollapsedQueryIds] = useState<Set<string>>(
+    () => new Set(groups.map((group) => group.queryId)),
+  );
+  const seenQueryIdsRef = useRef<Set<string>>(new Set(groups.map((group) => group.queryId)));
+
+  useEffect(() => {
+    const newlySeenQueryIds = groups
+      .map((group) => group.queryId)
+      .filter((queryId) => !seenQueryIdsRef.current.has(queryId));
+    if (newlySeenQueryIds.length === 0) {
+      return;
+    }
+    newlySeenQueryIds.forEach((queryId) => {
+      seenQueryIdsRef.current.add(queryId);
+    });
+    setCollapsedQueryIds((current) => new Set([...current, ...newlySeenQueryIds]));
+  }, [groups]);
 
   if (groups.length === 0) {
     return <p>No products found. Try broadening the search query.</p>;

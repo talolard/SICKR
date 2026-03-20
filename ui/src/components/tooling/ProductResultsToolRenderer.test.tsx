@@ -43,15 +43,9 @@ describe("ProductResultsToolRenderer", () => {
     expect(screen.getByText("Storage options")).toBeInTheDocument();
     expect(screen.getByText("narrow wardrobe")).toBeInTheDocument();
     expect(screen.getByText("2 results")).toBeInTheDocument();
-    expect(screen.getByText("BRIMNES Wardrobe")).toBeInTheDocument();
-    expect(screen.getByText("PAX Shelf")).toBeInTheDocument();
-    expect(screen.getByTestId("product-results-panel-storage")).toHaveClass(
-      "max-h-[26rem]",
-      "overflow-y-auto",
-    );
-    expect(
-      screen.getByTestId("search-result-storage-prod-002-placeholder"),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("BRIMNES Wardrobe")).not.toBeInTheDocument();
+    expect(screen.queryByText("PAX Shelf")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("product-results-panel-storage")).not.toBeInTheDocument();
   });
 
   it("collapses and re-expands a query section while keeping the summary visible", async () => {
@@ -88,16 +82,20 @@ describe("ProductResultsToolRenderer", () => {
 
     await user.click(toggle);
 
+    expect(screen.getByText("BRIMNES Wardrobe")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("product-results-panel-storage")).toHaveClass(
+      "max-h-[26rem]",
+      "overflow-y-auto",
+    );
+
+    await user.click(toggle);
+
     expect(screen.getByText("Storage options")).toBeInTheDocument();
     expect(screen.getByText("narrow wardrobe")).toBeInTheDocument();
     expect(screen.getByText("1 result")).toBeInTheDocument();
     expect(screen.queryByText("BRIMNES Wardrobe")).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(toggle);
-
-    expect(screen.getByText("BRIMNES Wardrobe")).toBeInTheDocument();
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("opens the gallery popover for products with multiple images", async () => {
@@ -126,6 +124,7 @@ describe("ProductResultsToolRenderer", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: /task lamp/i }));
     await user.click(screen.getByTestId("search-result-lighting-prod-003-button"));
 
     expect(
@@ -149,7 +148,7 @@ describe("ProductResultsToolRenderer", () => {
     expect(screen.getByText("Empty search")).toBeInTheDocument();
     expect(screen.getByText("0 results")).toBeInTheDocument();
     expect(
-      screen.getByText("No products found. Try broadening the search query."),
-    ).toBeInTheDocument();
+      screen.queryByText("No products found. Try broadening the search query."),
+    ).not.toBeInTheDocument();
   });
 });

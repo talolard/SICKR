@@ -33,7 +33,7 @@ export function mapCopilotToolStatus(status: CopilotHookStatus): CopilotToolRend
 
 export function ToolCard({ children }: ToolCardProps): ReactElement {
   return (
-    <div className="rounded-[24px] bg-[color:var(--surface-container-lowest)] p-3 shadow-[var(--panel-shadow)]">
+    <div className="min-w-0 overflow-hidden rounded-[24px] bg-[color:var(--surface-container-lowest)] p-3 shadow-[var(--panel-shadow)]">
       {children}
     </div>
   );

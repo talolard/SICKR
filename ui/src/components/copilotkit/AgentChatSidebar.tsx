@@ -65,6 +65,11 @@ export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): React
           flex-direction: column;
           gap: 0;
           overflow: hidden;
+          margin-top: 0.55rem;
+          border-radius: 1.75rem;
+          background: color-mix(in srgb, var(--surface-container-lowest) 94%, transparent);
+          box-shadow: var(--panel-shadow);
+          padding: 0.4rem 0 0.2rem;
         }
 
         .agent-chat-pane .copilotKitMessagesContainer {
@@ -75,7 +80,7 @@ export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): React
           gap: 1rem;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 1rem 0.55rem 0.55rem;
+          padding: 0.85rem 0.7rem 0.7rem;
         }
 
         .agent-chat-pane .copilotKitMessagesContainer > * {
@@ -85,7 +90,7 @@ export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): React
         .agent-chat-pane .copilotKitMessagesFooter {
           flex-shrink: 0;
           width: calc(100% - 1rem);
-          margin-top: 0;
+          margin-top: 0.35rem;
           padding: 0 0 0.4rem;
         }
 
@@ -94,6 +99,7 @@ export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): React
           margin-bottom: 0;
           border-radius: 1.5rem;
           box-shadow: var(--panel-shadow);
+          min-width: 0;
         }
 
         .agent-chat-pane .copilotKitMessage.copilotKitAssistantMessage {
@@ -150,6 +156,22 @@ export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): React
 
         .agent-chat-pane .copilotKitInput textarea::placeholder {
           color: color-mix(in srgb, var(--on-surface-variant) 82%, transparent);
+        }
+
+        .agent-chat-pane .copilotKitMarkdown,
+        .agent-chat-pane .copilotKitMarkdownElement,
+        .agent-chat-pane .copilotKitMessage p,
+        .agent-chat-pane .copilotKitMessage li,
+        .agent-chat-pane .copilotKitMessage span {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+
+        .agent-chat-pane .copilotKitMessage pre,
+        .agent-chat-pane .copilotKitMessage code {
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .agent-chat-pane .copilotKitInputControls {

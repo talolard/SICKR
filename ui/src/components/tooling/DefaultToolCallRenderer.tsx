@@ -37,23 +37,47 @@ export function DefaultToolCallRenderer(
 
   if (status === "failed") {
     return (
-      <section aria-label={`tool-${name}`}>
-        <h2>{name}</h2>
-        <p>Status: failed</p>
+      <section aria-label={`tool-${name}`} className="min-w-0 space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+            Tool call
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-primary">{name}</h2>
+        </div>
+        <p className="text-sm leading-6 text-on-surface-variant">Status: failed</p>
         {searchQueries.length > 0 ? <p>Search queries: {searchQueries.join(" · ")}</p> : null}
-        <p>Action: Retry with updated input.</p>
-        {errorMessage ? <pre>{errorMessage}</pre> : null}
+        <p className="text-sm leading-6 text-on-surface-variant">Action: Retry with updated input.</p>
+        {errorMessage ? (
+          <pre className="overflow-hidden whitespace-pre-wrap break-words rounded-[18px] bg-[color:var(--surface-container-low)] px-3 py-3 text-xs leading-6 text-on-surface-variant">
+            {errorMessage}
+          </pre>
+        ) : null}
       </section>
     );
   }
 
   return (
-    <section aria-label={`tool-${name}`}>
-      <h2>{name}</h2>
-      <p>Status: {status}</p>
-      {searchQueries.length > 0 ? <p>Search queries: {searchQueries.join(" · ")}</p> : null}
-      {productCount !== null ? <p>Result count: {productCount}</p> : null}
-      {productCount === null && result ? <pre>{JSON.stringify(result, null, 2)}</pre> : null}
+    <section aria-label={`tool-${name}`} className="min-w-0 space-y-3">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+          Tool call
+        </p>
+        <h2 className="mt-1 text-sm font-semibold text-primary">{name}</h2>
+      </div>
+      <p className="text-sm leading-6 text-on-surface-variant">Status: {status}</p>
+      {searchQueries.length > 0 ? (
+        <p className="text-sm leading-6 text-on-surface-variant">
+          Search queries: {searchQueries.join(" · ")}
+        </p>
+      ) : null}
+      {productCount !== null ? (
+        <p className="text-sm leading-6 text-on-surface-variant">Result count: {productCount}</p>
+      ) : null}
+      {productCount === null && result ? (
+        <pre className="overflow-hidden whitespace-pre-wrap break-words rounded-[18px] bg-[color:var(--surface-container-low)] px-3 py-3 text-xs leading-6 text-on-surface-variant">
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      ) : null}
     </section>
   );
 }
