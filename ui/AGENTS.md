@@ -31,6 +31,11 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Keep business rules, parsing, and agent-specific state shaping in typed hooks or `ui/src/lib/*`, not inline inside JSX branches.
 - Treat the UI as a product surface, not a debug console.
 
+## Workflow docs
+
+- For frontend planning and execution guidance, see [docs/frontend_delivery_guidelines.md](../docs/frontend_delivery_guidelines.md).
+- For frontend epic and task authoring, see [docs/frontend_epic_authoring.md](../docs/frontend_epic_authoring.md).
+- For PR descriptions, review loops, and validation expectations, see [docs/frontend_pr_review_guidelines.md](../docs/frontend_pr_review_guidelines.md).
 ## Frontend delivery workflow
 
 - Before editing, name:

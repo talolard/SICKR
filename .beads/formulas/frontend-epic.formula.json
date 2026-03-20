@@ -1,0 +1,71 @@
+{
+  "formula": "frontend-epic",
+  "title": "{{title}}",
+  "description": "Context:\n- Goal: {{goal}}\n- Routes in scope: {{routes_in_scope}}\n- Routes deferred: {{routes_deferred}}\n- Shared contracts affected: {{shared_contracts}}\n- Design references: {{design_refs}}\n\nDefinition of done:\n- Route coverage is explicit and honest.\n- Shared-shell or shared-contract changes are landed before route-local polish.\n- Touched routes are checked in empty, loading, success, long-content, and error states.\n- PR reporting states covered routes, deferred routes, design references, validation, and remaining risks.\n\nNon-goals:\n- {{non_goals}}\n\nValidation matrix:\n- Manual: {{manual_validation}}\n- Automated: {{automated_validation}}",
+  "version": 1,
+  "type": "workflow",
+  "vars": {
+    "title": {
+      "description": "Epic title",
+      "required": true
+    },
+    "goal": {
+      "description": "Short user-visible goal for the slice",
+      "required": true
+    },
+    "routes_in_scope": {
+      "description": "Comma-separated routes or UI surfaces in scope",
+      "required": true
+    },
+    "routes_deferred": {
+      "description": "Comma-separated deferred routes or 'None'",
+      "default": "None"
+    },
+    "shared_contracts": {
+      "description": "Shared shells, rails, renderers, or contracts affected",
+      "default": "None"
+    },
+    "design_refs": {
+      "description": "Named design references checked for this slice",
+      "required": true
+    },
+    "non_goals": {
+      "description": "Explicit non-goals and preserved runtime seams",
+      "default": "No backend architecture changes. Preserve existing typed runtime seams unless separately scoped."
+    },
+    "manual_validation": {
+      "description": "Human validation matrix for touched routes",
+      "default": "Canonical desktop viewport, fresh thread, existing thread, realistic success case, and long-content or raw-tool-output stress case."
+    },
+    "automated_validation": {
+      "description": "Automated validation commands",
+      "default": "make tidy; make ui-test-e2e-real-ui-smoke when agent-page behavior changes; targeted Vitest and Playwright coverage for touched surfaces."
+    }
+  },
+  "steps": [
+    {
+      "id": "route-matrix",
+      "title": "Lock route matrix, deferred routes, and non-goals for {{title}}",
+      "type": "task",
+      "description": "Goal:\n- Make route coverage honest before implementation starts.\n\nScope:\n- name touched routes\n- name deferred routes\n- name shared contracts affected\n- name design references and required states\n\nAcceptance Criteria:\n- The epic description is updated with routes in scope, routes deferred, design references, non-goals, and validation expectations.\n- Shared-shell versus route-local scope is explicit.\n- Follow-up slices are split or superseded instead of duplicated."
+    },
+    {
+      "id": "implementation",
+      "title": "Implement the shared contract and route slices for {{title}}",
+      "type": "task",
+      "description": "Goal:\n- Land the actual frontend behavior and visual work without blurring shared-contract changes and route-local changes.\n\nScope:\n- shared shell or shared contract work first\n- route-local implementation after the shared contract is stable\n- preserve existing runtime seams unless separately scoped\n\nAcceptance Criteria:\n- Empty, loading, success, long-content, and error states are reviewed on every touched route.\n- Long raw payloads and narrow-column stress cases stay contained.\n- Defer untouched routes explicitly instead of implying parity.",
+      "needs": [
+        "route-matrix"
+      ]
+    },
+    {
+      "id": "validation-and-reporting",
+      "title": "Validate, update docs, and sync PR reporting for {{title}}",
+      "type": "task",
+      "description": "Goal:\n- Make the shipped slice reviewable and hard to misread.\n\nScope:\n- update AGENTS or local UI guidance if rules changed\n- update PR description with covered routes, deferred routes, and validation\n- capture remaining risks and follow-up tasks\n\nAcceptance Criteria:\n- Required automated checks pass on final branch state.\n- PR description lists routes covered, routes deferred, design references, validation, and remaining risks.\n- Related Beads tasks are updated only after final branch-state validation.",
+      "needs": [
+        "implementation"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "formula": "frontend-pr-review",
+  "title": "{{title}}",
+  "description": "Context:\n- PR title: {{pr_title}}\n- Routes claimed by the PR: {{routes_claimed}}\n- Design references claimed by the PR: {{design_refs}}\n- Validation claimed by the PR: {{author_validation}}\n\nReview goal:\n- {{review_goal}}\n\nReviewer notes:\n- Use this formula as a wisp by default.\n- If you find real blocking issues, create durable tasks with discovered-from links and block the review task on them.\n- Do not approve a route-local slice as app-wide parity unless deferred sibling routes are called out explicitly.",
+  "version": 1,
+  "type": "workflow",
+  "vars": {
+    "title": {
+      "description": "Root review title",
+      "required": true
+    },
+    "pr_number": {
+      "description": "Pull request number",
+      "required": true
+    },
+    "pr_title": {
+      "description": "Pull request title",
+      "required": true
+    },
+    "routes_claimed": {
+      "description": "Routes or surfaces the PR claims to cover",
+      "default": "Not stated in the PR body"
+    },
+    "design_refs": {
+      "description": "Named design references claimed by the PR",
+      "default": "Not stated in the PR body"
+    },
+    "author_validation": {
+      "description": "Validation the author claims to have run",
+      "default": "Not stated in the PR body"
+    },
+    "review_goal": {
+      "description": "Short review goal",
+      "default": "Confirm route coverage honesty, validation evidence, and remaining risks for a frontend change."
+    }
+  },
+  "steps": [
+    {
+      "id": "scope-honesty",
+      "title": "Check route coverage and deferred routes for PR #{{pr_number}}",
+      "type": "task",
+      "description": "Acceptance Criteria:\n- You can name the actual routes touched by the branch.\n- You can name sibling routes that remain intentionally old or incomplete.\n- The PR body avoids app-wide claims for route-local work."
+    },
+    {
+      "id": "design-and-shared-contracts",
+      "title": "Check design references and shared-contract claims for PR #{{pr_number}}",
+      "type": "task",
+      "description": "Acceptance Criteria:\n- Touched routes were compared against named design references.\n- Shared shell or shared contract changes are called out explicitly.\n- The PR does not describe a local visual polish pass as shared-shell parity."
+    },
+    {
+      "id": "states-and-stress",
+      "title": "Check state coverage and stress behavior for PR #{{pr_number}}",
+      "type": "task",
+      "description": "Acceptance Criteria:\n- Fresh-thread, existing-thread, realistic success, and long-content stress states were checked.\n- If chat or tool-rendering UI changed, long raw payloads and scroll ownership were checked.\n- The branch does not introduce horizontal overflow or hidden transcript controls."
+    },
+    {
+      "id": "validation-and-beads",
+      "title": "Check validation evidence and Beads synchronization for PR #{{pr_number}}",
+      "type": "task",
+      "description": "Acceptance Criteria:\n- Automated checks in the PR body match what was actually run.\n- Closed Beads tasks match what was actually delivered.\n- Follow-up work is linked explicitly instead of left implicit."
+    },
+    {
+      "id": "findings-and-approval",
+      "title": "Record findings or approval outcome for PR #{{pr_number}}",
+      "type": "task",
+      "description": "Acceptance Criteria:\n- Real findings are created as durable discovered-from issues when needed.\n- Blocking issues are attached back to this review task.\n- Approval or change-request outcome is recorded in the PR and Beads state.",
+      "needs": [
+        "scope-honesty",
+        "design-and-shared-contracts",
+        "states-and-stress",
+        "validation-and-beads"
+      ]
+    }
+  ]
+}
