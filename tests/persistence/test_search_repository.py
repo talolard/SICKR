@@ -141,6 +141,7 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
     assert [item.rank for item in result_rows] == [1, 2]
     assert [item.product_id for item in result_rows] == ["prod-1", "prod-2"]
 
+
 def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     _seed_thread(session_factory, thread_id="thread-search-order")
