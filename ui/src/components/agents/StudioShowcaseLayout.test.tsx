@@ -25,7 +25,7 @@ const agentsOutOfOrder: AgentItem[] = [
 ];
 
 describe("StudioShowcaseLayout", () => {
-  it("renders cards in the intended editorial order", () => {
+  function renderLayout(): void {
     render(
       <StudioShowcaseLayout
         agents={agentsOutOfOrder}
@@ -36,6 +36,10 @@ describe("StudioShowcaseLayout", () => {
         title="Welcome to your Designer's Studio"
       />,
     );
+  }
+
+  it("renders cards in the intended editorial order", () => {
+    renderLayout();
 
     expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
       "/agents/search",
@@ -45,20 +49,22 @@ describe("StudioShowcaseLayout", () => {
   });
 
   it("renders the simplified consultation rail without a new badge", () => {
-    render(
-      <StudioShowcaseLayout
-        agents={agentsOutOfOrder}
-        description="Curated home design help."
-        error=""
-        eyebrow="Designer's Studio"
-        isLoadingAgents={false}
-        title="Welcome to your Designer's Studio"
-      />,
-    );
+    renderLayout();
 
     expect(screen.getByRole("button", { name: "Chat" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Suggestions" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
     expect(screen.queryByText("NEW")).not.toBeInTheDocument();
+  });
+
+  it("keeps the home shell split into dedicated left, center, and right regions", () => {
+    renderLayout();
+
+    expect(screen.getByTestId("studio-showcase-left-rail")).toBeInTheDocument();
+    expect(screen.getByTestId("studio-showcase-main")).toBeInTheDocument();
+    expect(screen.getByTestId("studio-showcase-right-rail")).toBeInTheDocument();
+    expect(
+      screen.getByText(/I've noticed your preference for Belgian linen/i),
+    ).toBeInTheDocument();
   });
 });

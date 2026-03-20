@@ -90,18 +90,24 @@ function contextItemClass(active: boolean): string {
   return [
     "flex w-full items-center gap-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] transition",
     active
-      ? "-mx-6 bg-[color:var(--surface-container-lowest)] px-6 py-4 text-primary"
-      : "px-1 py-4 text-on-surface-variant hover:text-primary",
+      ? "-ml-8 rounded-r-full bg-[color:var(--surface-container-lowest)] py-3.5 pl-8 pr-6 text-primary shadow-[0_12px_24px_rgba(32,27,16,0.06)]"
+      : "px-0 py-3.5 text-on-surface-variant hover:translate-x-1 hover:text-primary",
   ].join(" ");
 }
 
 function consultationItemClass(active: boolean): string {
   return [
-    "flex w-full items-center gap-3 rounded-[18px] px-2 py-3 text-left text-sm transition",
+    "flex w-full items-center gap-3 px-0 py-3 text-left text-sm transition",
     active
-      ? "bg-transparent font-semibold text-primary"
-      : "bg-transparent text-on-surface-variant hover:bg-[color:var(--surface-container-low)] hover:text-primary",
+      ? "font-semibold text-primary"
+      : "text-on-surface-variant hover:translate-x-1 hover:text-primary",
   ].join(" ");
+}
+
+function railGlyphShellClass(active: boolean): string {
+  return active
+    ? "flex h-5 w-5 items-center justify-center text-primary"
+    : "flex h-5 w-5 items-center justify-center text-[color:color-mix(in_srgb,var(--on-surface-variant)_78%,transparent)]";
 }
 
 function RailGlyph({ kind }: { kind: RailGlyphKind }): React.ReactElement {
@@ -301,8 +307,11 @@ export function StudioShowcaseLayout({
   const orderedAgents = orderShowcaseAgents(agents);
 
   return (
-    <section className="mx-auto grid w-full max-w-[1480px] gap-6 px-4 pb-16 pt-8 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px] xl:px-6">
-      <aside className="editorial-panel hidden min-h-[calc(100vh-9rem)] flex-col justify-between rounded-[30px] px-6 py-8 lg:flex">
+    <section className="mx-auto grid w-full max-w-[1440px] gap-0 px-0 pb-16 pt-0 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_312px]">
+      <aside
+        className="hidden bg-[color:var(--surface-container-low)] lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:min-h-[44rem] lg:flex-col lg:justify-between lg:self-start lg:px-8 lg:py-8"
+        data-testid="studio-showcase-left-rail"
+      >
         <div>
           <h2 className="editorial-display text-3xl text-[color:var(--primary)]">Context</h2>
           <p className="editorial-meta-copy mt-2 text-[10px] font-semibold uppercase tracking-[0.22em]">
@@ -316,7 +325,7 @@ export function StudioShowcaseLayout({
               key={item.label}
               type="button"
             >
-              <span className="editorial-rail-glyph">
+              <span className={railGlyphShellClass(Boolean(item.active))}>
                 <RailGlyph kind={item.icon} />
               </span>
               <span>{item.label}</span>
@@ -324,14 +333,14 @@ export function StudioShowcaseLayout({
           ))}
         </nav>
         <button
-          className="editorial-button-primary w-full rounded-[20px] px-5 py-4 text-sm font-semibold"
+          className="editorial-button-primary w-full rounded-[18px] px-5 py-4 text-sm font-semibold"
           type="button"
         >
           Update Brief
         </button>
       </aside>
 
-      <section className="min-w-0">
+      <section className="min-w-0 px-4 pt-8 md:px-6 lg:px-8" data-testid="studio-showcase-main">
         <header>
           <p className="editorial-eyebrow">{eyebrow}</p>
           <h1 className="editorial-display mt-4 max-w-4xl text-5xl leading-[0.92] text-on-surface md:text-7xl">
@@ -346,7 +355,7 @@ export function StudioShowcaseLayout({
           <p className="mt-6 rounded-[22px] bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-9 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {isLoadingAgents
             ? Array.from({ length: 3 }, (_, index) => (
                 <div
@@ -361,12 +370,12 @@ export function StudioShowcaseLayout({
               ))}
         </div>
 
-        <div className="mt-4 flex flex-wrap justify-center gap-3">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Compare Fabrics</span>
           <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Lighting Modes</span>
         </div>
 
-        <section className="mt-14" id="archives">
+        <section className="mt-16" id="archives">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="editorial-eyebrow">The Archives</p>
@@ -390,7 +399,10 @@ export function StudioShowcaseLayout({
         </section>
       </section>
 
-      <aside className="editorial-panel-elevated hidden min-h-[calc(100vh-9rem)] flex-col rounded-[30px] px-6 py-8 xl:flex">
+      <aside
+        className="hidden bg-[color:var(--surface-container-lowest)] xl:sticky xl:top-16 xl:flex xl:h-[calc(100vh-4rem)] xl:min-h-[44rem] xl:flex-col xl:self-start xl:px-7 xl:py-8"
+        data-testid="studio-showcase-right-rail"
+      >
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color:var(--primary)] text-white shadow-[0_18px_34px_rgba(24,36,27,0.18)]">
@@ -406,13 +418,13 @@ export function StudioShowcaseLayout({
             </div>
           </div>
 
-          <div className="editorial-note-card editorial-body-copy mt-6 rounded-[24px] px-4 py-5 text-sm leading-7">
-            I&apos;ve noticed your preference for Belgian linen and quiet forest tones. Would you
-            like me to curate matching textures for the living room?
+          <div className="editorial-body-copy mt-5 rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4 text-sm leading-7">
+            I&apos;ve noticed your preference for Belgian linen. Would you like me to curate some
+            matching textures for the living room?
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-1">
+        <div className="mt-9 flex flex-col gap-1">
           {consultationItems.map((item) => (
             <button
               className={consultationItemClass(Boolean(item.active))}
@@ -420,7 +432,7 @@ export function StudioShowcaseLayout({
               type="button"
             >
               <span className="flex items-center gap-3">
-                <span className="editorial-rail-glyph">
+                <span className={railGlyphShellClass(Boolean(item.active))}>
                   <RailGlyph kind={item.icon} />
                 </span>
                 <span className="text-sm font-semibold">{item.label}</span>
@@ -431,7 +443,7 @@ export function StudioShowcaseLayout({
 
         <div className="editorial-subtle-separator mt-auto h-px w-full" />
         <button className="mt-5 flex items-center gap-3 px-0 pb-0 pt-5 text-left text-sm text-on-surface-variant" type="button">
-          <span className="editorial-rail-glyph">
+          <span className={railGlyphShellClass(false)}>
             <RailGlyph kind="help" />
           </span>
           <span className="font-medium">Help &amp; Resources</span>
