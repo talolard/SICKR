@@ -12,6 +12,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.shared import (
+    SHARED_CONTEXT_TOOL_NAMES,
     analysis_repository,
     build_shared_context_tools,
     require_room_id,
@@ -44,10 +45,7 @@ from ikea_agent.tools.image_analysis import segment_image_with_prompt as run_ima
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
-    "remember_room_fact",
-    "remember_project_fact",
-    "rename_room",
-    "set_room_type",
+    *SHARED_CONTEXT_TOOL_NAMES,
     "list_uploaded_images",
     "detect_objects_in_image",
     "estimate_depth_map",

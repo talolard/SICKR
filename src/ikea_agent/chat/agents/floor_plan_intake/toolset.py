@@ -14,6 +14,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
 from ikea_agent.chat.agents.shared import (
+    SHARED_CONTEXT_TOOL_NAMES,
     build_shared_context_tools,
     floor_plan_repository,
     require_room_id,
@@ -35,10 +36,7 @@ from ikea_agent.tools.floorplanner.yaml_codec import dump_scene_yaml, parse_scen
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
-    "remember_room_fact",
-    "remember_project_fact",
-    "rename_room",
-    "set_room_type",
+    *SHARED_CONTEXT_TOOL_NAMES,
     "render_floor_plan",
     "load_floor_plan_scene_yaml",
     "export_floor_plan_scene_yaml",

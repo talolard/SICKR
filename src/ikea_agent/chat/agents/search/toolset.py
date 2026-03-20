@@ -15,6 +15,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
+    SHARED_CONTEXT_TOOL_NAMES,
     build_room_3d_snapshot_context_payload,
     build_shared_context_tools,
     require_room_id,
@@ -40,10 +41,7 @@ from ikea_agent.shared.types import (
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
-    "remember_room_fact",
-    "remember_project_fact",
-    "rename_room",
-    "set_room_type",
+    *SHARED_CONTEXT_TOOL_NAMES,
     "run_search_graph",
     "propose_bundle",
     "list_room_3d_snapshot_context",

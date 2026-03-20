@@ -112,6 +112,21 @@ class FloorPlanRepository:
             return None
         return _snapshot_from_row(row)
 
+    def list_revisions(self, *, room_id: str) -> list[FloorPlanRevisionSnapshot]:
+        """Return all persisted revisions for one room ordered newest-first."""
+
+        with self._session_factory() as session:
+            rows = (
+                session.execute(
+                    _snapshot_select_statement()
+                    .where(FloorPlanRevisionRecord.room_id == room_id)
+                    .order_by(FloorPlanRevisionRecord.revision.desc())
+                )
+                .mappings()
+                .all()
+            )
+        return [_snapshot_from_row(row) for row in rows]
+
     def get_revision(self, *, room_id: str, revision: int) -> FloorPlanRevisionSnapshot | None:
         """Load a specific revision for one room."""
 

@@ -130,3 +130,46 @@ def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
 
     assert first.ref.attachment_id != second.ref.attachment_id
     assert len(thread_count) == 2
+
+
+def test_asset_repository_lists_room_images_only_for_user_uploads(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = AssetRepository(session_factory)
+    store = AttachmentStore(
+        tmp_path / "artifacts",
+        asset_repository=repository,
+    )
+
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-images",
+        run_id=None,
+    ):
+        first = store.save_image_bytes(
+            content=b"room-image-1",
+            mime_type="image/png",
+            filename="room-1.png",
+            kind="user_upload",
+        )
+        _generated = store.save_image_bytes(
+            content=b"floor-plan-preview",
+            mime_type="image/png",
+            filename="floor-plan.png",
+            created_by_tool="render_floor_plan",
+            kind="floor_plan_png",
+        )
+        second = store.save_image_bytes(
+            content=b"room-image-2",
+            mime_type="image/jpeg",
+            filename="room-2.jpg",
+            kind="user_upload",
+        )
+
+    listed = repository.list_room_images(room_id=DEFAULT_DEV_ROOM_ID)
+
+    assert [item.asset_id for item in listed] == [
+        second.ref.attachment_id,
+        first.ref.attachment_id,
+    ]
+    assert [item.kind for item in listed] == ["user_upload", "user_upload"]
+    assert [item.file_name for item in listed] == ["room-2.jpg", "room-1.png"]

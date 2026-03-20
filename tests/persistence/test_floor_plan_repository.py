@@ -119,3 +119,33 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     assert confirmed.revision == 1
     assert confirmed.confirmed_at is not None
     assert confirmed.confirmation_note == "User confirmed this layout."
+
+
+def test_floor_plan_repository_lists_room_revisions_newest_first(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    repository = FloorPlanRepository(session_factory)
+    first = _scene("first")
+    second = _scene("second")
+
+    repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-first",
+        scene=first,
+        summary=scene_to_summary(first),
+        svg_asset_id=None,
+        png_asset_id=None,
+    )
+    repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-second",
+        scene=second,
+        summary=scene_to_summary(second),
+        svg_asset_id=None,
+        png_asset_id=None,
+    )
+
+    revisions = repository.list_revisions(room_id=DEFAULT_DEV_ROOM_ID)
+
+    assert [item.revision for item in revisions] == [2, 1]
+    assert revisions[0].thread_id == "thread-floor-second"
+    assert revisions[1].thread_id == "thread-floor-first"

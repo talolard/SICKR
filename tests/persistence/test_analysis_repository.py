@@ -258,4 +258,64 @@ def test_record_analysis_accepts_new_thread_for_same_room_assets(tmp_path: Path)
         ).one()
 
     assert row.room_id == DEFAULT_DEV_ROOM_ID
-    assert row.thread_id == "thread-analysis-followup"
+
+
+def test_list_room_analyses_returns_room_wide_history(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+    ):
+        first = store.save_image_bytes(
+            content=b"first-image",
+            mime_type="image/png",
+            filename="first.png",
+            kind="user_upload",
+        )
+        second = store.save_image_bytes(
+            content=b"second-image",
+            mime_type="image/png",
+            filename="second.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    repository.record_analysis(
+        tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+        input_asset_id=first.ref.attachment_id,
+        request_json={"image": {"attachment_id": first.ref.attachment_id}},
+        result_json={"detections": [{"label": "chair"}]},
+        detections=[],
+    )
+    repository.record_analysis(
+        tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-followup",
+        run_id=None,
+        input_asset_id=first.ref.attachment_id,
+        input_asset_ids=[first.ref.attachment_id, second.ref.attachment_id],
+        request_json={"images": [first.ref.attachment_id, second.ref.attachment_id]},
+        result_json={"room_type": "bedroom"},
+        detections=[],
+    )
+
+    listed = repository.list_room_analyses(room_id=DEFAULT_DEV_ROOM_ID)
+
+    assert [item.tool_name for item in listed] == [
+        "get_room_detail_details_from_photo",
+        "detect_objects_in_image",
+    ]
+    assert listed[0].thread_id == "thread-analysis-followup"
+    assert listed[0].input_asset_ids == (
+        first.ref.attachment_id,
+        second.ref.attachment_id,
+    )
+    assert listed[0].request["images"] == [first.ref.attachment_id, second.ref.attachment_id]
+    assert listed[1].thread_id == "thread-analysis-source"

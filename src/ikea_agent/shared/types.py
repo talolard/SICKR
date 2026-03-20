@@ -8,7 +8,7 @@ runtime persistence, and FastAPI responses without losing validation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -334,3 +334,107 @@ class AttachmentRef:
     width: int | None
     height: int | None
     file_name: str | None = None
+
+
+class AttachmentRefPayload(BaseModel):
+    """JSON-serializable attachment reference used by tool inputs and shared reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attachment_id: str
+    mime_type: str
+    uri: str
+    width: int | None = None
+    height: int | None = None
+    file_name: str | None = None
+
+    @classmethod
+    def from_ref(cls, ref: AttachmentRef) -> AttachmentRefPayload:
+        """Build payload model from the runtime dataclass variant."""
+
+        return cls(
+            attachment_id=ref.attachment_id,
+            mime_type=ref.mime_type,
+            uri=ref.uri,
+            width=ref.width,
+            height=ref.height,
+            file_name=ref.file_name,
+        )
+
+
+class RoomImageArtifact(BaseModel):
+    """One room-owned uploaded image visible to shared agent reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attachment: AttachmentRefPayload
+    thread_id: str
+    run_id: str | None
+    created_by_tool: str | None
+    created_at: str
+
+
+class FloorPlanRevisionOverview(BaseModel):
+    """Compact persisted floor-plan revision metadata for room-wide reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    floor_plan_revision_id: str
+    revision: int
+    scene_level: str
+    summary: dict[str, Any]
+    thread_id: str
+    confirmed_at: str | None
+    confirmation_note: str | None
+    created_at: str
+
+
+class FloorPlanArtifact(BaseModel):
+    """Latest persisted floor-plan scene plus linked render attachments."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    floor_plan_revision_id: str
+    room_id: str
+    thread_id: str
+    revision: int
+    scene_level: str
+    scene: dict[str, Any]
+    summary: dict[str, Any]
+    svg_attachment: AttachmentRefPayload | None
+    png_attachment: AttachmentRefPayload | None
+    confirmed_at: str | None
+    confirmed_by_run_id: str | None
+    confirmation_note: str | None
+    created_at: str
+
+
+class RoomImageAnalysisArtifact(BaseModel):
+    """One persisted image-analysis result visible across threads in a room."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: str
+    tool_name: str
+    thread_id: str
+    run_id: str | None
+    input_images: list[AttachmentRefPayload]
+    request: dict[str, Any]
+    result: dict[str, Any]
+    created_at: str
+
+
+class Room3DSnapshotArtifact(BaseModel):
+    """One persisted room 3D snapshot with its linked snapshot attachment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    room_3d_snapshot_id: str
+    thread_id: str
+    run_id: str | None
+    snapshot_image: AttachmentRefPayload | None
+    room_3d_asset_id: str | None
+    camera: dict[str, Any]
+    lighting: dict[str, Any]
+    comment: str | None
+    created_at: str
