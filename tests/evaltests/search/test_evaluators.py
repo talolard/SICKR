@@ -6,6 +6,7 @@ from typing import cast
 from evals.search.evaluators import (
     BundleToolCallContractEvaluator,
     FinalOutputContractEvaluator,
+    SearchToolCallContractEvaluator,
 )
 from evals.search.fixtures import SEARCH_EVAL_FIXTURES
 from evals.search.types import SearchEvalInput
@@ -93,6 +94,56 @@ def test_bundle_tool_call_contract_evaluator_requires_bundle_when_configured() -
     reason = result["bundle_call_contract"].reason
     assert reason is not None
     assert "Expected `propose_bundle`" in reason
+
+
+def test_search_tool_call_contract_evaluator_requires_search_when_configured() -> None:
+    evaluator = SearchToolCallContractEvaluator()
+    ctx = _context(
+        inputs=SearchEvalInput(
+            user_message="Find a few compact desks.",
+            require_search_call=True,
+        ),
+        output="I found some desks.",
+    )
+
+    result = cast(
+        "dict[str, EvaluationReason]",
+        evaluator.evaluate(ctx),
+    )
+
+    assert result["search_call_contract"].value is False
+    reason = result["search_call_contract"].reason
+    assert reason is not None
+    assert "Expected `run_search_graph`" in reason
+
+
+def test_search_tool_call_contract_evaluator_forbids_search_when_configured() -> None:
+    evaluator = SearchToolCallContractEvaluator()
+    ctx = _context(
+        inputs=SearchEvalInput(
+            user_message="Formalize the already grounded bundle.",
+            forbid_search_call=True,
+        ),
+        output="The bundle is ready.",
+        spans=[
+            _FakeSpan(
+                attributes={
+                    "gen_ai.tool.name": "run_search_graph",
+                    "tool_arguments": '{"queries":[{"semantic_query":"desk"}]}',
+                }
+            )
+        ],
+    )
+
+    result = cast(
+        "dict[str, EvaluationReason]",
+        evaluator.evaluate(ctx),
+    )
+
+    assert result["search_call_contract"].value is False
+    reason = result["search_call_contract"].reason
+    assert reason is not None
+    assert "forbids search" in reason
 
 
 def test_bundle_tool_call_contract_evaluator_forbids_bundle_when_configured() -> None:
