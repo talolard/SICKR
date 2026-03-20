@@ -22,6 +22,7 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 ## Workflow invariants
 
 - Mutating implementation work must happen in a dedicated worktree. Start new work with `make agent-start ...`; for existing assigned work, stay in the provided worktree. See [docs/worktree_multi_agent_workflow.md](docs/worktree_multi_agent_workflow.md).
+- `make dev human` is reserved for Tal's canonical checkout and stable human-owned slot `90`. Agents must not use it; agents should use `make agent-start ...` in a dedicated worktree instead.
 - Keep one worktree per epic or major task branch unless a human explicitly overrides that.
 - Merge runs are explicit and handled from the merge queue; use `make merge-list` and follow [docs/merge_runbook.md](docs/merge_runbook.md).
 - Create or update design plans in `plans/` before substantial changes.
@@ -62,6 +63,8 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - CopilotKit and AG-UI backend protocol notes: [external_docs/pydantic_ai_ag_ui.md](external_docs/pydantic_ai_ag_ui.md)
 - UI integration spec: [spec/ui/pydanticai_copilotkit_integration.md](spec/ui/pydanticai_copilotkit_integration.md)
 - Frontend planning and execution guidance: [docs/frontend_delivery_guidelines.md](docs/frontend_delivery_guidelines.md)
+- Frontend epic and task authoring guidance: [docs/frontend_epic_authoring.md](docs/frontend_epic_authoring.md)
+- Frontend PR review and validation guidance: [docs/frontend_pr_review_guidelines.md](docs/frontend_pr_review_guidelines.md)
 - Effective patterns from the March 18 floor-plan fixes:
   - prefer capability-based shared agent-shell logic over hard-coding one agent into shared flows
   - use in-flow chat primitives for page content and reserve sidebar primitives for actual sidebar UX

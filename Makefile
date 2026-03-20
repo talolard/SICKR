@@ -1,4 +1,5 @@
 WORKTREE_ENV_FILE ?= .tmp_untracked/worktree.env
+HUMAN_DEV_SLOT ?= 90
 
 ifneq ("$(wildcard $(WORKTREE_ENV_FILE))","")
 include $(WORKTREE_ENV_FILE)
@@ -8,7 +9,7 @@ endif
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
-	dev-all dev-all-mock reset agent-start merge-list merge-list-all \
+	dev human dev-human dev-all dev-all-mock reset agent-start merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
@@ -202,6 +203,14 @@ ui-test-e2e-real-ui-smoke:
 	fi; \
 	curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1 || true; \
 	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PLAYWRIGHT_REUSE_EXISTING_SERVER=1 RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
+
+dev: dev-human
+
+human: dev-human
+
+# Human-only convenience entrypoint in the canonical checkout.
+dev-human:
+	@HUMAN_DEV_SLOT="$(HUMAN_DEV_SLOT)" ./scripts/human_dev.sh
 
 dev-all:
 	@set -e; \
