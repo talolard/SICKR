@@ -138,7 +138,6 @@ function ArrowGlyph(): React.ReactElement {
     </svg>
   );
 }
-
 export function AgentLauncherCard({
   agent,
 }: AgentLauncherCardProps): React.ReactElement {
@@ -175,7 +174,7 @@ export function AgentLauncherCard({
           <span className="inline-flex w-fit rounded-full bg-surface-container-lowest px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant shadow-[0_10px_20px_rgba(32,27,16,0.05)]">
             {agentLabel}
           </span>
-          <p className="editorial-body-copy mt-3 text-sm leading-6">
+          <p className="editorial-body-copy mt-3 max-w-[18rem] text-sm leading-6">
             {content.summary}
           </p>
         </div>

@@ -25,7 +25,6 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - center work surface
   - right consultation rail
 - Route-specific differences should live inside the center work surface and helper copy, not in completely different page composition rules.
-
 ## Scope
 
 - `ui/` owns product-facing presentation, layout, interaction patterns, and browser-side state management.
