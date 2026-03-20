@@ -26,13 +26,17 @@ export function DepthEstimationToolRenderer(
 ): ReactElement {
   const { result } = props;
   return (
-    <section className="rounded border bg-white p-2" data-testid="depth-estimation-tool-output">
+    <section className="space-y-3" data-testid="depth-estimation-tool-output">
       <ImageToolOutputRenderer caption={result.caption} images={result.images} />
-      <p className="mt-2 text-xs text-gray-600">
-        Params: ensemble {result.parameters_used.ensemble_size}, resolution{" "}
-        {result.parameters_used.processing_res}, resample {result.parameters_used.resample_method},
-        seed {result.parameters_used.seed}, format {result.parameters_used.output_format}
-      </p>
+      <div className="rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4">
+        <p className="editorial-eyebrow">Depth settings</p>
+        <p className="mt-3 text-xs leading-6 text-on-surface-variant">
+          Params: ensemble {result.parameters_used.ensemble_size}, resolution{" "}
+          {result.parameters_used.processing_res}, resample{" "}
+          {result.parameters_used.resample_method}, seed {result.parameters_used.seed}, format{" "}
+          {result.parameters_used.output_format}
+        </p>
+      </div>
     </section>
   );
 }

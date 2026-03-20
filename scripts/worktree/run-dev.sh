@@ -76,7 +76,7 @@ if [[ -z "${BACKEND_PORT}" || -z "${UI_PORT}" ]]; then
   exit 1
 fi
 
-export DUCKDB_PATH MILVUS_LITE_URI ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
 export PY_AG_UI_URL="http://127.0.0.1:${BACKEND_PORT}/ag-ui/"
 
 if [[ "${MODE}" == "both" || "${MODE}" == "backend" ]]; then
@@ -87,7 +87,7 @@ if [[ "${MODE}" == "both" || "${MODE}" == "ui" ]]; then
 fi
 
 if [[ "${MODE}" == "backend" ]]; then
-  exec make chat PORT="${BACKEND_PORT}"
+  exec make chat PORT="${BACKEND_PORT}" DATABASE_URL="${DATABASE_URL}"
 fi
 
 if [[ "${MODE}" == "ui" ]]; then
@@ -95,7 +95,7 @@ if [[ "${MODE}" == "ui" ]]; then
 fi
 
 trap 'kill 0' INT TERM EXIT
-make chat PORT="${BACKEND_PORT}" &
+make chat PORT="${BACKEND_PORT}" DATABASE_URL="${DATABASE_URL}" &
 sleep 2
 make ui-dev-real UI_PORT="${UI_PORT}" PY_AG_UI_URL="${PY_AG_UI_URL}" &
 wait

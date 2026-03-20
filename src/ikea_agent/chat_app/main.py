@@ -137,11 +137,11 @@ def create_app(
             app,
             thread_query_repository=thread_query_repository,
         )
-    product_image_catalog = getattr(chat_runtime, "product_image_catalog", None)
-    if product_image_catalog is not None:
+    catalog_repository = getattr(chat_runtime, "catalog_repository", None)
+    if catalog_repository is not None:
         _register_product_image_routes(
             app,
-            product_image_catalog=product_image_catalog,
+            catalog_repository=catalog_repository,
         )
 
     catalog = list_agent_catalog()

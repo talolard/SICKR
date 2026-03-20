@@ -15,6 +15,7 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.search.toolset import build_search_toolset
@@ -28,7 +29,7 @@ from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.main import create_app
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine, create_session_factory
+from ikea_agent.shared.sqlalchemy_db import create_session_factory
 from ikea_agent.tools.preferences import PreferenceNoteInput, note_to_memory_input
 
 PREFERENCE_INSTRUCTION: Callable[[RunContext[SearchAgentDeps]], str] = cast(
@@ -48,7 +49,7 @@ def _set_fake_google_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _runtime(tmp_path: Path) -> _PersistenceRuntime:
-    engine = create_duckdb_engine(str(tmp_path / "revealed_preference_api_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "revealed_preference_api_test.sqlite")
     ensure_persistence_schema(engine)
     return _PersistenceRuntime(
         sqlalchemy_engine=engine,

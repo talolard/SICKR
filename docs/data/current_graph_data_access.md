@@ -8,7 +8,7 @@ The active orchestration in `src/ikea_agent/chat/search_pipeline.py` runs:
 
 1. Build `RetrievalRequest` from user query + filters.
 2. Embed query text via runtime embedder (`chat/runtime.py`).
-3. Search Milvus Lite vectors and hydrate candidates from DuckDB.
+3. Search Postgres `catalog.product_embeddings` directly with pgvector and hydrate typed catalog rows in the same repository query.
 4. Rerank candidates with the configured backend.
 5. Apply MMR diversification.
 6. Return `SearchGraphToolResult` for tool/UI rendering.
@@ -23,15 +23,19 @@ deployments should stay on the lexical backend.
 `run_search_pipeline_batch` uses runtime helpers in `chat/runtime.py`:
 
 1. Embed query text through `pydantic_ai.Embedder`.
-2. Search Milvus Lite collection for nearest vectors.
-3. Hydrate candidate keys in DuckDB (`app.products_canonical` + `app.product_embeddings`).
-4. Apply structured filters in inline SQL.
+2. Run one SQLAlchemy-built pgvector query against `catalog.product_embeddings` joined with
+   `catalog.products_canonical`.
+3. Apply structured filters, sorting, and limits inside that repository query.
 
 ## Raw Data vs Embeddings
 
-- Raw product metadata: DuckDB `app.products_canonical`.
-- Embedding vectors at runtime: Milvus Lite collection.
-- Embedding source-of-truth snapshots: DuckDB `app.product_embeddings` and parquet artifacts in `data/parquet/`.
+- Raw product metadata: Postgres `catalog.products_canonical`.
+- Embedding vectors at runtime: Postgres `catalog.product_embeddings` with pgvector.
+- Embedding source-of-truth snapshots: Postgres `catalog.product_embeddings`, plus canonical parquet
+  artifacts in `data/parquet/`.
+- Neighbor similarities: Postgres computes pairwise candidate-set similarities directly from
+  `catalog.product_embeddings` with pgvector distance expressions; `catalog.product_embedding_neighbors`
+  is now an optional legacy surface only.
 
 ## Legacy State Clarification
 

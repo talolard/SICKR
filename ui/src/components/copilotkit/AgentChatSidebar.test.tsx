@@ -34,9 +34,10 @@ vi.mock("@copilotkit/react-ui", () => ({
 
 describe("AgentChatSidebar", () => {
   it("renders the richer inline chat pane around CopilotKit chat", () => {
-    render(<AgentChatSidebar />);
+    render(<AgentChatSidebar currentAgent="floor_plan_intake" />);
 
-    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByText("Design Consultation")).toBeInTheDocument();
+    expect(screen.getByText("Architectural mode active")).toBeInTheDocument();
     expect(screen.getByTestId("mock-copilot-chat")).toHaveClass("agent-chat-pane");
     expect(screen.getByText("This request failed.")).toBeInTheDocument();
     expect(screen.getByText("Model request failed.")).toBeInTheDocument();

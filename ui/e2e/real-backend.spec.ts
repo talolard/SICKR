@@ -95,6 +95,9 @@ test.describe("real backend smoke", () => {
     test.setTimeout(120_000);
 
     await page.goto("/agents/search");
+    await expect(page.getByTestId("new-thread-button")).toBeVisible();
+    await page.getByTestId("new-thread-button").click();
+
     const chatInput = page.getByPlaceholder("Type a message...");
     const sendButton = page.getByRole("button", { name: "Send" });
     await expect(chatInput).toBeVisible();
@@ -106,14 +109,11 @@ test.describe("real backend smoke", () => {
     await expect(sendButton).toBeEnabled({ timeout: 10_000 });
     await sendButton.click();
     await expect(chatInput).toHaveValue("", { timeout: 10_000 });
-    const disabledMessage =
-      "Live model requests are disabled. Set ALLOW_MODEL_REQUESTS=1 and GEMINI_API_KEY/GOOGLE_API_KEY for real responses.";
+
+    const assistantMessages = page.locator(".agent-chat-pane .copilotKitAssistantMessage");
     await expect
-      .poll(
-        async () => ((await page.locator("body").textContent()) ?? "").includes(disabledMessage),
-        { timeout: 60_000 },
-      )
-      .toBe(true);
+      .poll(async () => await assistantMessages.count(), { timeout: 60_000 })
+      .toBeGreaterThan(0);
   });
 
   test("creates a fresh thread on search and floor-plan agent pages", async ({ page }) => {

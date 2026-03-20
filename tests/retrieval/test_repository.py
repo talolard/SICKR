@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import Engine
+from sqlalchemy.dialects import postgresql
+from tests.shared.sqlite_db import create_sqlite_engine
 
-from ikea_agent.retrieval.catalog_repository import CatalogRepository
-from ikea_agent.retrieval.service import VectorMatch
+from ikea_agent.retrieval.catalog_repository import (
+    CatalogRepository,
+    _build_postgres_neighbor_similarity_statement,
+    _build_postgres_search_statement,
+)
+from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,
@@ -22,69 +28,111 @@ def _setup_schema(engine: Engine) -> None:
 
 def _seed_products(engine: Engine) -> None:
     with engine.begin() as connection:
-        connection.exec_driver_sql(
-            """
-            INSERT INTO app.products_canonical (
-                canonical_product_key,
-                product_id,
-                unique_id,
-                country,
-                product_name,
-                display_title,
-                product_type,
-                description_text,
-                main_category,
-                sub_category,
-                dimensions_text,
-                width_cm,
-                depth_cm,
-                height_cm,
-                price_eur,
-                currency,
-                rating,
-                rating_count,
-                badge,
-                online_sellable,
-                url,
-                source_updated_at
-            ) VALUES
-                (
-                    '1-DE', 1, '1-Germany', 'Germany', 'Desk One',
-                    'Desk One Compact Workstation', 'Desk', 'Work desk',
-                    'tables-desks', 'desks', '120x60x75 cm', 120, 60, 75, 100, 'EUR',
-                    4.0, 10, 'none', true, 'https://example.com/1', now()
-                ),
-                (
-                    '2-DE', 2, '2-Germany', 'Germany', 'Desk Two', null, 'Desk', 'Compact desk',
-                    'tables-desks', 'desks', '100x50x74 cm', 100, 50, 74, 80, 'EUR',
-                    4.5, 20, 'none', true, 'https://example.com/2', now()
-                )
-            """
+        connection.execute(
+            products_canonical.insert(),
+            [
+                {
+                    "canonical_product_key": "1-DE",
+                    "product_id": 1,
+                    "unique_id": "1-Germany",
+                    "country": "Germany",
+                    "product_name": "Desk One",
+                    "display_title": "Desk One Compact Workstation",
+                    "product_type": "Desk",
+                    "description_text": "Work desk",
+                    "main_category": "tables-desks",
+                    "sub_category": "desks",
+                    "dimensions_text": "120x60x75 cm",
+                    "width_cm": 120.0,
+                    "depth_cm": 60.0,
+                    "height_cm": 75.0,
+                    "price_eur": 100.0,
+                    "currency": "EUR",
+                    "rating": 4.0,
+                    "rating_count": 10,
+                    "badge": "none",
+                    "online_sellable": True,
+                    "url": "https://example.com/1",
+                    "source_updated_at": datetime.now(UTC),
+                },
+                {
+                    "canonical_product_key": "2-DE",
+                    "product_id": 2,
+                    "unique_id": "2-Germany",
+                    "country": "Germany",
+                    "product_name": "Desk Two",
+                    "display_title": None,
+                    "product_type": "Desk",
+                    "description_text": "Compact desk",
+                    "main_category": "tables-desks",
+                    "sub_category": "desks",
+                    "dimensions_text": "100x50x74 cm",
+                    "width_cm": 100.0,
+                    "depth_cm": 50.0,
+                    "height_cm": 74.0,
+                    "price_eur": 80.0,
+                    "currency": "EUR",
+                    "rating": 4.5,
+                    "rating_count": 20,
+                    "badge": "none",
+                    "online_sellable": True,
+                    "url": "https://example.com/2",
+                    "source_updated_at": datetime.now(UTC),
+                },
+            ],
         )
-        connection.exec_driver_sql(
-            """
-            INSERT INTO app.product_embeddings (
-                canonical_product_key,
-                embedding_model,
-                run_id,
-                embedding_vector,
-                embedded_text,
-                embedded_at
-            ) VALUES
-                (
-                    '1-DE', 'gemini-embedding-001', 'run-1',
-                    [1.0, 0.0], 'line1\\nline2', now()
-                ),
-                (
-                    '2-DE', 'gemini-embedding-001', 'run-1',
-                    [0.0, 1.0], 'desk two', now()
-                )
-            """
+        connection.execute(
+            product_embeddings.insert(),
+            [
+                {
+                    "canonical_product_key": "1-DE",
+                    "embedding_model": "gemini-embedding-001",
+                    "run_id": "run-1",
+                    "embedding_vector": [1.0, 0.0],
+                    "embedded_text": "line1\\nline2",
+                    "embedded_at": datetime.now(UTC),
+                },
+                {
+                    "canonical_product_key": "2-DE",
+                    "embedding_model": "gemini-embedding-001",
+                    "run_id": "run-1",
+                    "embedding_vector": [0.0, 1.0],
+                    "embedded_text": "desk two",
+                    "embedded_at": datetime.now(UTC),
+                },
+            ],
+        )
+        connection.execute(
+            product_images.insert(),
+            [
+                {
+                    "image_asset_key": "1-primary.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 5,
+                    "is_og_image": True,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": "catalog/1-primary.jpg",
+                    "public_url": "https://example.com/images/1-primary.jpg",
+                    "local_path": None,
+                },
+                {
+                    "image_asset_key": "1-detail.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 2,
+                    "is_og_image": False,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": "catalog/1-detail.jpg",
+                    "public_url": "https://example.com/images/1-detail.jpg",
+                    "local_path": None,
+                },
+            ],
         )
 
 
 def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_1.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_1.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 
@@ -95,11 +143,9 @@ def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> N
         dimensions=DimensionFilter(width=DimensionAxisFilter(min_cm=110.0, max_cm=130.0)),
     )
 
-    results = repository.hydrate_candidates(
-        candidates=[
-            VectorMatch(canonical_product_key="1-DE", semantic_score=0.95),
-            VectorMatch(canonical_product_key="2-DE", semantic_score=0.85),
-        ],
+    results = repository.search_semantic_products(
+        query_vector=(1.0, 0.0),
+        embedding_model="gemini-embedding-001",
         filters=filters,
         result_limit=10,
     )
@@ -111,7 +157,7 @@ def test_hydrate_candidates_filters_by_price_and_dimensions(tmp_path: Path) -> N
 
 
 def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Path) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_2.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_2.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 
@@ -121,23 +167,22 @@ def test_hydrate_candidates_filters_by_include_and_exclude_keyword(tmp_path: Pat
         exclude_keyword="compact",
     )
 
-    results = repository.hydrate_candidates(
-        candidates=[
-            VectorMatch(canonical_product_key="1-DE", semantic_score=0.9),
-            VectorMatch(canonical_product_key="2-DE", semantic_score=0.8),
-        ],
+    results = repository.search_semantic_products(
+        query_vector=(1.0, 0.0),
+        embedding_model="gemini-embedding-001",
         filters=filters,
         result_limit=10,
     )
 
     assert len(results) == 1
     assert results[0].canonical_product_key == "1-DE"
+    assert results[0].rank_explanation == "legacy cosine score 1.000"
 
 
 def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
     tmp_path: Path,
 ) -> None:
-    engine = create_duckdb_engine(str(tmp_path / "retrieval_test_3.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_3.sqlite")
     _setup_schema(engine)
     _seed_products(engine)
 
@@ -148,3 +193,101 @@ def test_read_product_by_key_preserves_family_name_and_exposes_display_title(
     assert product is not None
     assert product.product_name == "Desk One"
     assert product.display_title == "Desk One Compact Workstation"
+
+
+def test_read_image_urls_by_product_keys_returns_ordered_proxy_urls(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_4.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+
+    repository = CatalogRepository(engine)
+
+    image_urls = repository.read_image_urls_by_product_keys(
+        canonical_product_keys=["1-DE"],
+        serving_strategy="backend_proxy",
+        base_url=None,
+    )
+
+    assert image_urls == {
+        "1-DE": (
+            "/static/product-images/1",
+            "/static/product-images/1/2",
+        )
+    }
+
+
+def test_resolve_product_image_path_returns_ranked_local_path(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_5.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    primary_path = image_root / "primary.jpg"
+    detail_path = image_root / "detail.jpg"
+    primary_path.write_bytes(b"primary")
+    detail_path.write_bytes(b"detail")
+    with engine.begin() as connection:
+        connection.execute(product_images.delete())
+        connection.execute(
+            product_images.insert(),
+            [
+                {
+                    "image_asset_key": "1-primary-local.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 5,
+                    "is_og_image": True,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": str(primary_path),
+                    "public_url": None,
+                    "local_path": str(primary_path),
+                },
+                {
+                    "image_asset_key": "1-detail-local.jpg",
+                    "canonical_product_key": "1-DE",
+                    "product_id": "1",
+                    "image_rank": 2,
+                    "is_og_image": False,
+                    "storage_backend_kind": "local_shared_root",
+                    "storage_locator": str(detail_path),
+                    "public_url": None,
+                    "local_path": str(detail_path),
+                },
+            ],
+        )
+
+    repository = CatalogRepository(engine)
+
+    assert repository.resolve_product_image_path(product_id="1") == primary_path.resolve()
+    assert repository.resolve_product_image_path(product_id="1", ordinal=2) == detail_path.resolve()
+
+
+def test_postgres_search_statement_uses_pgvector_distance_and_sqlalchemy_filters() -> None:
+    filters = RetrievalFilters(
+        category="tables-desks",
+        include_keyword="work",
+        exclude_keyword="compact",
+        price=PriceFilterEUR(min_eur=90.0, max_eur=120.0),
+        dimensions=DimensionFilter(width=DimensionAxisFilter(min_cm=110.0, max_cm=130.0)),
+    )
+
+    compiled = str(_build_postgres_search_statement(filters).compile(dialect=postgresql.dialect()))
+
+    assert "catalog.product_embeddings.embedding_vector <=> %(query_vector)s" in compiled
+    assert "JOIN catalog.products_canonical" in compiled
+    assert "catalog.products_canonical.main_category = %(category)s" in compiled
+    assert "catalog.products_canonical.price_eur >= %(price_min_eur)s" in compiled
+    assert "catalog.products_canonical.width_cm >= %(width_min_cm)s" in compiled
+    assert "LIKE '%%' || %(include_keyword)s || '%%'" in compiled
+
+
+def test_postgres_neighbor_similarity_statement_uses_pgvector_pair_distance() -> None:
+    compiled = str(
+        _build_postgres_neighbor_similarity_statement().compile(dialect=postgresql.dialect())
+    )
+
+    assert "source_embeddings.embedding_vector <=> neighbor_embeddings.embedding_vector" in compiled
+    assert "source_embeddings.canonical_product_key IN (__[POSTCOMPILE_source_keys])" in compiled
+    assert (
+        "neighbor_embeddings.canonical_product_key IN (__[POSTCOMPILE_neighbor_keys])" in compiled
+    )

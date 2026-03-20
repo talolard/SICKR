@@ -46,7 +46,8 @@ describe("FloorPlanPreviewPanel", () => {
   it("renders empty state", () => {
     render(<FloorPlanPreviewPanel preview={null} />);
 
-    expect(screen.getByText("Floor Plan Preview")).toBeInTheDocument();
+    expect(screen.getByText("Floor plan preview")).toBeInTheDocument();
+    expect(screen.getByText("Drafting surface")).toBeInTheDocument();
     expect(screen.getByText(/Render a floor plan/i)).toBeInTheDocument();
   });
 

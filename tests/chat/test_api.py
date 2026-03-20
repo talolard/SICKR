@@ -13,6 +13,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
@@ -23,7 +24,7 @@ from ikea_agent.config import get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator, BeadsTraceIssueResult
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine, create_session_factory
+from ikea_agent.shared.sqlalchemy_db import create_session_factory
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,7 +281,7 @@ def test_attachment_upload_rejects_unsupported_type() -> None:
 
 
 def _persistence_runtime(tmp_path: Path) -> _PersistenceRuntime:
-    engine = create_duckdb_engine(str(tmp_path / "trace_route_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "trace_route_test.sqlite")
     ensure_persistence_schema(engine)
     session_factory = create_session_factory(engine)
     return _PersistenceRuntime(sqlalchemy_engine=engine, session_factory=session_factory)

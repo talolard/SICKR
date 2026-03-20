@@ -10,16 +10,13 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "alembic>=1.17.1",
-  "duckdb>=1.4.0",
-  "duckdb-engine>=0.17.0",
   "fal-client>=0.9.0",
   "fastapi>=0.127.1",
   "httpx>=0.28.1",
   "logfire[fastapi]>=4.26.0",
-  "milvus-lite>=2.4.11",
-  "pymilvus[milvus-lite]>=2.6.0",
   "pydantic-ai-slim[ag-ui,google,vertexai,logfire]>=1.66.0",
   "pydantic-settings>=2.10.1",
+  "psycopg[binary]>=3.2.10",
   "pyyaml>=6.0",
   "python-dotenv>=1.1.1",
   "renovation>=0.1.1",
@@ -29,6 +26,8 @@ dependencies = [
   "usd-core>=24.8",
   "uvicorn>=0.40.0",
   "pydantic-evals>=1.67.0",
+  "pgvector>=0.4.2",
+  "pyarrow>=23.0.1",
 ]
 
 [dependency-groups]

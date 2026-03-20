@@ -7,9 +7,11 @@ shared sidecar output root:
 
 ## Runtime Contract
 
-- Startup builds an in-memory index from completed run outputs under `runs/`.
-- Each run prefers `catalog.parquet` when present and falls back to `catalog.jsonl`.
-- Rows without a valid `local_path` on disk are ignored.
+- Startup builds an in-memory index from seeded Postgres rows in `catalog.product_images`.
+- Seed inputs still come from completed sidecar run outputs under `runs/`; the Postgres seed step
+  prefers `catalog.parquet` when present and falls back to `catalog.jsonl`.
+- Rows may point at local shared-root files, direct public URLs, or both.
+- Backend-proxy serving only works for rows with a readable `local_path` on disk.
 - Image ranking prefers `is_og_image`, then `image_rank`, then canonical URL.
 
 ## UI Contract
@@ -17,9 +19,11 @@ shared sidecar output root:
 - Search results and bundle detail cards receive `image_urls` directly in the
   tool payloads.
 - Missing images render a placeholder tile instead of triggering extra fetches.
-- The backend serves image bytes from:
+- With `IMAGE_SERVING_STRATEGY=backend_proxy`, the backend serves image bytes from:
   - `/static/product-images/{product_id}`
   - `/static/product-images/{product_id}/{ordinal}`
+- With `IMAGE_SERVING_STRATEGY=direct_public_url`, runtime payloads use the seeded `public_url`
+  value directly and do not require backend-local file serving.
 
 ## Identity
 

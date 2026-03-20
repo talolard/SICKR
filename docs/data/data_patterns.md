@@ -50,11 +50,11 @@ HAVING COUNT(*) > 1
 ORDER BY 2 DESC;
 
 -- Canonical coverage
-SELECT COUNT(*) AS canonical_rows FROM app.products_canonical;
+SELECT COUNT(*) AS canonical_rows FROM catalog.products_canonical;
 
 -- Dimensions type distribution
 SELECT dimensions_type, COUNT(*) AS n
-FROM app.products_canonical
+FROM catalog.products_canonical
 GROUP BY dimensions_type
 ORDER BY n DESC;
 

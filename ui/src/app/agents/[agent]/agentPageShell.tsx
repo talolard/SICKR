@@ -3,6 +3,7 @@
 import type { ReactElement, ReactNode } from "react";
 
 import { AgentInspectorPanel } from "@/components/agents/AgentInspectorPanel";
+import { resolveWorkspacePresentation } from "@/components/agents/workspacePresentation";
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
@@ -11,7 +12,6 @@ import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import type { KnownFactItem } from "@/lib/api/threadDataClient";
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import type { AgentItem, AgentMetadata } from "@/lib/agents";
-import { formatAgentName } from "@/lib/agentLabels";
 
 type AgentRouteErrorProps = {
   currentAgent: string;
@@ -20,7 +20,6 @@ type AgentRouteErrorProps = {
 
 type AgentThreadHeaderProps = {
   currentAgent: string;
-  description: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -48,7 +47,6 @@ type SharedAgentPageShellProps = {
   onCreateThread: () => void;
   onDismissWarning: () => void;
   isSearchAgent: boolean;
-  isFloorPlanAgent: boolean;
   supportsImageAttachments: boolean;
   activeBundleId: string | null;
   bundleProposalError: string | null;
@@ -90,7 +88,6 @@ export function UnknownAgentView({
 
 function AgentThreadHeader({
   currentAgent,
-  description,
   threadId,
   threadIds,
   warning,
@@ -102,30 +99,36 @@ function AgentThreadHeader({
 }: AgentThreadHeaderProps): ReactElement {
   const selectableThreadIds =
     threadId && !threadIds.includes(threadId) ? [threadId, ...threadIds] : threadIds;
-  const agentTitle = formatAgentName(currentAgent);
+  const presentation = resolveWorkspacePresentation(currentAgent);
 
   return (
-    <header className="flex flex-col gap-4 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.86))] p-4 shadow-[0_14px_40px_-36px_rgba(15,23,42,0.45)]">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-2">
+    <header className="rounded-[34px] bg-[color:var(--surface-container-low)] px-6 py-6 shadow-[var(--panel-shadow)]">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-              Agent workspace
+            <span className="rounded-full bg-[color:var(--surface-container-lowest)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+              {presentation.capabilityLabel}
             </span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900">
+            <span className="rounded-full bg-[color:var(--tertiary-fixed)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
               {threadIds.length} thread{threadIds.length === 1 ? "" : "s"} tracked
             </span>
           </div>
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{agentTitle}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
+            <h1 className="editorial-display text-[2.35rem] leading-none text-primary md:text-[3rem]">
+              {presentation.title}
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
+              {presentation.description}
+            </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-[220px] flex-col gap-1 text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-            Thread
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-[240px] flex-col gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Tracked thread
+            </span>
             <select
-              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              className="rounded-full bg-[color:var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-primary shadow-[var(--panel-shadow)] outline-none"
               data-testid="agent-thread-select"
               disabled={!threadId}
               onChange={(event) => {
@@ -141,7 +144,7 @@ function AgentThreadHeader({
             </select>
           </label>
           <button
-            className="rounded-2xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+            className="rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_35px_rgba(24,36,27,0.18)]"
             data-testid="new-thread-button"
             onClick={onCreateThread}
             type="button"
@@ -158,14 +161,16 @@ function AgentThreadHeader({
         </div>
       </div>
       {warning ? (
-        <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-950">
+        <div className="mt-5 flex items-start gap-2 rounded-[24px] bg-amber-50 px-4 py-3 text-xs text-amber-950">
           <span>{warning}</span>
           <button className="underline" onClick={onDismissWarning} type="button">
             Dismiss
           </button>
         </div>
       ) : null}
-      {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
+      <div className="mt-5">
+        {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
+      </div>
     </header>
   );
 }
@@ -187,7 +192,6 @@ export function SharedAgentPageShell({
   onCreateThread,
   onDismissWarning,
   isSearchAgent,
-  isFloorPlanAgent,
   supportsImageAttachments,
   activeBundleId,
   bundleProposalError,
@@ -203,34 +207,29 @@ export function SharedAgentPageShell({
   onCloseTraceDialog,
 }: SharedAgentPageShellProps): ReactElement {
   const selected = agents.find((item) => item.name === currentAgent) ?? null;
-  const description = selected?.description ?? "Agent chat and tool-call stream.";
-  const mainLayoutClassName = isSearchAgent
-    ? "mx-auto flex w-full max-w-[1900px] flex-col gap-4 px-4 py-4 pb-6 xl:grid xl:h-[calc(100vh-5.5rem)] xl:grid-cols-[minmax(280px,0.68fr)_minmax(0,1.26fr)_minmax(340px,380px)]"
-    : "mx-auto grid w-full max-w-[1720px] grid-cols-1 gap-4 px-4 py-4 pb-6 lg:grid-cols-[minmax(300px,0.78fr)_minmax(0,1.22fr)]";
-  const contentLayoutClassName = isFloorPlanAgent
-    ? "grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)]"
-    : "flex flex-1 flex-col gap-3";
+  const presentation = resolveWorkspacePresentation(currentAgent, selected?.description);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(246,219,138,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(31,74,123,0.12),transparent_32%),linear-gradient(180deg,#f6f3ee_0%,#f2eee8_46%,#ece7df_100%)]">
+    <main className="editorial-page min-h-screen">
       <AppNavBanner
         currentAgentName={currentAgent}
         agents={agents}
         agentLoadError={agentListError}
         isLoadingAgents={isLoadingAgents}
       />
-      <section className={mainLayoutClassName}>
+      <section className="mx-auto grid w-full max-w-[1860px] grid-cols-1 gap-5 px-4 py-5 pb-6 xl:h-[calc(100vh-5.5rem)] xl:grid-cols-[260px_minmax(0,1fr)_360px] xl:px-6">
         <AgentInspectorPanel
+          currentAgent={currentAgent}
           metadataError={metadataError}
           isLoadingKnownFacts={isLoadingKnownFacts}
           knownFacts={knownFacts}
           knownFactsError={knownFactsError}
           metadata={metadata}
         />
-        <section className="flex min-h-[70vh] min-w-0 flex-col gap-4 rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_20px_55px_-40px_rgba(15,23,42,0.5)] backdrop-blur xl:min-h-0 xl:overflow-hidden">
+        <section className="flex min-h-[70vh] min-w-0 flex-col gap-4 rounded-[34px] bg-[rgba(255,248,242,0.78)] p-4 shadow-[var(--panel-shadow-strong)] backdrop-blur xl:min-h-0 xl:overflow-hidden">
+          {toolRenderers}
           <AgentThreadHeader
             currentAgent={currentAgent}
-            description={description}
             threadId={threadId}
             threadIds={threadIds}
             warning={warning}
@@ -240,25 +239,39 @@ export function SharedAgentPageShell({
             isTraceCaptureEnabled={isTraceCaptureEnabled}
             onOpenTraceDialog={onOpenTraceDialog}
           />
-          {isSearchAgent ? (
-            <div className="min-h-0 flex-1">
-              <SearchBundlePanel
-                activeBundleId={activeBundleId}
-                error={bundleProposalError}
-                isLoading={isLoadingBundleProposals}
-                proposals={bundleProposals}
-              />
-            </div>
-          ) : (
-            <div className={contentLayoutClassName}>
-              <div className="flex min-h-0 min-w-0 flex-col gap-3">
-                {toolRenderers}
-                {previewPanel}
-                {supportsImageAttachments ? attachmentPanel : null}
+          <section className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-4">
+              <div className="rounded-[30px] bg-[color:var(--surface-container-low)] px-5 py-5 shadow-[var(--panel-shadow)]">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="editorial-eyebrow">{presentation.stageEyebrow}</p>
+                    <h2 className="editorial-display mt-3 text-[1.95rem] leading-none text-primary">
+                      {presentation.stageTitle}
+                    </h2>
+                    <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
+                      {presentation.stageDescription}
+                    </p>
+                  </div>
+                  <div className="rounded-full bg-[color:var(--surface-container-lowest)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary shadow-[var(--panel-shadow)]">
+                    {presentation.stageStatus}
+                  </div>
+                </div>
               </div>
-              <div className="min-h-0 min-w-0">{chatPanel}</div>
+              {isSearchAgent ? (
+                <SearchBundlePanel
+                  activeBundleId={activeBundleId}
+                  error={bundleProposalError}
+                  isLoading={isLoadingBundleProposals}
+                  proposals={bundleProposals}
+                />
+              ) : (
+                <>
+                  {previewPanel}
+                  {supportsImageAttachments ? attachmentPanel : null}
+                </>
+              )}
             </div>
-          )}
+          </section>
           {isTraceCaptureEnabled && threadId ? (
             <SaveTraceDialog
               agentName={currentAgent}
@@ -268,24 +281,14 @@ export function SharedAgentPageShell({
             />
           ) : null}
         </section>
-        {isSearchAgent ? (
-          <aside className="min-h-[70vh] min-w-0 xl:min-h-0" data-testid="search-chat-rail">
-            <div className="flex h-full min-h-[70vh] min-w-0 flex-col rounded-[28px] border border-slate-200/80 bg-white/92 p-3 shadow-[0_18px_48px_-38px_rgba(15,23,42,0.5)] backdrop-blur xl:min-h-0 xl:overflow-hidden">
-              <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Conversation
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Keep follow-ups and long result explanations contained in the chat rail.
-                </p>
-              </div>
-              <div className="min-h-0 flex-1">
-                {toolRenderers}
-                {chatPanel}
-              </div>
-            </div>
-          </aside>
-        ) : null}
+        <aside
+          className="min-h-[70vh] min-w-0 xl:min-h-0"
+          {...(isSearchAgent ? { "data-testid": "search-chat-rail" } : {})}
+        >
+          <div className="flex h-full min-h-[70vh] min-w-0 flex-col xl:min-h-0">
+            {chatPanel}
+          </div>
+        </aside>
       </section>
     </main>
   );

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import (
     AgentRunRecord,
@@ -15,11 +16,10 @@ from ikea_agent.persistence.run_history_repository import (
     ThreadRunHistoryEntry,
     extract_last_user_prompt,
 )
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
-    engine = create_duckdb_engine(str(tmp_path / "run_history_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "run_history_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

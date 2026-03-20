@@ -58,8 +58,8 @@ describe("BundleProposalSummaryCard", () => {
     );
 
     const button = screen.getByRole("button", { name: /desk setup/i });
-    expect(button).toHaveClass("cursor-pointer", "hover:border-slate-300", "hover:shadow-sm");
-    expect(button).toHaveClass("border-slate-900");
+    expect(button).toHaveClass("cursor-pointer", "hover:bg-[color:var(--surface-container-high)]");
+    expect(button).toHaveClass("bg-[color:var(--surface-container-high)]");
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Selected")).toBeInTheDocument();
 

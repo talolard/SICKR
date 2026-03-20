@@ -1,0 +1,86 @@
+name: Postgres Snapshot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/postgres-snapshot.yml"
+      - "docker/compose.postgres.yml"
+      - "migrations/**"
+      - "scripts/docker_deps/**"
+      - "src/ingest/precompute_embedding_neighbors.py"
+      - "src/ikea_agent/retrieval/**"
+      - "data/parquet/**"
+      - "tests/fixtures/image_catalog/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/postgres-snapshot.yml"
+      - "docker/compose.postgres.yml"
+      - "migrations/**"
+      - "scripts/docker_deps/**"
+      - "src/ingest/precompute_embedding_neighbors.py"
+      - "src/ikea_agent/retrieval/**"
+      - "data/parquet/**"
+      - "tests/fixtures/image_catalog/**"
+
+jobs:
+  build-snapshot:
+    name: Build And Validate Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Set up Python + uv cache
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Build snapshot artifact
+        run: |
+          mkdir -p artifacts/postgres-snapshot
+          uv run python -m scripts.docker_deps.build_postgres_snapshot \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output-root "$GITHUB_WORKSPACE/.tmp_untracked/docker-deps/snapshots" \
+            --image-catalog-root "$GITHUB_WORKSPACE/tests/fixtures/image_catalog" \
+            --image-catalog-run-id "ci-fixture" \
+            --builder-port 25432 \
+            --validator-port 26432 \
+            --summary-path artifacts/postgres-snapshot/summary.json
+
+      - name: Export snapshot metadata
+        id: snapshot_meta
+        run: |
+          version="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("artifacts/postgres-snapshot/summary.json").read_text())
+          print(payload["snapshot_version"])
+          PY
+          )"
+          artifact_dir="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("artifacts/postgres-snapshot/summary.json").read_text())
+          print(payload["artifact_dir"])
+          PY
+          )"
+          echo "snapshot_version=${version}" >> "$GITHUB_OUTPUT"
+          echo "artifact_dir=${artifact_dir}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-snapshot-${{ steps.snapshot_meta.outputs.snapshot_version }}
+          path: |
+            ${{ steps.snapshot_meta.outputs.artifact_dir }}
+            artifacts/postgres-snapshot/summary.json
+          if-no-files-found: error

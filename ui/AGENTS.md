@@ -10,6 +10,21 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Treat the exported `code.html` files and screenshots as composition, spacing, and copy references.
 - When the exported HTML conflicts with `DESIGN.md`, prefer `DESIGN.md`.
 
+## Route matrix
+
+- The redesign is not complete until these surfaces read as one product family:
+  - home
+  - top navigation / launcher chrome
+  - search workspace
+  - floor-plan intake workspace
+  - image-analysis workspace
+  - consultation chat rail
+- Shared-shell parity matters more than isolated page polish. If home looks editorial but the live workspaces still use the old utility shell, the redesign is still incomplete.
+- Search, floor-plan, and image-analysis should share the same baseline shell grammar:
+  - left context rail
+  - center work surface
+  - right consultation rail
+- Route-specific differences should live inside the center work surface and helper copy, not in completely different page composition rules.
 ## Scope
 
 - `ui/` owns product-facing presentation, layout, interaction patterns, and browser-side state management.
@@ -21,6 +36,22 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - For frontend planning and execution guidance, see [docs/frontend_delivery_guidelines.md](../docs/frontend_delivery_guidelines.md).
 - For frontend epic and task authoring, see [docs/frontend_epic_authoring.md](../docs/frontend_epic_authoring.md).
 - For PR descriptions, review loops, and validation expectations, see [docs/frontend_pr_review_guidelines.md](../docs/frontend_pr_review_guidelines.md).
+## Frontend delivery workflow
+
+- Before editing, name:
+  - touched routes
+  - deferred routes
+  - reference artifacts
+  - required states: empty, loading, success, long-content, and error
+- For redesign work, implement in this order unless there is a strong reason not to:
+  - shared shell contract
+  - scroll ownership and height boundaries
+  - route-specific center-surface content
+  - route-local polish
+  - tests and visual verification
+- Do not describe a slice as route-family parity if only one route or the home surface was changed.
+- When debugging layout or overflow, reproduce it on the running page before changing CSS.
+- For broader process guidance, see [docs/frontend_delivery_guidelines.md](../docs/frontend_delivery_guidelines.md).
 
 ## Current stack
 
@@ -58,6 +89,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - If content is long, constrain it and make the scroll region visually obvious.
 - Prefer tonal surface changes over repeated border boxes for hierarchy.
 - Use borders only as a low-contrast fallback where accessibility or legibility genuinely needs them.
+- Do not let one route quietly drift into a different shell family; shared layout contracts should be enforced in the shared agent-page shell before route-local embellishments are added.
 
 ## CopilotKit rules
 
@@ -65,6 +97,9 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Keep CopilotKit CSS overrides shallow and documented. If a selector is fragile or library-internal, add a short comment explaining why it exists.
 - Do not take on chat-surface architecture changes casually. Inline chat, sidebar chat, and popup chat are product-level decisions and should be called out explicitly in plans.
 - When structured outputs become primary artifacts, prefer promoting them into the main work area instead of only leaving them buried in the transcript.
+- Inspect the real CopilotKit DOM before assuming which element owns overflow, padding, or control positioning.
+- Raw tool payloads, long strings, and JSON must wrap safely inside narrow chat rails.
+- Bulky tool outputs inside the consultation rail should usually start collapsed by default.
 
 ## Information hierarchy
 
@@ -79,6 +114,16 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - runtime notes
 - If a section is primarily useful for debugging or implementation validation, default it closed or move it behind a secondary affordance.
 - Prompt text, runtime configuration, and raw tool wiring details should usually live behind a labeled debug disclosure rather than in the default reading flow.
+
+## Stitch rollout rules
+
+- Every redesign PR must say explicitly:
+  - which routes are covered
+  - which routes are intentionally deferred
+  - which Stitch artifacts were checked
+- Do not describe a redesign slice as app-wide parity when it only changes home, theme, or launcher surfaces.
+- When work is phased, keep the unfinished route gaps visible in the PR summary and linked Beads tasks.
+- If a route is still using the old shell intentionally, say that directly rather than implying it is already aligned.
 
 ## Component guidance
 
@@ -125,3 +170,9 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - targeted Playwright coverage when behavior is user-visible
   - `make tidy`
 - For behavioral changes on agent pages, aim to keep `make ui-test-e2e-real-ui-smoke` green before calling the work ready.
+- For redesign work, include route-level visual verification notes for the touched pages and name the reference screenshot or export used for comparison.
+- Manual route review should include:
+  - a fresh thread
+  - an existing thread
+  - one realistic success case
+  - one long-content or raw-tool-output stress case

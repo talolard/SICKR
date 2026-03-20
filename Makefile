@@ -1,14 +1,15 @@
 WORKTREE_ENV_FILE ?= .tmp_untracked/worktree.env
+HUMAN_DEV_SLOT ?= 90
 
 ifneq ("$(wildcard $(WORKTREE_ENV_FILE))","")
 include $(WORKTREE_ENV_FILE)
 endif
 
-.PHONY: deps chat lint format format-check format-all typecheck test tidy preflight \
+.PHONY: deps deps-up deps-down deps-reset deps-reseed deps-status chat lint format format-check format-all typecheck test tidy preflight \
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
-	dev-all dev-all-mock reset agent-start merge-list merge-list-all \
+	dev human dev-human dev-all dev-all-mock reset agent-start merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
@@ -17,10 +18,10 @@ UI_DIR ?= ui
 UI_PORT ?= 3000
 UI_NODE_MODULES ?= $(UI_DIR)/node_modules
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
-DUCKDB_PATH ?= data/ikea.duckdb
-MILVUS_LITE_URI ?= data/milvus_lite.db
+DATABASE_URL ?= postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent
 ARTIFACT_ROOT_DIR ?= data/artifacts
 FEEDBACK_ROOT_DIR ?= comments
+TRACE_ROOT_DIR ?= traces
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
 COVERAGE_DIR ?= .tmp_untracked/coverage
@@ -33,10 +34,25 @@ COVERAGE_SUMMARY_MD ?= $(COVERAGE_DIR)/summary.md
 COVERAGE_REPORT_JSON ?= $(COVERAGE_DIR)/report.json
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
-export DUCKDB_PATH MILVUS_LITE_URI ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
 
 deps:
 	$(UV) sync --all-groups
+
+deps-up:
+	./scripts/worktree/deps.sh up --slot "$(SLOT)"
+
+deps-down:
+	./scripts/worktree/deps.sh down --slot "$(SLOT)"
+
+deps-reset:
+	./scripts/worktree/deps.sh reset --slot "$(SLOT)"
+
+deps-reseed:
+	./scripts/worktree/deps.sh reseed --slot "$(SLOT)"
+
+deps-status:
+	./scripts/worktree/deps.sh status --slot "$(SLOT)"
 
 lint:
 	$(UV_RUN) ruff check .
@@ -136,8 +152,14 @@ ui-test-e2e-real-ui-smoke:
 	BACKEND_LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-backend-$(PORT).log"; \
 	UI_LOG_PATH="$$LOG_DIR/ikea-agent-ui-smoke-ui-$(UI_PORT).log"; \
 	mkdir -p "$$LOG_DIR"; \
-	BACKEND_LOG_PATH="$$REPO_ROOT/$$BACKEND_LOG_PATH"; \
-	UI_LOG_PATH="$$REPO_ROOT/$$UI_LOG_PATH"; \
+	case "$$BACKEND_LOG_PATH" in \
+		/*) ;; \
+		*) BACKEND_LOG_PATH="$$REPO_ROOT/$$BACKEND_LOG_PATH" ;; \
+	esac; \
+	case "$$UI_LOG_PATH" in \
+		/*) ;; \
+		*) UI_LOG_PATH="$$REPO_ROOT/$$UI_LOG_PATH" ;; \
+	esac; \
 	if curl -fsS "http://$(HOST):$(PORT)/api/agents" >/dev/null 2>&1; then \
 		echo "Backend already running at http://$(HOST):$(PORT)"; \
 	else \
@@ -181,6 +203,14 @@ ui-test-e2e-real-ui-smoke:
 	fi; \
 	curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1 || true; \
 	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PLAYWRIGHT_REUSE_EXISTING_SERVER=1 RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
+
+dev: dev-human
+
+human: dev-human
+
+# Human-only convenience entrypoint in the canonical checkout.
+dev-human:
+	@HUMAN_DEV_SLOT="$(HUMAN_DEV_SLOT)" ./scripts/human_dev.sh
 
 dev-all:
 	@set -e; \
