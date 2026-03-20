@@ -6,19 +6,6 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 
-def build_postgres_sqlalchemy_url(
-    *,
-    host: str,
-    port: int,
-    database: str,
-    username: str,
-    password: str,
-) -> str:
-    """Return a SQLAlchemy URL for the local Postgres dependency stack."""
-
-    return f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
-
-
 def resolve_database_url(*, database_url: str | None) -> str:
     """Resolve the runtime SQLAlchemy URL from current settings."""
 

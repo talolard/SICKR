@@ -98,17 +98,6 @@ class SearchRepository:
             session.commit()
             return search_id
 
-    def list_search_runs(self, *, room_id: str) -> list[str]:
-        """Return search ids for a room ordered newest-first."""
-
-        with self._session_factory() as session:
-            rows = session.execute(
-                select(SearchRunRecord.search_id)
-                .where(SearchRunRecord.room_id == room_id)
-                .order_by(SearchRunRecord.created_at.desc())
-            ).scalars()
-            return [str(item) for item in rows]
-
     def record_bundle_proposal(
         self,
         *,
