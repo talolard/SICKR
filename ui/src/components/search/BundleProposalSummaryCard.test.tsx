@@ -39,8 +39,8 @@ describe("BundleProposalSummaryCard", () => {
   it("shows a scroll affordance for long bundle notes", () => {
     render(<BundleProposalSummaryCard actionLabel="Show details" proposal={proposal} />);
 
-    expect(screen.getByTestId("bundle-summary-notes")).toHaveClass("max-h-24", "overflow-y-auto");
-    expect(screen.getByText("Scroll to read the full explanation.")).toBeInTheDocument();
+    expect(screen.getByTestId("bundle-summary-notes")).toHaveClass("max-h-20", "overflow-y-auto");
+    expect(screen.getByText("Scroll to read the full rationale.")).toBeInTheDocument();
   });
 
   it("renders clickable hoverable cards and forwards the click", async () => {

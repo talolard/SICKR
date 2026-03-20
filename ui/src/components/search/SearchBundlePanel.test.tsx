@@ -75,7 +75,7 @@ describe("SearchBundlePanel", () => {
     expect(screen.getByText("€189.97")).toBeInTheDocument();
     expect(screen.getByText("2 items")).toBeInTheDocument();
     expect(screen.queryByText("Two matching chairs")).not.toBeInTheDocument();
-    expect(screen.getByText("Scroll to read the full explanation.")).toBeInTheDocument();
+    expect(screen.getByText("Scroll to read the full rationale.")).toBeInTheDocument();
     expect(screen.getByTestId("bundle-summary-notes")).toHaveClass("overflow-y-auto");
     expect(screen.getByRole("button", { name: /desk setup/i })).toHaveClass("cursor-pointer");
     expect(screen.getByRole("button", { name: /desk setup/i })).toHaveAttribute(
@@ -91,7 +91,7 @@ describe("SearchBundlePanel", () => {
 
     await user.click(screen.getByRole("button", { name: /desk setup/i }));
 
-    expect(screen.getAllByText("Why it is in the bundle")).toHaveLength(2);
+    expect(screen.getAllByText("Why it fits")).toHaveLength(2);
     expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
     expect(screen.getByText("Chair One Ergonomic Desk Chair")).toBeInTheDocument();
     expect(screen.queryByText(/Pricing:/)).not.toBeInTheDocument();
