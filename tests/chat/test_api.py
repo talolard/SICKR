@@ -30,8 +30,10 @@ from ikea_agent.chat_app import agui as agui_module
 from ikea_agent.chat_app.main import create_app
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.models import (
+    AgentRunRecord,
     ProjectRecord,
     RoomRecord,
+    ThreadMessageSegmentRecord,
     ThreadRecord,
     UserRecord,
     ensure_persistence_schema,
@@ -380,6 +382,98 @@ def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> Non
         response.json()["detail"]
         == "Thread `thread-1` belongs to room `room-dev-default`, not `room-other`."
     )
+
+
+def test_room_thread_messages_route_returns_canonical_transcript_and_404s_on_mismatch(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        session.add(
+            RoomRecord(
+                room_id="room-other",
+                project_id=DEFAULT_DEV_PROJECT_ID,
+                title="Other room",
+                room_type="home_office",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ThreadRecord(
+                thread_id="thread-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                title="Existing thread",
+                status="active",
+                created_at=now,
+                updated_at=now,
+                last_activity_at=now,
+            )
+        )
+        session.flush()
+        session.add(
+            AgentRunRecord(
+                run_id="run-1",
+                thread_id="thread-1",
+                parent_run_id=None,
+                agent_name="search",
+                status="completed",
+                user_prompt_text="hello",
+                error_message=None,
+                started_at=now,
+                ended_at=now,
+            )
+        )
+        session.add(
+            ThreadMessageSegmentRecord(
+                thread_message_segment_id="msgseg-1",
+                thread_id="thread-1",
+                run_id="run-1",
+                sequence_no=1,
+                messages_json=ModelMessagesTypeAdapter.dump_json(
+                    [
+                        ModelRequest(parts=[UserPromptPart(content="hello")]),
+                        ModelResponse(parts=[TextPart(content="hi there")]),
+                    ]
+                ).decode("utf-8"),
+                created_at=now,
+            )
+        )
+        session.commit()
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    response = client.get(f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads/thread-1/messages")
+    mismatch_response = client.get("/api/rooms/room-other/threads/thread-1/messages")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "room_id": DEFAULT_DEV_ROOM_ID,
+        "thread_id": "thread-1",
+        "messages": [
+            {
+                "content": "hello",
+                "id": "user-1",
+                "role": "user",
+            },
+            {
+                "content": "hi there",
+                "id": "assistant-2",
+                "role": "assistant",
+            },
+        ],
+    }
+    assert mismatch_response.status_code == 404
+    assert mismatch_response.json()["detail"] == "Thread not found."
 
 
 def test_create_app_seeds_default_dev_hierarchy_for_persistence_runtime(tmp_path: Path) -> None:

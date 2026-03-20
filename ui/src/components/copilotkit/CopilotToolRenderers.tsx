@@ -10,6 +10,7 @@ import type { FloorPlanPreviewState } from "@/lib/floorPlanPreviewStore";
 
 type CopilotToolRenderersProps = {
   onBundleSelected?: (bundleId: string) => void;
+  roomId?: string | null;
   threadId?: string | null;
   onFloorPlanRendered?: (snapshot: Omit<FloorPlanPreviewState, "threadId">) => void;
   onBundleProposed?: (proposal: BundleProposal) => void;
@@ -17,6 +18,7 @@ type CopilotToolRenderersProps = {
 
 export function CopilotToolRenderers({
   onBundleSelected,
+  roomId,
   threadId,
   onFloorPlanRendered,
   onBundleProposed,
@@ -28,6 +30,7 @@ export function CopilotToolRenderers({
     ...(onBundleProposed ? { onBundleProposed } : {}),
   });
   useImageAnalysisToolRenderers({
+    ...(roomId !== undefined ? { roomId } : {}),
     ...(threadId !== undefined ? { threadId } : {}),
   });
 

@@ -62,6 +62,14 @@ export type AnalysisFeedbackItem = {
   created_at: string;
 };
 
+export type ThreadMessageItem = Record<string, unknown>;
+
+export type ThreadTranscriptResponse = {
+  room_id: string;
+  thread_id: string;
+  messages: ThreadMessageItem[];
+};
+
 export class ThreadDataRequestError extends Error {
   status: number;
 
@@ -80,33 +88,59 @@ async function readJson<T>(input: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function getThreadDetail(threadId: string): Promise<ThreadDetailItem> {
-  return await readJson<ThreadDetailItem>(`/api/thread-data/threads/${threadId}`);
+function buildRoomThreadPath(roomId: string, threadId: string, suffix?: string): string {
+  const basePath = `/api/thread-data/rooms/${roomId}/threads/${threadId}`;
+  return suffix ? `${basePath}/${suffix}` : basePath;
 }
 
-export async function listThreadAssets(threadId: string): Promise<AssetListItem[]> {
-  return await readJson<AssetListItem[]>(`/api/thread-data/threads/${threadId}/assets`);
+export async function getRoomThreadDetail(
+  roomId: string,
+  threadId: string,
+): Promise<ThreadDetailItem> {
+  return await readJson<ThreadDetailItem>(buildRoomThreadPath(roomId, threadId));
 }
 
-export async function listThreadBundleProposals(threadId: string): Promise<BundleProposal[]> {
-  return await readJson<BundleProposal[]>(`/api/thread-data/threads/${threadId}/bundle-proposals`);
+export async function listRoomThreadAssets(roomId: string, threadId: string): Promise<AssetListItem[]> {
+  return await readJson<AssetListItem[]>(buildRoomThreadPath(roomId, threadId, "assets"));
 }
 
-export async function listThreadKnownFacts(threadId: string): Promise<KnownFactItem[]> {
-  return await readJson<KnownFactItem[]>(`/api/thread-data/threads/${threadId}/known-facts`);
+export async function listRoomThreadBundleProposals(
+  roomId: string,
+  threadId: string,
+): Promise<BundleProposal[]> {
+  return await readJson<BundleProposal[]>(buildRoomThreadPath(roomId, threadId, "bundle-proposals"));
 }
 
-export async function createAnalysisFeedback({
+export async function listRoomThreadKnownFacts(
+  roomId: string,
+  threadId: string,
+): Promise<KnownFactItem[]> {
+  return await readJson<KnownFactItem[]>(buildRoomThreadPath(roomId, threadId, "known-facts"));
+}
+
+export async function listRoomThreadMessages(
+  roomId: string,
+  threadId: string,
+): Promise<ThreadMessageItem[]> {
+  const response = await readJson<ThreadTranscriptResponse>(
+    buildRoomThreadPath(roomId, threadId, "messages"),
+  );
+  return response.messages;
+}
+
+export async function createRoomThreadAnalysisFeedback({
+  roomId,
   threadId,
   analysisId,
   payload,
 }: {
+  roomId: string;
   threadId: string;
   analysisId: string;
   payload: AnalysisFeedbackCreateRequest;
 }): Promise<AnalysisFeedbackItem> {
   return await readJson<AnalysisFeedbackItem>(
-    `/api/thread-data/threads/${threadId}/analyses/${analysisId}/feedback`,
+    buildRoomThreadPath(roomId, threadId, `analyses/${analysisId}/feedback`),
     {
       method: "POST",
       headers: { "content-type": "application/json" },

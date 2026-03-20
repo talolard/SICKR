@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
@@ -19,6 +26,7 @@ from ikea_agent.persistence.models import (
     ProjectFactRecord,
     RoomFactRecord,
     SearchRunRecord,
+    ThreadMessageSegmentRecord,
     ThreadRecord,
     ensure_persistence_schema,
 )
@@ -37,6 +45,15 @@ def _runtime(tmp_path: Path) -> _RuntimeStub:
     ensure_persistence_schema(engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     return _RuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
+
+
+def _encoded_messages_json() -> str:
+    return ModelMessagesTypeAdapter.dump_json(
+        [
+            ModelRequest(parts=[UserPromptPart(content="Need help with layout.")]),
+            ModelResponse(parts=[TextPart(content="Let's measure the walls.")]),
+        ]
+    ).decode("utf-8")
 
 
 def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
@@ -76,6 +93,16 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 error_message=None,
                 started_at=now,
                 ended_at=now,
+            )
+        )
+        session.add(
+            ThreadMessageSegmentRecord(
+                thread_message_segment_id="msgseg-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                sequence_no=1,
+                messages_json=_encoded_messages_json(),
+                created_at=now,
             )
         )
         session.add(
@@ -208,17 +235,20 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         session.commit()
 
 
-def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_path: Path) -> None:
+def test_thread_query_repository_returns_room_visible_records(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _seed(runtime, tmp_path=tmp_path)
     repository = ThreadQueryRepository(runtime.session_factory)
 
-    detail = repository.get_thread(thread_id="thread-api")
-    assets = repository.list_assets(thread_id="thread-api")
-    bundles = repository.list_bundle_proposals(thread_id="thread-api")
-    known_facts = repository.list_known_facts(thread_id="thread-api")
+    detail = repository.get_thread(room_id="room-dev-default", thread_id="thread-api")
+    assets = repository.list_assets(room_id="room-dev-default", thread_id="thread-api")
+    bundles = repository.list_bundle_proposals(room_id="room-dev-default", thread_id="thread-api")
+    known_facts = repository.list_known_facts(room_id="room-dev-default", thread_id="thread-api")
 
     assert detail is not None
+    assert assets is not None
+    assert bundles is not None
+    assert known_facts is not None
     assert detail.thread_id == "thread-api"
     assert detail.room_id == "room-dev-default"
     assert detail.room_title == "Untitled room"
@@ -245,11 +275,22 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert known_facts[0].summary == "User has toddlers, keep things elevated."
     assert known_facts[1].scope == "project"
 
-    followup_detail = repository.get_thread(thread_id="thread-api-followup")
-    followup_assets = repository.list_assets(thread_id="thread-api-followup")
-    followup_bundles = repository.list_bundle_proposals(thread_id="thread-api-followup")
+    followup_detail = repository.get_thread(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    followup_assets = repository.list_assets(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    followup_bundles = repository.list_bundle_proposals(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
 
     assert followup_detail is not None
+    assert followup_assets is not None
+    assert followup_bundles is not None
     assert followup_detail.asset_count == 1
     assert followup_detail.floor_plan_revision_count == 1
     assert followup_detail.analysis_count == 1
@@ -258,12 +299,45 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert [item.bundle_id for item in followup_bundles] == ["bundle-api"]
 
 
+def test_thread_query_repository_keeps_transcripts_thread_specific(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    _seed(runtime, tmp_path=tmp_path)
+    repository = ThreadQueryRepository(runtime.session_factory)
+
+    transcript = repository.get_transcript(room_id="room-dev-default", thread_id="thread-api")
+    followup_transcript = repository.get_transcript(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    mismatched_assets = repository.list_assets(room_id="room-other", thread_id="thread-api")
+
+    assert transcript is not None
+    assert followup_transcript is not None
+    assert transcript.room_id == "room-dev-default"
+    assert transcript.thread_id == "thread-api"
+    assert transcript.messages == [
+        {
+            "content": "Need help with layout.",
+            "id": "user-1",
+            "role": "user",
+        },
+        {
+            "content": "Let's measure the walls.",
+            "id": "assistant-2",
+            "role": "assistant",
+        },
+    ]
+    assert followup_transcript.messages == []
+    assert mismatched_assets is None
+
+
 def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _seed(runtime, tmp_path=tmp_path)
     repository = ThreadQueryRepository(runtime.session_factory)
 
     created = repository.create_analysis_feedback(
+        room_id="room-dev-default",
         thread_id="thread-api-followup",
         analysis_id="analysis-api",
         feedback_kind="confirm",
@@ -274,6 +348,7 @@ def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path)
         run_id="run-api",
     )
     missing = repository.create_analysis_feedback(
+        room_id="room-dev-default",
         thread_id="thread-api",
         analysis_id="analysis-missing",
         feedback_kind="reject",

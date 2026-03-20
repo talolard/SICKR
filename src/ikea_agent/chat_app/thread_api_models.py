@@ -1,4 +1,4 @@
-"""Typed FastAPI response models for thread-scoped persistence APIs."""
+"""Typed FastAPI response models for room/thread persistence APIs."""
 
 from __future__ import annotations
 
@@ -77,3 +77,11 @@ class AnalysisFeedbackItem(BaseModel):
     query_text: str | None
     note: str | None
     created_at: str
+
+
+class ThreadTranscriptResponse(BaseModel):
+    """Canonical transcript payload for one room/thread pair."""
+
+    room_id: str
+    thread_id: str
+    messages: list[dict[str, object]]

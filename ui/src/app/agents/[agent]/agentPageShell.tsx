@@ -18,6 +18,7 @@ type AgentRouteErrorProps = {
 
 type AgentThreadHeaderProps = {
   currentAgent: string;
+  roomId: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -36,6 +37,7 @@ type SharedAgentPageShellProps = {
   knownFacts: KnownFactItem[];
   knownFactsError: string | null;
   isLoadingKnownFacts: boolean;
+  roomId: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -80,6 +82,7 @@ export function UnknownAgentView({
 
 function AgentThreadHeader({
   currentAgent,
+  roomId,
   threadId,
   threadIds,
   warning,
@@ -160,7 +163,7 @@ function AgentThreadHeader({
             Thread data
           </summary>
           <div className="mt-3">
-            <ThreadDataPanel key={threadId} threadId={threadId} />
+            <ThreadDataPanel key={`${roomId}:${threadId}`} roomId={roomId} threadId={threadId} />
           </div>
         </details>
       ) : null}
@@ -178,6 +181,7 @@ export function SharedAgentPageShell({
   knownFacts,
   knownFactsError,
   isLoadingKnownFacts,
+  roomId,
   threadId,
   threadIds,
   warning,
@@ -219,6 +223,7 @@ export function SharedAgentPageShell({
           {toolRenderers}
           <AgentThreadHeader
             currentAgent={currentAgent}
+            roomId={roomId}
             threadId={threadId}
             threadIds={threadIds}
             warning={warning}

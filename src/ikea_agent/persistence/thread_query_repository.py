@@ -1,4 +1,4 @@
-"""Thread-scoped query repository for UI-facing persistence APIs."""
+"""Room-aware query repository for UI-facing persistence APIs."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ from ikea_agent.chat_app.thread_api_models import (
     AssetListItem,
     KnownFactItem,
     ThreadDetailItem,
+    ThreadTranscriptResponse,
 )
+from ikea_agent.chat_app.transcript_codec import serialize_thread_transcript
 from ikea_agent.persistence.context_fact_repository import ContextFactRepository
 from ikea_agent.persistence.models import (
     AgentRunRecord,
@@ -30,6 +32,7 @@ from ikea_agent.persistence.models import (
     SearchRunRecord,
     ThreadRecord,
 )
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
@@ -63,12 +66,12 @@ def _floor_plan_asset_labels(session: Session, *, room_id: str) -> dict[str, str
 
 
 class ThreadQueryRepository:
-    """Query and mutation helpers for thread data API routes."""
+    """Query and mutation helpers for room/thread data API routes."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 
-    def get_thread(self, *, thread_id: str) -> ThreadDetailItem | None:
+    def get_thread(self, *, room_id: str, thread_id: str) -> ThreadDetailItem | None:
         """Return one thread detail with aggregate child counts."""
 
         with self._session_factory() as session:
@@ -84,6 +87,7 @@ class ThreadQueryRepository:
                 )
                 .join(RoomRecord, RoomRecord.room_id == ThreadRecord.room_id)
                 .where(ThreadRecord.thread_id == thread_id)
+                .where(ThreadRecord.room_id == room_id)
             ).one_or_none()
             if row is None:
                 return None
@@ -135,13 +139,12 @@ class ThreadQueryRepository:
             search_count=search_count,
         )
 
-    def list_assets(self, *, thread_id: str) -> list[AssetListItem]:
+    def list_assets(self, *, room_id: str, thread_id: str) -> list[AssetListItem] | None:
         """Return room-linked assets visible from one thread."""
 
         with self._session_factory() as session:
-            room_id = _resolve_room_id(session=session, thread_id=thread_id)
-            if room_id is None:
-                return []
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
             floor_plan_labels = _floor_plan_asset_labels(session, room_id=room_id)
             rows = session.execute(
                 select(
@@ -176,13 +179,17 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
-    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
+    def list_bundle_proposals(
+        self,
+        *,
+        room_id: str,
+        thread_id: str,
+    ) -> list[BundleProposalToolResult] | None:
         """Return persisted bundle proposals visible from one thread."""
 
         with self._session_factory() as session:
-            room_id = _resolve_room_id(session=session, thread_id=thread_id)
-            if room_id is None:
-                return []
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
             rows = session.execute(
                 select(
                     BundleProposalRecord.bundle_id,
@@ -217,8 +224,12 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
-    def list_known_facts(self, *, thread_id: str) -> list[KnownFactItem]:
+    def list_known_facts(self, *, room_id: str, thread_id: str) -> list[KnownFactItem] | None:
         """Return room/project facts visible from one thread."""
+
+        with self._session_factory() as session:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
 
         rows = ContextFactRepository(self._session_factory).list_known_facts_for_thread(
             thread_id=thread_id
@@ -236,9 +247,31 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
+    def get_transcript(
+        self,
+        *,
+        room_id: str,
+        thread_id: str,
+    ) -> ThreadTranscriptResponse | None:
+        """Return the canonical transcript payload for one room/thread pair."""
+
+        with self._session_factory() as session:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
+
+        messages = RunHistoryRepository(self._session_factory).load_message_history(
+            thread_id=thread_id
+        )
+        return ThreadTranscriptResponse(
+            room_id=room_id,
+            thread_id=thread_id,
+            messages=serialize_thread_transcript(messages),
+        )
+
     def create_analysis_feedback(
         self,
         *,
+        room_id: str,
         thread_id: str,
         analysis_id: str,
         feedback_kind: AnalysisFeedbackKind,
@@ -252,8 +285,7 @@ class ThreadQueryRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            room_id = _resolve_room_id(session=session, thread_id=thread_id)
-            if room_id is None:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
                 return None
             analysis_exists = session.execute(
                 select(AnalysisRunRecord.analysis_id)
@@ -299,11 +331,15 @@ def _count_rows(*, session: Session, statement: Select[tuple[int]]) -> int:
     return int(count_value)
 
 
-def _resolve_room_id(*, session: Session, thread_id: str) -> str | None:
-    room_id = session.execute(
-        select(ThreadRecord.room_id).where(ThreadRecord.thread_id == thread_id)
-    ).scalar_one_or_none()
-    return str(room_id) if room_id is not None else None
+def _thread_exists_in_room(*, session: Session, room_id: str, thread_id: str) -> bool:
+    return (
+        session.execute(
+            select(ThreadRecord.thread_id)
+            .where(ThreadRecord.thread_id == thread_id)
+            .where(ThreadRecord.room_id == room_id)
+        ).scalar_one_or_none()
+        is not None
+    )
 
 
 def _run_exists(*, session: Session, run_id: str) -> bool:

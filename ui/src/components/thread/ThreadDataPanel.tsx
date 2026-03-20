@@ -4,18 +4,19 @@ import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
 import {
-  getThreadDetail,
-  listThreadAssets,
   type AssetListItem,
   type ThreadDetailItem,
   ThreadDataRequestError,
+  getRoomThreadDetail,
+  listRoomThreadAssets,
 } from "@/lib/api/threadDataClient";
 
 type Props = {
+  roomId: string;
   threadId: string;
 };
 
-export function ThreadDataPanel({ threadId }: Props): ReactElement {
+export function ThreadDataPanel({ roomId, threadId }: Props): ReactElement {
   const [detail, setDetail] = useState<ThreadDetailItem | null>(null);
   const [assets, setAssets] = useState<AssetListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getThreadDetail(threadId), listThreadAssets(threadId)])
+    Promise.all([getRoomThreadDetail(roomId, threadId), listRoomThreadAssets(roomId, threadId)])
       .then(([nextDetail, nextAssets]) => {
         if (!active) {
           return;
@@ -48,7 +49,7 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
     return () => {
       active = false;
     };
-  }, [threadId]);
+  }, [roomId, threadId]);
 
   if (error) {
     return <p className="text-xs text-red-700">{error}</p>;

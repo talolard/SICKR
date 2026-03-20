@@ -42,6 +42,7 @@ describe("CopilotToolRenderers", () => {
         onBundleSelected={onBundleSelected}
         onBundleProposed={onBundleProposed}
         onFloorPlanRendered={onFloorPlanRendered}
+        roomId="room-456"
         threadId="thread-123"
       />,
     );
@@ -53,6 +54,7 @@ describe("CopilotToolRenderers", () => {
       onFloorPlanRendered,
     });
     expect(useImageAnalysisToolRenderersMock).toHaveBeenCalledWith({
+      roomId: "room-456",
       threadId: "thread-123",
     });
   });

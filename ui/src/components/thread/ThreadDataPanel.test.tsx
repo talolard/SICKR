@@ -4,9 +4,12 @@ import { vi } from "vitest";
 import { ThreadDataPanel } from "./ThreadDataPanel";
 
 vi.mock("@/lib/api/threadDataClient", () => ({
-  getThreadDetail: vi.fn(async () => ({
+  getRoomThreadDetail: vi.fn(async () => ({
     thread_id: "thread-1",
     title: "Floor-plan hallway",
+    room_id: "room-1",
+    room_title: "Hallway",
+    room_type: "hallway",
     status: "active",
     last_activity_at: null,
     run_count: 1,
@@ -15,7 +18,7 @@ vi.mock("@/lib/api/threadDataClient", () => ({
     analysis_count: 0,
     search_count: 0,
   })),
-  listThreadAssets: vi.fn(async () => [
+  listRoomThreadAssets: vi.fn(async () => [
     {
       asset_id: "asset-png",
       run_id: "run-1",
@@ -53,7 +56,7 @@ vi.mock("@/lib/api/threadDataClient", () => ({
 
 describe("ThreadDataPanel", () => {
   it("shows asset display labels instead of raw filenames", async () => {
-    render(<ThreadDataPanel threadId="thread-1" />);
+    render(<ThreadDataPanel roomId="room-1" threadId="thread-1" />);
 
     await waitFor(() => {
       expect(screen.getByText("Latest assets")).toBeInTheDocument();
