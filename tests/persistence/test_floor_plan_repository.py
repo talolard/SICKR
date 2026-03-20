@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
-from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.models import FloorPlanRevisionRecord, ensure_persistence_schema
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.tools.floorplanner.models import BaselineFloorPlanScene, scene_to_summary
 
 
@@ -14,6 +23,19 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     engine = create_sqlite_engine(tmp_path / "floor_plan_repository_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def _scene(name: str) -> BaselineFloorPlanScene:
@@ -58,12 +80,15 @@ def _scene(name: str) -> BaselineFloorPlanScene:
 
 def test_floor_plan_repository_persists_revision_history_across_instances(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor")
+    _seed_thread(session_factory, thread_id="thread-floor-followup")
     first_repository = FloorPlanRepository(session_factory)
 
     first = _scene("first")
     second = _scene("second")
 
     saved_first = first_repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-floor",
         scene=first,
         summary=scene_to_summary(first),
@@ -71,7 +96,8 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
         png_asset_id="asset-png-1",
     )
     saved_second = first_repository.save_revision(
-        thread_id="thread-floor",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-followup",
         scene=second,
         summary=scene_to_summary(second),
         svg_asset_id="asset-svg-2",
@@ -79,11 +105,13 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
     )
 
     restarted_repository = FloorPlanRepository(session_factory)
-    latest = restarted_repository.get_latest_revision(thread_id="thread-floor")
+    latest = restarted_repository.get_latest_revision(room_id=DEFAULT_DEV_ROOM_ID)
 
     assert saved_first.revision == 1
     assert saved_second.revision == 2
     assert latest is not None
+    assert latest.room_id == DEFAULT_DEV_ROOM_ID
+    assert latest.thread_id == "thread-floor-followup"
     assert latest.revision == 2
     assert latest.svg_asset_id is None
     assert latest.scene.placements[0].placement_id == "second-wardrobe"
@@ -91,10 +119,12 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
 
 def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-confirm")
     repository = FloorPlanRepository(session_factory)
     scene = _scene("confirmed")
 
     repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-floor-confirm",
         scene=scene,
         summary=scene_to_summary(scene),
@@ -103,7 +133,7 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     )
 
     confirmed = repository.confirm_revision(
-        thread_id="thread-floor-confirm",
+        room_id=DEFAULT_DEV_ROOM_ID,
         revision=None,
         run_id=None,
         confirmation_note="User confirmed this layout.",
@@ -113,3 +143,85 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     assert confirmed.revision == 1
     assert confirmed.confirmed_at is not None
     assert confirmed.confirmation_note == "User confirmed this layout."
+
+
+def test_floor_plan_repository_lists_room_revisions_newest_first(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-first")
+    _seed_thread(session_factory, thread_id="thread-floor-second")
+    repository = FloorPlanRepository(session_factory)
+    first = _scene("first")
+    second = _scene("second")
+
+    repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-first",
+        scene=first,
+        summary=scene_to_summary(first),
+        svg_asset_id=None,
+        png_asset_id=None,
+    )
+    repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-second",
+        scene=second,
+        summary=scene_to_summary(second),
+        svg_asset_id=None,
+        png_asset_id=None,
+    )
+
+    revisions = repository.list_revisions(room_id=DEFAULT_DEV_ROOM_ID)
+
+    assert [item.revision for item in revisions] == [2, 1]
+    assert revisions[0].thread_id == "thread-floor-second"
+    assert revisions[1].thread_id == "thread-floor-first"
+
+
+def test_floor_plan_repository_enforces_room_scoped_unique_revision_numbers(
+    tmp_path: Path,
+) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-first")
+    _seed_thread(session_factory, thread_id="thread-floor-second")
+    scene = _scene("duplicate")
+    summary_json = json.dumps(scene_to_summary(scene), sort_keys=True)
+    scene_json = scene.model_dump_json()
+    now = datetime.now(UTC)
+
+    with session_factory() as session:
+        session.add(
+            FloorPlanRevisionRecord(
+                floor_plan_revision_id="fprev-room-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                thread_id="thread-floor-first",
+                revision=1,
+                scene_level=scene.scene_level,
+                scene_json=scene_json,
+                summary_json=summary_json,
+                svg_asset_id=None,
+                png_asset_id=None,
+                confirmed_at=None,
+                confirmed_by_run_id=None,
+                confirmation_note=None,
+                created_at=now,
+            )
+        )
+        session.add(
+            FloorPlanRevisionRecord(
+                floor_plan_revision_id="fprev-room-2",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                thread_id="thread-floor-second",
+                revision=1,
+                scene_level=scene.scene_level,
+                scene_json=scene_json,
+                summary_json=summary_json,
+                svg_asset_id=None,
+                png_asset_id=None,
+                confirmed_at=None,
+                confirmed_by_run_id=None,
+                confirmation_note=None,
+                created_at=now,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()

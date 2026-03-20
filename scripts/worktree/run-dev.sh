@@ -76,7 +76,7 @@ if [[ -z "${BACKEND_PORT}" || -z "${UI_PORT}" ]]; then
   exit 1
 fi
 
-export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
 export PY_AG_UI_URL="http://127.0.0.1:${BACKEND_PORT}/ag-ui/"
 
 if [[ "${MODE}" == "both" || "${MODE}" == "backend" ]]; then

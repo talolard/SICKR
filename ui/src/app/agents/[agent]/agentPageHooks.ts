@@ -1,12 +1,14 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 
 import type { AttachmentRef } from "@/lib/attachments";
 import {
-  listThreadBundleProposals,
-  listThreadKnownFacts,
   type KnownFactItem,
+  listRoomThreadBundleProposals,
+  listRoomThreadKnownFacts,
+  listRoomThreadMessages,
+  type ThreadMessageItem,
   ThreadDataRequestError,
 } from "@/lib/api/threadDataClient";
 import {
@@ -22,11 +24,6 @@ import {
   loadFloorPlanPreview,
   saveFloorPlanPreview,
 } from "@/lib/floorPlanPreviewStore";
-import {
-  loadThreadSnapshot,
-  saveThreadSnapshot,
-  type ThreadSnapshot,
-} from "@/lib/threadStore";
 import {
   fetchAgentMetadata,
   fetchAgents,
@@ -129,7 +126,10 @@ export function useAgentMetadataState(currentAgent: string): AgentMetadataState 
   return { agents, metadata, agentListError, isLoadingAgents, metadataError };
 }
 
-export function useKnownFactsState(threadId: string | null): KnownFactsState {
+export function useKnownFactsState(
+  roomId: string,
+  threadId: string | null,
+): KnownFactsState {
   const [knownFacts, setKnownFacts] = useState<KnownFactItem[]>([]);
   const [knownFactsError, setKnownFactsError] = useState<string | null>(null);
   const [isLoadingKnownFacts, setIsLoadingKnownFacts] = useState<boolean>(false);
@@ -152,7 +152,7 @@ export function useKnownFactsState(threadId: string | null): KnownFactsState {
       setKnownFactsError(null);
       setIsLoadingKnownFacts(true);
     });
-    void listThreadKnownFacts(threadId)
+    void listRoomThreadKnownFacts(roomId, threadId)
       .then((persistedKnownFacts) => {
         if (!active) {
           return;
@@ -180,13 +180,14 @@ export function useKnownFactsState(threadId: string | null): KnownFactsState {
     return () => {
       active = false;
     };
-  }, [threadId]);
+  }, [roomId, threadId]);
 
   return { knownFacts, knownFactsError, isLoadingKnownFacts };
 }
 
 export function useSearchBundleState(
   currentAgent: string,
+  roomId: string,
   threadId: string | null,
 ): SearchBundleState {
   const [bundleProposals, setBundleProposals] = useState<BundleProposal[]>([]);
@@ -215,7 +216,7 @@ export function useSearchBundleState(
       setBundleProposalError(null);
       setIsLoadingBundleProposals(true);
     });
-    void listThreadBundleProposals(threadId)
+    void listRoomThreadBundleProposals(roomId, threadId)
       .then((persistedProposals) => {
         if (!active) {
           return;
@@ -247,7 +248,7 @@ export function useSearchBundleState(
     return () => {
       active = false;
     };
-  }, [currentAgent, threadId]);
+  }, [currentAgent, roomId, threadId]);
 
   const addBundleProposal = (proposal: BundleProposal): void => {
     setActiveBundleId(proposal.bundle_id);
@@ -272,11 +273,14 @@ export function useSearchBundleState(
 export function useCopilotAgentStateSync(params: {
   agent: CopilotAgentStateBridge;
   currentAgent: string;
+  roomId: string;
+  sessionId: string;
   threadId: string | null;
   imageAttachments: AttachmentRef[];
   bundleProposals: BundleProposal[];
 }): void {
-  const { agent, currentAgent, threadId, imageAttachments, bundleProposals } = params;
+  const { agent, currentAgent, roomId, sessionId, threadId, imageAttachments, bundleProposals } =
+    params;
 
   useEffect(() => {
     if (!threadId) {
@@ -289,7 +293,8 @@ export function useCopilotAgentStateSync(params: {
         ? (agent.state as Record<string, unknown>)
         : {};
     if (
-      previousState.session_id === threadId &&
+      previousState.session_id === sessionId &&
+      previousState.room_id === roomId &&
       previousState.thread_id === threadId &&
       stableJson(previousState.attachments ?? []) === stableJson(attachmentsForAgent) &&
       stableJson(previousState.bundle_proposals ?? []) === stableJson(bundleProposalsForAgent)
@@ -298,53 +303,50 @@ export function useCopilotAgentStateSync(params: {
     }
     agent.setState({
       ...previousState,
-      session_id: threadId,
+      session_id: sessionId,
+      room_id: roomId,
       thread_id: threadId,
       attachments: attachmentsForAgent,
       bundle_proposals: bundleProposalsForAgent,
     });
-  }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
+  }, [agent, bundleProposals, currentAgent, imageAttachments, roomId, sessionId, threadId]);
 }
 
-export function useThreadSnapshotSync(params: {
-  agentKey: string;
+export function useThreadMessagesHydration(params: {
+  roomId: string;
   threadId: string | null;
-  messages: unknown[];
   replaceMessages: (messages: unknown[]) => void;
 }): void {
-  const { agentKey, threadId, messages, replaceMessages } = params;
-  const skipSaveThreadIdRef = useRef<string | null>(null);
+  const { roomId, threadId, replaceMessages } = params;
 
   useEffect(() => {
     if (!threadId) {
-      skipSaveThreadIdRef.current = null;
+      replaceMessages([]);
       return;
     }
-    const snapshot = loadThreadSnapshot(threadId, agentKey);
-    skipSaveThreadIdRef.current = threadId;
-    replaceMessages(snapshot?.copilotMessages ?? []);
-  }, [agentKey, replaceMessages, threadId]);
-
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
-    if (skipSaveThreadIdRef.current === threadId) {
-      skipSaveThreadIdRef.current = null;
-      return;
-    }
-    const previousSnapshot = loadThreadSnapshot(threadId, agentKey);
-    const nextSnapshot: ThreadSnapshot = {
-      threadId,
-      prompt: previousSnapshot?.prompt ?? "",
-      assistantText: previousSnapshot?.assistantText ?? "",
-      toolCallsById: previousSnapshot?.toolCallsById ?? {},
-      attachments: previousSnapshot?.attachments ?? [],
-      copilotMessages: messages,
-      ...(previousSnapshot?.messages ? { messages: previousSnapshot.messages } : {}),
+    let active = true;
+    replaceMessages([]);
+    void listRoomThreadMessages(roomId, threadId)
+      .then((persistedMessages: ThreadMessageItem[]) => {
+        if (!active) {
+          return;
+        }
+        replaceMessages(persistedMessages);
+      })
+      .catch((fetchError: unknown) => {
+        if (!active) {
+          return;
+        }
+        if (fetchError instanceof ThreadDataRequestError && fetchError.status === 404) {
+          replaceMessages([]);
+          return;
+        }
+        replaceMessages([]);
+      });
+    return () => {
+      active = false;
     };
-    saveThreadSnapshot(nextSnapshot, agentKey);
-  }, [agentKey, messages, threadId]);
+  }, [replaceMessages, roomId, threadId]);
 }
 
 export function useFloorPlanPreviewState(threadId: string | null): {

@@ -1,17 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  loadResumableThreadIds,
   loadRoom3DSnapshots,
-  loadThreadIds,
   loadActiveThreadId,
   loadThreadSnapshot,
-  saveResumableThreadIds,
   saveRoom3DSnapshots,
-  saveThreadIds,
   saveActiveThreadId,
   saveThreadSnapshot,
-  upsertThreadId,
 } from "./threadStore";
 
 describe("threadStore", () => {
@@ -41,20 +36,6 @@ describe("threadStore", () => {
     expect(loadActiveThreadId()).toBe("thread-1");
     expect(loadThreadSnapshot("thread-1")?.assistantText).toBe("world");
     expect(loadThreadSnapshot("thread-1")?.copilotMessages).toHaveLength(1);
-  });
-
-  it("upserts thread ids without duplicates", () => {
-    expect(upsertThreadId("thread-1")).toEqual(["thread-1"]);
-    expect(upsertThreadId("thread-2")).toEqual(["thread-2", "thread-1"]);
-    expect(upsertThreadId("thread-1")).toEqual(["thread-2", "thread-1"]);
-  });
-
-  it("loads and saves thread id indexes and resumable ids", () => {
-    saveThreadIds(["thread-1", "thread-2"]);
-    saveResumableThreadIds(["thread-2"]);
-
-    expect(loadThreadIds()).toEqual(["thread-1", "thread-2"]);
-    expect(loadResumableThreadIds()).toEqual(["thread-2"]);
   });
 
   it("persists room 3d snapshot context per thread", () => {

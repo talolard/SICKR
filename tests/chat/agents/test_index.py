@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
+from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.floor_plan_intake.agent import resolve_model_name
 from ikea_agent.chat.agents.index import (
@@ -28,6 +31,18 @@ def test_describe_agent_returns_prompt_and_tools() -> None:
     assert metadata["name"] == "floor_plan_intake"
     assert "floor-plan intake specialist" in metadata["prompt_markdown"].lower()
     assert "render_floor_plan" in metadata["tools"]
+
+
+@pytest.mark.parametrize("agent_name", ["floor_plan_intake", "search", "image_analysis"])
+def test_describe_agent_tool_metadata_matches_built_toolset(
+    agent_name: str,
+) -> None:
+    metadata = describe_agent(agent_name)
+    built = build_agent_ag_ui_agent(agent_name, explicit_model="gemini-2.0-flash")
+
+    toolset = cast("FunctionToolset[object]", built._user_toolsets[0])
+
+    assert metadata["tools"] == list(toolset.tools.keys())
 
 
 def test_get_agent_raises_for_unknown() -> None:

@@ -11,11 +11,14 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
-    AgentRunRecord,
     BundleProposalRecord,
     SearchResultRecord,
     SearchRunRecord,
-    ThreadRecord,
+)
+from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
 )
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
@@ -28,7 +31,7 @@ from ikea_agent.shared.types import (
 
 
 class SearchRepository:
-    """Repository for storing thread-scoped search snapshots and result rows."""
+    """Repository for storing room-owned search snapshots with thread provenance."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -36,6 +39,7 @@ class SearchRepository:
     def record_search_run(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         query_text: str,
@@ -48,14 +52,14 @@ class SearchRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             search_id = f"search-{uuid4().hex[:24]}"
             session.add(
                 SearchRunRecord(
                     search_id=search_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     query_text=query_text,
@@ -90,16 +94,17 @@ class SearchRepository:
                         price_eur=item.price_eur,
                     )
                 )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
             return search_id
 
-    def list_search_runs(self, *, thread_id: str) -> list[str]:
-        """Return search ids for a thread ordered newest-first."""
+    def list_search_runs(self, *, room_id: str) -> list[str]:
+        """Return search ids for a room ordered newest-first."""
 
         with self._session_factory() as session:
             rows = session.execute(
                 select(SearchRunRecord.search_id)
-                .where(SearchRunRecord.thread_id == thread_id)
+                .where(SearchRunRecord.room_id == room_id)
                 .order_by(SearchRunRecord.created_at.desc())
             ).scalars()
             return [str(item) for item in rows]
@@ -107,21 +112,22 @@ class SearchRepository:
     def record_bundle_proposal(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         proposal: BundleProposalToolResult,
     ) -> str:
-        """Persist one hydrated bundle proposal for later thread reloads."""
+        """Persist one hydrated bundle proposal for later room reloads."""
 
         created_at = datetime.fromisoformat(proposal.created_at)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=created_at)
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.merge(
                 BundleProposalRecord(
                     bundle_id=proposal.bundle_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     title=proposal.title,
@@ -139,11 +145,12 @@ class SearchRepository:
                     created_at=created_at,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=created_at)
             session.commit()
         return proposal.bundle_id
 
-    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
-        """Return bundle proposals for a thread ordered newest-first."""
+    def list_bundle_proposals(self, *, room_id: str) -> list[BundleProposalToolResult]:
+        """Return bundle proposals for a room ordered newest-first."""
 
         with self._session_factory() as session:
             rows = session.execute(
@@ -158,7 +165,7 @@ class SearchRepository:
                     BundleProposalRecord.validations_json,
                     cast(BundleProposalRecord.created_at, String),
                 )
-                .where(BundleProposalRecord.thread_id == thread_id)
+                .where(BundleProposalRecord.room_id == room_id)
                 .order_by(BundleProposalRecord.created_at.desc())
             ).all()
         return [
@@ -179,33 +186,6 @@ class SearchRepository:
             )
             for item in rows
         ]
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        existing_thread_id = session.execute(
-            select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-        ).scalar_one_or_none()
-        if existing_thread_id is not None:
-            return
-        session.add(
-            ThreadRecord(
-                thread_id=thread_id,
-                owner_id=None,
-                title=None,
-                status="active",
-                created_at=now,
-                updated_at=now,
-                last_activity_at=now,
-            )
-        )
-
-    @staticmethod
-    def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        return session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
 
 
 def _load_bundle_items(raw_items: object) -> list[BundleProposalLineItem]:

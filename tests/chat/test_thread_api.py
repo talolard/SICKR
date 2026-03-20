@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
@@ -16,11 +23,15 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
-    RevealedPreferenceRecord,
+    ProjectFactRecord,
+    RoomFactRecord,
     SearchRunRecord,
+    ThreadMessageSegmentRecord,
     ThreadRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.ownership import ensure_default_dev_hierarchy
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 
 
@@ -37,14 +48,35 @@ def _runtime(tmp_path: Path) -> _RuntimeStub:
     return _RuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
 
 
+def _encoded_messages_json() -> str:
+    return ModelMessagesTypeAdapter.dump_json(
+        [
+            ModelRequest(parts=[UserPromptPart(content="Need help with layout.")]),
+            ModelResponse(parts=[TextPart(content="Let's measure the walls.")]),
+        ]
+    ).decode("utf-8")
+
+
 def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
     now = datetime.now(UTC)
     with runtime.session_factory() as session:
+        hierarchy = ensure_default_dev_hierarchy(session, now=now)
         session.add(
             ThreadRecord(
                 thread_id="thread-api",
-                owner_id=None,
+                room_id=hierarchy.room_id,
                 title="Initial title",
+                status="active",
+                created_at=now,
+                updated_at=now,
+                last_activity_at=now,
+            )
+        )
+        session.add(
+            ThreadRecord(
+                thread_id="thread-api-followup",
+                room_id=hierarchy.room_id,
+                title="Follow-up thread",
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -65,8 +97,19 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
             )
         )
         session.add(
+            ThreadMessageSegmentRecord(
+                thread_message_segment_id="msgseg-api",
+                thread_id="thread-api",
+                run_id="run-api",
+                sequence_no=1,
+                messages_json=_encoded_messages_json(),
+                created_at=now,
+            )
+        )
+        session.add(
             AssetRecord(
                 asset_id="asset-api",
+                room_id=hierarchy.room_id,
                 thread_id="thread-api",
                 run_id="run-api",
                 created_by_tool="upload",
@@ -85,6 +128,7 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         session.add(
             FloorPlanRevisionRecord(
                 floor_plan_revision_id="fprev-api",
+                room_id=hierarchy.room_id,
                 thread_id="thread-api",
                 revision=1,
                 scene_level="baseline",
@@ -101,6 +145,7 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         session.add(
             AnalysisRunRecord(
                 analysis_id="analysis-api",
+                room_id=hierarchy.room_id,
                 thread_id="thread-api",
                 run_id="run-api",
                 tool_name="detect_objects_in_image",
@@ -113,6 +158,7 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         session.add(
             SearchRunRecord(
                 search_id="search-api",
+                room_id=hierarchy.room_id,
                 thread_id="thread-api",
                 run_id="run-api",
                 query_text="wardrobe",
@@ -127,6 +173,7 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
         session.add(
             BundleProposalRecord(
                 bundle_id="bundle-api",
+                room_id=hierarchy.room_id,
                 thread_id="thread-api",
                 run_id="run-api",
                 title="Desk starter",
@@ -159,9 +206,9 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
             )
         )
         session.add(
-            RevealedPreferenceRecord(
-                revealed_preference_id="rmem-api",
-                thread_id="thread-api",
+            RoomFactRecord(
+                room_fact_id="rfact-api",
+                room_id=hierarchy.room_id,
                 run_id="run-api",
                 signal_key="agent_note",
                 kind="constraint",
@@ -172,21 +219,40 @@ def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
                 updated_at=now,
             )
         )
+        session.add(
+            ProjectFactRecord(
+                project_fact_id="pfact-api",
+                project_id=hierarchy.project_id,
+                run_id="run-api",
+                signal_key="agent_note",
+                kind="fact",
+                value="household_has_toddler",
+                summary="Household includes a toddler.",
+                source_message_text="We have a toddler at home.",
+                created_at=now,
+                updated_at=now,
+            )
+        )
         session.commit()
 
 
-def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_path: Path) -> None:
+def test_thread_query_repository_returns_room_visible_records(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _seed(runtime, tmp_path=tmp_path)
     repository = ThreadQueryRepository(runtime.session_factory)
 
-    detail = repository.get_thread(thread_id="thread-api")
-    assets = repository.list_assets(thread_id="thread-api")
-    bundles = repository.list_bundle_proposals(thread_id="thread-api")
-    known_facts = repository.list_known_facts(thread_id="thread-api")
+    detail = repository.get_thread(room_id="room-dev-default", thread_id="thread-api")
+    assets = repository.list_assets(room_id="room-dev-default", thread_id="thread-api")
+    bundles = repository.list_bundle_proposals(room_id="room-dev-default", thread_id="thread-api")
+    known_facts = repository.list_known_facts(room_id="room-dev-default", thread_id="thread-api")
 
     assert detail is not None
+    assert assets is not None
+    assert bundles is not None
+    assert known_facts is not None
     assert detail.thread_id == "thread-api"
+    assert detail.room_id == "room-dev-default"
+    assert detail.room_title == "Untitled room"
     assert detail.asset_count == 1
     assert detail.run_count == 1
     assert detail.floor_plan_revision_count == 1
@@ -204,9 +270,114 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
     assert bundles[0].items[0].image_urls == []
     assert bundles[0].validations[0].kind == "budget_max_eur"
 
-    assert len(known_facts) == 1
+    assert len(known_facts) == 2
+    assert known_facts[0].scope == "room"
     assert known_facts[0].kind == "constraint"
     assert known_facts[0].summary == "User has toddlers, keep things elevated."
+    assert known_facts[1].scope == "project"
+
+    followup_detail = repository.get_thread(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    followup_assets = repository.list_assets(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    followup_bundles = repository.list_bundle_proposals(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+
+    assert followup_detail is not None
+    assert followup_assets is not None
+    assert followup_bundles is not None
+    assert followup_detail.asset_count == 1
+    assert followup_detail.floor_plan_revision_count == 1
+    assert followup_detail.analysis_count == 1
+    assert followup_detail.search_count == 1
+    assert [item.asset_id for item in followup_assets] == ["asset-api"]
+    assert [item.bundle_id for item in followup_bundles] == ["bundle-api"]
+
+
+def test_thread_query_repository_keeps_transcripts_thread_specific(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    _seed(runtime, tmp_path=tmp_path)
+    repository = ThreadQueryRepository(runtime.session_factory)
+
+    transcript = repository.get_transcript(room_id="room-dev-default", thread_id="thread-api")
+    followup_transcript = repository.get_transcript(
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
+    )
+    mismatched_assets = repository.list_assets(room_id="room-other", thread_id="thread-api")
+
+    assert transcript is not None
+    assert followup_transcript is not None
+    assert transcript.room_id == "room-dev-default"
+    assert transcript.thread_id == "thread-api"
+    assert transcript.messages == [
+        {
+            "content": "Need help with layout.",
+            "id": "user-1",
+            "role": "user",
+        },
+        {
+            "content": "Let's measure the walls.",
+            "id": "assistant-2",
+            "role": "assistant",
+        },
+    ]
+    assert followup_transcript.messages == []
+    assert mismatched_assets is None
+
+
+def test_thread_query_repository_orders_threads_by_latest_durable_activity(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    base_now = datetime.now(UTC) - timedelta(hours=1)
+    with runtime.session_factory() as session:
+        hierarchy = ensure_default_dev_hierarchy(session, now=base_now)
+        session.add(
+            ThreadRecord(
+                thread_id="thread-stale",
+                room_id=hierarchy.room_id,
+                title="Stale thread",
+                status="active",
+                created_at=base_now,
+                updated_at=base_now,
+                last_activity_at=base_now,
+            )
+        )
+        fresher_time = base_now + timedelta(minutes=5)
+        session.add(
+            ThreadRecord(
+                thread_id="thread-fresh",
+                room_id=hierarchy.room_id,
+                title="Fresh thread",
+                status="active",
+                created_at=fresher_time,
+                updated_at=fresher_time,
+                last_activity_at=fresher_time,
+            )
+        )
+        session.commit()
+
+    RunHistoryRepository(runtime.session_factory).record_run_start(
+        room_id="room-dev-default",
+        thread_id="thread-stale",
+        run_id="run-ordering",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="Re-open this thread",
+    )
+
+    threads = ThreadQueryRepository(runtime.session_factory).list_threads(
+        room_id="room-dev-default"
+    )
+
+    assert [item.thread_id for item in threads[:2]] == ["thread-stale", "thread-fresh"]
 
 
 def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path) -> None:
@@ -215,7 +386,8 @@ def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path)
     repository = ThreadQueryRepository(runtime.session_factory)
 
     created = repository.create_analysis_feedback(
-        thread_id="thread-api",
+        room_id="room-dev-default",
+        thread_id="thread-api-followup",
         analysis_id="analysis-api",
         feedback_kind="confirm",
         mask_ordinal=1,
@@ -225,6 +397,7 @@ def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path)
         run_id="run-api",
     )
     missing = repository.create_analysis_feedback(
+        room_id="room-dev-default",
         thread_id="thread-api",
         analysis_id="analysis-missing",
         feedback_kind="reject",
@@ -251,5 +424,5 @@ def test_create_analysis_feedback_persists_thread_scoped_records(tmp_path: Path)
         ).one()
 
     assert persisted.analysis_id == "analysis-api"
-    assert persisted.thread_id == "thread-api"
+    assert persisted.thread_id == "thread-api-followup"
     assert persisted.query_text == "bed"

@@ -86,14 +86,19 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             table_names = {(str(row[0]), str(row[1])) for row in cursor.fetchall()}
 
         assert {
+            ("app", "users"),
+            ("app", "projects"),
+            ("app", "rooms"),
             ("app", "threads"),
             ("app", "agent_runs"),
-            ("app", "message_archives"),
+            ("app", "thread_message_segments"),
             ("app", "assets"),
             ("app", "floor_plan_revisions"),
             ("app", "analysis_runs"),
             ("app", "analysis_input_assets"),
             ("app", "analysis_detections"),
+            ("app", "room_facts"),
+            ("app", "project_facts"),
             ("app", "search_runs"),
             ("app", "search_results"),
             ("app", "room_3d_assets"),

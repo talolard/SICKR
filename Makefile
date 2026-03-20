@@ -21,7 +21,6 @@ PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
 DATABASE_URL ?= postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent
 ARTIFACT_ROOT_DIR ?= data/artifacts
 FEEDBACK_ROOT_DIR ?= comments
-TRACE_ROOT_DIR ?= traces
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
 COVERAGE_DIR ?= .tmp_untracked/coverage
@@ -35,7 +34,7 @@ COVERAGE_REPORT_JSON ?= $(COVERAGE_DIR)/report.json
 SMOKE_ASSISTANT_TEXT ?= Deterministic smoke response from the local test model.
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
-export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
 
 deps:
 	$(UV) sync --all-groups

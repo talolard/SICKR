@@ -227,6 +227,32 @@ def build_agent_deps(
     return _registration_by_name(name).build_deps(runtime, attachment_store)
 
 
+def clone_agent_deps_for_request(base_deps: AnyAgentDeps) -> AnyAgentDeps:
+    """Return one per-request deps container with fresh mutable state."""
+
+    if isinstance(base_deps, FloorPlanIntakeDeps):
+        return FloorPlanIntakeDeps(
+            runtime=base_deps.runtime,
+            attachment_store=base_deps.attachment_store,
+            floor_plan_scene_store=base_deps.floor_plan_scene_store,
+            state=FloorPlanIntakeAgentState(),
+        )
+    if isinstance(base_deps, SearchAgentDeps):
+        return SearchAgentDeps(
+            runtime=base_deps.runtime,
+            attachment_store=base_deps.attachment_store,
+            state=SearchAgentState(),
+        )
+    if isinstance(base_deps, ImageAnalysisAgentDeps):
+        return ImageAnalysisAgentDeps(
+            runtime=base_deps.runtime,
+            attachment_store=base_deps.attachment_store,
+            state=ImageAnalysisAgentState(),
+        )
+    msg = f"Unsupported deps type `{type(base_deps)!r}`."
+    raise TypeError(msg)
+
+
 __all__ = [
     "AGENTS",
     "AgentCatalogItem",
@@ -234,6 +260,7 @@ __all__ = [
     "AnyAgentDeps",
     "build_agent_ag_ui_agent",
     "build_agent_deps",
+    "clone_agent_deps_for_request",
     "describe_agent",
     "get_agent",
     "list_agent_catalog",

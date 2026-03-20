@@ -7,8 +7,6 @@ import { resolveWorkspacePresentation } from "@/components/agents/workspacePrese
 import { AppNavBanner } from "@/components/navigation/AppNavBanner";
 import { SearchBundlePanel } from "@/components/search/SearchBundlePanel";
 import { ThreadDataPanel } from "@/components/thread/ThreadDataPanel";
-import { SaveTraceButton } from "@/components/trace/SaveTraceButton";
-import { SaveTraceDialog } from "@/components/trace/SaveTraceDialog";
 import type { KnownFactItem } from "@/lib/api/threadDataClient";
 import type { BundleProposal } from "@/lib/bundleProposalsStore";
 import type { AgentItem, AgentMetadata } from "@/lib/agents";
@@ -20,14 +18,13 @@ type AgentRouteErrorProps = {
 
 type AgentThreadHeaderProps = {
   currentAgent: string;
+  roomId: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
   onSelectThread: (threadId: string) => void;
   onCreateThread: () => void;
   onDismissWarning: () => void;
-  isTraceCaptureEnabled: boolean;
-  onOpenTraceDialog: () => void;
 };
 
 type SharedAgentPageShellProps = {
@@ -40,6 +37,7 @@ type SharedAgentPageShellProps = {
   knownFacts: KnownFactItem[];
   knownFactsError: string | null;
   isLoadingKnownFacts: boolean;
+  roomId: string;
   threadId: string | null;
   threadIds: string[];
   warning: string | null;
@@ -56,10 +54,6 @@ type SharedAgentPageShellProps = {
   previewPanel: ReactNode;
   attachmentPanel: ReactNode;
   chatPanel: ReactNode;
-  isTraceCaptureEnabled: boolean;
-  isTraceDialogOpen: boolean;
-  onOpenTraceDialog: () => void;
-  onCloseTraceDialog: () => void;
 };
 
 export function InvalidAgentPathView(): ReactElement {
@@ -88,14 +82,13 @@ export function UnknownAgentView({
 
 function AgentThreadHeader({
   currentAgent,
+  roomId,
   threadId,
   threadIds,
   warning,
   onSelectThread,
   onCreateThread,
   onDismissWarning,
-  isTraceCaptureEnabled,
-  onOpenTraceDialog,
 }: AgentThreadHeaderProps): ReactElement {
   const selectableThreadIds =
     threadId && !threadIds.includes(threadId) ? [threadId, ...threadIds] : threadIds;
@@ -154,13 +147,6 @@ function AgentThreadHeader({
           >
             New thread
           </button>
-          {isTraceCaptureEnabled && threadId ? (
-            <SaveTraceButton
-              onClick={() => {
-                onOpenTraceDialog();
-              }}
-            />
-          ) : null}
         </div>
       </div>
       {warning ? (
@@ -177,7 +163,7 @@ function AgentThreadHeader({
             Thread data
           </summary>
           <div className="mt-3">
-            <ThreadDataPanel key={threadId} threadId={threadId} />
+            <ThreadDataPanel key={`${roomId}:${threadId}`} roomId={roomId} threadId={threadId} />
           </div>
         </details>
       ) : null}
@@ -195,6 +181,7 @@ export function SharedAgentPageShell({
   knownFacts,
   knownFactsError,
   isLoadingKnownFacts,
+  roomId,
   threadId,
   threadIds,
   warning,
@@ -211,10 +198,6 @@ export function SharedAgentPageShell({
   previewPanel,
   attachmentPanel,
   chatPanel,
-  isTraceCaptureEnabled,
-  isTraceDialogOpen,
-  onOpenTraceDialog,
-  onCloseTraceDialog,
 }: SharedAgentPageShellProps): ReactElement {
   const selected = agents.find((item) => item.name === currentAgent) ?? null;
   const presentation = resolveWorkspacePresentation(currentAgent, selected?.description);
@@ -240,14 +223,13 @@ export function SharedAgentPageShell({
           {toolRenderers}
           <AgentThreadHeader
             currentAgent={currentAgent}
+            roomId={roomId}
             threadId={threadId}
             threadIds={threadIds}
             warning={warning}
             onSelectThread={onSelectThread}
             onCreateThread={onCreateThread}
             onDismissWarning={onDismissWarning}
-            isTraceCaptureEnabled={isTraceCaptureEnabled}
-            onOpenTraceDialog={onOpenTraceDialog}
           />
           <section className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="space-y-4">
@@ -284,14 +266,6 @@ export function SharedAgentPageShell({
               )}
             </div>
           </section>
-          {isTraceCaptureEnabled && threadId ? (
-            <SaveTraceDialog
-              agentName={currentAgent}
-              onClose={onCloseTraceDialog}
-              open={isTraceDialogOpen}
-              threadId={threadId}
-            />
-          ) : null}
         </section>
         <aside
           className="min-h-[70vh] min-w-0 xl:min-h-0"

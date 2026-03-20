@@ -9,17 +9,9 @@ from ikea_agent.chat.agents.state import (
     Room3DSnapshotLighting,
 )
 from ikea_agent.chat.runtime import GoogleEmbeddingSettings
-from ikea_agent.chat_app.thread_api_models import (
-    RecentTraceReportListResponse,
-    TraceReportCreateResponse,
-)
+from ikea_agent.chat_app.thread_api_models import AnalysisFeedbackItem
 from ikea_agent.config import AppSettings
-from ikea_agent.persistence.models import (
-    MessageArchiveRecord,
-    SearchResultRecord,
-    ThreadRecord,
-)
-from ikea_agent.persistence.run_history_repository import RunHistoryRepository
+from ikea_agent.persistence.models import SearchResultRecord, ThreadRecord
 from ikea_agent.retrieval.reranker import RerankedItem
 from ikea_agent.retrieval.schema import (
     product_embedding_neighbors,
@@ -59,16 +51,12 @@ if TYPE_CHECKING:
         Room3DSnapshotLighting.emphasized_light_count,
         Room3DSnapshotContext.captured_at,
         GoogleEmbeddingSettings.google_task_type,
-        RecentTraceReportListResponse.traces,
-        TraceReportCreateResponse.beads_epic_id,
-        TraceReportCreateResponse.beads_task_id,
+        AnalysisFeedbackItem.query_text,
         AppSettings.embedding_provider,
         AppSettings.retrieval_candidate_limit,
-        ThreadRecord.owner_id,
+        ThreadRecord.room_id,
         ThreadRecord.updated_at,
-        MessageArchiveRecord.archive_version,
         SearchResultRecord.search_result_id,
-        RunHistoryRepository.load_archived_all_messages_json,
         RerankedItem.rank_before,
         products_canonical,
         product_embeddings,

@@ -15,8 +15,11 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
-    build_remember_preference_tool,
+    SHARED_CONTEXT_TOOL_NAMES,
+    build_first_class_agent_toolset,
     build_room_3d_snapshot_context_payload,
+    require_room_id,
+    require_thread_id,
     room_3d_repository,
     search_repository,
     telemetry_context,
@@ -38,7 +41,7 @@ from ikea_agent.shared.types import (
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
-    "remember_preference",
+    *SHARED_CONTEXT_TOOL_NAMES,
     "run_search_graph",
     "propose_bundle",
     "list_room_3d_snapshot_context",
@@ -111,7 +114,8 @@ async def _run_search_graph_with_services(
     if search_repo is not None:
         for query_input, query_output in zip(normalized_queries, output.queries, strict=True):
             search_repo.record_search_run(
-                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                room_id=require_room_id(ctx.deps.state),
+                thread_id=require_thread_id(ctx.deps.state),
                 run_id=ctx.deps.state.run_id,
                 query_text=query_input.semantic_query,
                 filters=query_input.filters,
@@ -352,7 +356,8 @@ def _propose_bundle_with_services(
     repository = services.get_search_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_bundle_proposal(
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            room_id=require_room_id(ctx.deps.state),
+            thread_id=require_thread_id(ctx.deps.state),
             run_id=ctx.deps.state.run_id,
             proposal=result,
         )
@@ -421,8 +426,8 @@ def _list_room_3d_snapshot_context_with_services(
 ) -> dict[str, object]:
     persisted: list[Room3DSnapshotEntry] = []
     repository = services.get_room_3d_repository(ctx.deps.runtime)
-    if repository is not None and ctx.deps.state.thread_id is not None:
-        persisted = repository.list_room_3d_snapshots(thread_id=ctx.deps.state.thread_id)
+    if repository is not None:
+        persisted = repository.list_room_3d_snapshots(room_id=require_room_id(ctx.deps.state))
     payload = build_room_3d_snapshot_context_payload(
         state_snapshots=ctx.deps.state.room_3d_snapshots,
         persisted_snapshots=persisted,
@@ -497,9 +502,8 @@ def build_search_toolset(
             services=resolved_services,
         )
 
-    return FunctionToolset(
-        tools=[
-            build_remember_preference_tool(),
+    return build_first_class_agent_toolset(
+        local_tools=[
             Tool(run_search_graph_tool, name="run_search_graph"),
             Tool(propose_bundle_tool, name="propose_bundle"),
             Tool(

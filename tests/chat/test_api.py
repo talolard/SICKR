@@ -1,36 +1,65 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
+from fastapi import Request, Response
 from fastapi.testclient import TestClient
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from sqlalchemy import Engine
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
-from ikea_agent.chat_app.main import (
-    create_app,
-)
+from ikea_agent.chat_app import agui as agui_module
+from ikea_agent.chat_app.main import create_app
 from ikea_agent.config import get_settings
-from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator, BeadsTraceIssueResult
-from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.models import (
+    AgentRunRecord,
+    ProjectRecord,
+    RoomRecord,
+    ThreadMessageSegmentRecord,
+    ThreadRecord,
+    UserRecord,
+    ensure_persistence_schema,
+)
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_PROJECT_ID,
+    DEFAULT_DEV_ROOM_ID,
+    DEFAULT_DEV_USER_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
-from ikea_agent.shared.sqlalchemy_db import create_session_factory
 
 
-@dataclass(frozen=True, slots=True)
-class _PersistenceRuntime:
-    sqlalchemy_engine: Engine
+@dataclass
+class _PersistenceRuntimeStub:
+    sqlalchemy_engine: object
     session_factory: sessionmaker[Session]
+
+
+@dataclass(frozen=True)
+class _FakeAgUiRunResult:
+    messages: list[ModelMessage]
+
+    def new_messages_json(self, *, _output_tool_return_content: str | None = None) -> bytes:
+        return ModelMessagesTypeAdapter.dump_json(self.messages)
 
 
 @pytest.fixture(autouse=True)
@@ -61,9 +90,13 @@ def _chat_request_payload(user_text: str) -> dict[str, object]:
 
 def _ag_ui_request_payload(user_text: str) -> dict[str, object]:
     return {
+        "roomId": DEFAULT_DEV_ROOM_ID,
         "threadId": "thread-1",
         "runId": "run-1",
-        "state": {},
+        "state": {
+            "room_id": DEFAULT_DEV_ROOM_ID,
+            "session_id": "session-test",
+        },
         "tools": [],
         "context": [],
         "forwardedProps": {},
@@ -96,6 +129,26 @@ def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
         deps_type=object,
         output_type=str,
     )
+
+
+def _runtime_with_persistence(tmp_path: Path) -> _PersistenceRuntimeStub:
+    engine = create_sqlite_engine(tmp_path / "app_bootstrap_test.sqlite")
+    ensure_persistence_schema(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    return _PersistenceRuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
+
+
+def _seed_thread(runtime: _PersistenceRuntimeStub, *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:
@@ -179,6 +232,335 @@ def test_agent_ag_ui_route_uses_deterministic_env_model(monkeypatch: pytest.Monk
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "Deterministic smoke response from the local test model." in response.text
+
+
+def test_agent_ag_ui_route_requires_explicit_room_context() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "threadId": "thread-1",
+            "runId": "run-1",
+            "state": {},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "AG-UI requests require explicit `roomId`."
+
+
+def test_agent_ag_ui_route_uses_db_backed_message_history(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    _seed_thread(runtime, thread_id="thread-1")
+    observed_histories: list[list[ModelMessage]] = []
+    observed_request_messages: list[list[dict[str, object]]] = []
+
+    async def _stub_handle_ag_ui_request(
+        _agent: Agent[object, str],
+        _request: Request,
+        *,
+        message_history: list[ModelMessage] | None = None,
+        on_complete: Callable[[_FakeAgUiRunResult], Awaitable[None]] | None = None,
+        **_: object,
+    ) -> Response:
+        run_number = len(observed_histories) + 1
+        observed_histories.append(list(message_history or []))
+        request_payload = json.loads((await _request.body()).decode("utf-8"))
+        observed_request_messages.append(
+            [
+                message
+                for message in request_payload.get("messages", [])
+                if isinstance(message, dict)
+            ]
+        )
+        if on_complete is not None:
+            await on_complete(
+                _FakeAgUiRunResult(
+                    messages=[
+                        ModelRequest(
+                            parts=[UserPromptPart(content=f"user-{run_number}")],
+                            run_id=f"model-run-{run_number}",
+                        ),
+                        ModelResponse(
+                            parts=[TextPart(content=f"assistant-{run_number}")],
+                            model_name="test-model",
+                            run_id=f"model-run-{run_number}",
+                        ),
+                    ]
+                )
+            )
+        return Response(content="ok", media_type="text/plain")
+
+    monkeypatch.setattr(agui_module, "handle_ag_ui_request", _stub_handle_ag_ui_request)
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    first_payload = _ag_ui_request_payload("hello")
+    second_payload = _ag_ui_request_payload("follow up")
+    second_payload["runId"] = "run-2"
+    second_payload["messages"] = [
+        {"id": "message-1", "role": "user", "content": "user-1"},
+        {"id": "message-2", "role": "assistant", "content": "assistant-1"},
+        {"id": "message-3", "role": "user", "content": "follow up"},
+    ]
+
+    first_response = client.post("/ag-ui/agents/search", json=first_payload)
+    second_response = client.post("/ag-ui/agents/search", json=second_payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert observed_histories[0] == []
+    assert len(observed_histories[1]) == 2
+    assert [message["content"] for message in observed_request_messages[0]] == ["hello"]
+    assert [message["content"] for message in observed_request_messages[1]] == ["follow up"]
+    assert isinstance(observed_histories[1][0], ModelRequest)
+    assert isinstance(observed_histories[1][1], ModelResponse)
+    first_request_part = observed_histories[1][0].parts[0]
+    first_response_part = observed_histories[1][1].parts[0]
+    assert isinstance(first_request_part, UserPromptPart)
+    assert isinstance(first_response_part, TextPart)
+    assert first_request_part.content == "user-1"
+    assert first_response_part.content == "assistant-1"
+
+    repository = RunHistoryRepository(runtime.session_factory)
+    persisted_history = repository.load_message_history(thread_id="thread-1")
+    assert len(persisted_history) == 4
+
+
+def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        session.add(
+            RoomRecord(
+                room_id="room-other",
+                project_id=DEFAULT_DEV_PROJECT_ID,
+                title="Other room",
+                room_type="home_office",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ThreadRecord(
+                thread_id="thread-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                title="Existing thread",
+                status="active",
+                created_at=now,
+                updated_at=now,
+                last_activity_at=now,
+            )
+        )
+        session.commit()
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "roomId": "room-other",
+            "threadId": "thread-1",
+            "runId": "run-1",
+            "state": {"room_id": "room-other", "session_id": "session-test"},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Thread `thread-1` belongs to room `room-dev-default`, not `room-other`."
+    )
+
+
+def test_agent_ag_ui_route_rejects_unknown_threads(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "roomId": DEFAULT_DEV_ROOM_ID,
+            "threadId": "thread-missing",
+            "runId": "run-1",
+            "state": {"room_id": DEFAULT_DEV_ROOM_ID, "session_id": "session-test"},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Unknown thread_id `thread-missing` for room `room-dev-default`."
+    )
+
+
+def test_room_thread_messages_route_returns_canonical_transcript_and_404s_on_mismatch(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        session.add(
+            RoomRecord(
+                room_id="room-other",
+                project_id=DEFAULT_DEV_PROJECT_ID,
+                title="Other room",
+                room_type="home_office",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ThreadRecord(
+                thread_id="thread-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                title="Existing thread",
+                status="active",
+                created_at=now,
+                updated_at=now,
+                last_activity_at=now,
+            )
+        )
+        session.flush()
+        session.add(
+            AgentRunRecord(
+                run_id="run-1",
+                thread_id="thread-1",
+                parent_run_id=None,
+                agent_name="search",
+                status="completed",
+                user_prompt_text="hello",
+                error_message=None,
+                started_at=now,
+                ended_at=now,
+            )
+        )
+        session.add(
+            ThreadMessageSegmentRecord(
+                thread_message_segment_id="msgseg-1",
+                thread_id="thread-1",
+                run_id="run-1",
+                sequence_no=1,
+                messages_json=ModelMessagesTypeAdapter.dump_json(
+                    [
+                        ModelRequest(parts=[UserPromptPart(content="hello")]),
+                        ModelResponse(parts=[TextPart(content="hi there")]),
+                    ]
+                ).decode("utf-8"),
+                created_at=now,
+            )
+        )
+        session.commit()
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    response = client.get(f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads/thread-1/messages")
+    mismatch_response = client.get("/api/rooms/room-other/threads/thread-1/messages")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "room_id": DEFAULT_DEV_ROOM_ID,
+        "thread_id": "thread-1",
+        "messages": [
+            {
+                "content": "hello",
+                "id": "user-1",
+                "role": "user",
+            },
+            {
+                "content": "hi there",
+                "id": "assistant-2",
+                "role": "assistant",
+            },
+        ],
+    }
+    assert mismatch_response.status_code == 404
+    assert mismatch_response.json()["detail"] == "Thread not found."
+
+
+def test_room_threads_routes_list_and_create_explicit_threads(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    _seed_thread(runtime, thread_id="thread-existing")
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    list_response = client.get(f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads")
+    create_response = client.post(
+        f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads",
+        json={"title": "Follow-up thread"},
+    )
+
+    assert list_response.status_code == 200
+    listed_threads = list_response.json()
+    assert [item["thread_id"] for item in listed_threads] == ["thread-existing"]
+
+    assert create_response.status_code == 201
+    created_thread = create_response.json()
+    assert created_thread["thread_id"].startswith("thread-")
+    assert created_thread["title"] == "Follow-up thread"
+    assert created_thread["status"] == "active"
+
+
+def test_create_app_seeds_default_dev_hierarchy_for_persistence_runtime(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+
+    create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False, mount_ag_ui=False)
+
+    with runtime.session_factory() as session:
+        user_ids = session.execute(select(UserRecord.user_id)).scalars().all()
+        project_ids = session.execute(select(ProjectRecord.project_id)).scalars().all()
+        room_ids = session.execute(select(RoomRecord.room_id)).scalars().all()
+
+    assert user_ids == [DEFAULT_DEV_USER_ID]
+    assert project_ids == [DEFAULT_DEV_PROJECT_ID]
+    assert room_ids == [DEFAULT_DEV_ROOM_ID]
 
 
 def test_agent_metadata_route_returns_prompt_and_tools() -> None:
@@ -309,6 +691,24 @@ def test_attachment_upload_and_fetch_round_trip() -> None:
     assert download_response.headers["content-type"].startswith("image/png")
 
 
+def test_attachment_upload_requires_room_and_thread_context_when_persistence_is_enabled(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    upload_response = client.post(
+        "/attachments",
+        content=b"fake-image-bytes",
+        headers={"content-type": "image/png", "x-filename": "room.png"},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["detail"] == (
+        "Attachment uploads require explicit x-room-id and x-thread-id headers."
+    )
+
+
 def test_attachment_upload_rejects_unsupported_type() -> None:
     client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
 
@@ -319,248 +719,3 @@ def test_attachment_upload_rejects_unsupported_type() -> None:
     )
 
     assert upload_response.status_code == 415
-
-
-def _persistence_runtime(tmp_path: Path) -> _PersistenceRuntime:
-    engine = create_sqlite_engine(tmp_path / "trace_route_test.sqlite")
-    ensure_persistence_schema(engine)
-    session_factory = create_session_factory(engine)
-    return _PersistenceRuntime(sqlalchemy_engine=engine, session_factory=session_factory)
-
-
-def test_trace_report_route_is_not_registered_when_disabled(tmp_path: Path) -> None:
-    runtime = _persistence_runtime(tmp_path)
-    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
-
-    response = client.post("/api/traces", json={})
-
-    assert response.status_code == 404
-
-
-def test_trace_report_route_persists_bundle_and_returns_beads_ids(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _persistence_runtime(tmp_path)
-    repository = RunHistoryRepository(runtime.session_factory)
-    repository.record_run_start(
-        thread_id="thread-trace",
-        run_id="run-trace-1",
-        agent_name="search",
-        parent_run_id=None,
-        user_prompt_text="Find a desk setup.",
-        agui_input_messages_json='[{"role":"user","content":"Find a desk setup."}]',
-    )
-    repository.record_run_complete(
-        run_id="run-trace-1",
-        pydantic_all_messages_json=b'[{"kind":"request","text":"Find a desk setup."}]',
-        pydantic_new_messages_json=b'[{"kind":"response","text":"Here are options."}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-trace-1",
-        agui_event_trace_json='[{"type":"RUN_STARTED"},{"type":"RUN_FINISHED"}]',
-    )
-
-    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
-    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
-    monkeypatch.setattr(
-        BeadsTraceIssueCreator,
-        "create_trace_epic_and_task",
-        lambda *_args, **_kwargs: BeadsTraceIssueResult(
-            epic_id="trace-epic-1", task_id="trace-epic-1.1"
-        ),
-    )
-    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
-
-    response = client.post(
-        "/api/traces",
-        json={
-            "title": "Investigate search latency",
-            "description": "The search agent took too long to answer.",
-            "thread_id": "thread-trace",
-            "agent_name": "search",
-            "page_url": "http://localhost:3000/agents/search",
-            "user_agent": "pytest",
-            "include_console_log": True,
-            "console_log": '[{"level":"info","args":["hello"]}]',
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["trace_id"].startswith("investigate_search_latency--")
-    assert payload["status"] == "saved_and_linked"
-    assert payload["beads_epic_id"] == "trace-epic-1"
-    assert payload["beads_task_id"] == "trace-epic-1.1"
-
-    trace_dir = Path(payload["directory"])
-    assert (trace_dir / "metadata.json").exists()
-    assert (trace_dir / "trace.json").exists()
-    assert (trace_dir / "report.md").exists()
-
-    markdown = (trace_dir / "report.md").read_text(encoding="utf-8")
-    assert "Investigate search latency" in markdown
-    assert "trace.json" in markdown
-
-
-def test_trace_report_route_lists_recent_bundles(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _persistence_runtime(tmp_path)
-    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
-    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
-    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
-
-    first_dir = tmp_path / "traces" / "trace-one"
-    first_dir.mkdir(parents=True)
-    (first_dir / "metadata.json").write_text(
-        json.dumps(
-            {
-                "trace_id": "trace-one",
-                "title": "First trace",
-                "created_at": "2026-03-11T10:00:00Z",
-                "thread_id": "thread-a",
-                "agent_name": "search",
-            }
-        ),
-        encoding="utf-8",
-    )
-    second_dir = tmp_path / "traces" / "trace-two"
-    second_dir.mkdir(parents=True)
-    (second_dir / "metadata.json").write_text(
-        json.dumps(
-            {
-                "trace_id": "trace-two",
-                "title": "Second trace",
-                "created_at": "2026-03-11T11:00:00Z",
-                "thread_id": "thread-b",
-                "agent_name": "search",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    response = client.get("/api/traces/recent?limit=2")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert [trace["trace_id"] for trace in payload["traces"]] == ["trace-two", "trace-one"]
-
-
-def test_trace_report_route_redacts_sensitive_values(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _persistence_runtime(tmp_path)
-    repository = RunHistoryRepository(runtime.session_factory)
-    repository.record_run_start(
-        thread_id="thread-redact",
-        run_id="run-redact-1",
-        agent_name="search",
-        parent_run_id=None,
-        user_prompt_text="token=secret-token",
-        agui_input_messages_json='[{"role":"user","content":"password hunter2"}]',
-    )
-    repository.record_run_complete(
-        run_id="run-redact-1",
-        pydantic_all_messages_json=b'[{"secret":"api-key-123"}]',
-        pydantic_new_messages_json=b'[{"ok":true}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-redact-1",
-        agui_event_trace_json='[{"type":"RUN_FINISHED","payload":{"authorization":"Bearer abc"}}]',
-    )
-
-    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
-    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
-    monkeypatch.setattr(
-        BeadsTraceIssueCreator,
-        "create_trace_epic_and_task",
-        lambda *_args, **_kwargs: BeadsTraceIssueResult(
-            epic_id="trace-epic-1", task_id="trace-epic-1.1"
-        ),
-    )
-    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
-
-    response = client.post(
-        "/api/traces",
-        json={
-            "title": "Investigate redaction",
-            "thread_id": "thread-redact",
-            "agent_name": "search",
-            "include_console_log": True,
-            "console_log": '[{"token":"abc123"}]',
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    trace_dir = Path(payload["directory"])
-    trace_json = (trace_dir / "trace.json").read_text(encoding="utf-8")
-    console_json = (trace_dir / "console_log.json").read_text(encoding="utf-8")
-
-    assert "secret-token" not in trace_json
-    assert "hunter2" not in trace_json
-    assert "api-key-123" not in trace_json
-    assert "Bearer abc" not in trace_json
-    assert "abc123" not in console_json
-    assert "[REDACTED]" in trace_json
-    assert "[REDACTED]" in console_json
-
-
-def test_trace_report_route_returns_partial_success_when_beads_creation_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _persistence_runtime(tmp_path)
-    repository = RunHistoryRepository(runtime.session_factory)
-    repository.record_run_start(
-        thread_id="thread-partial",
-        run_id="run-partial-1",
-        agent_name="search",
-        parent_run_id=None,
-        user_prompt_text="Need a lamp.",
-        agui_input_messages_json='[{"role":"user","content":"Need a lamp."}]',
-    )
-    repository.record_run_complete(
-        run_id="run-partial-1",
-        pydantic_all_messages_json=b'[{"kind":"request","text":"Need a lamp."}]',
-        pydantic_new_messages_json=b'[{"kind":"response","text":"Here is a lamp."}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-partial-1",
-        agui_event_trace_json='[{"type":"RUN_STARTED"},{"type":"RUN_FINISHED"}]',
-    )
-
-    monkeypatch.setenv("TRACE_CAPTURE_ENABLED", "true")
-    monkeypatch.setenv("TRACE_ROOT_DIR", str(tmp_path / "traces"))
-
-    def _raise_beads_failure(*_args: object, **_kwargs: object) -> BeadsTraceIssueResult:
-        raise RuntimeError("bd create failed")
-
-    monkeypatch.setattr(
-        BeadsTraceIssueCreator,
-        "create_trace_epic_and_task",
-        _raise_beads_failure,
-    )
-    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
-
-    response = client.post(
-        "/api/traces",
-        json={
-            "title": "Investigate partial success",
-            "thread_id": "thread-partial",
-            "agent_name": "search",
-        },
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "saved_without_beads"
-    assert payload["beads_epic_id"] is None
-    assert payload["beads_task_id"] is None
-    trace_dir = Path(payload["directory"])
-    assert (trace_dir / "metadata.json").exists()
-    assert (trace_dir / "trace.json").exists()
-    assert (trace_dir / "report.md").exists()

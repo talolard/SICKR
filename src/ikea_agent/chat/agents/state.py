@@ -8,7 +8,8 @@ from ikea_agent.shared.types import (
     AttachmentRef,
     BundleProposalToolResult,
     GroundedSearchProduct,
-    RevealedPreferenceMemory,
+    KnownFactMemory,
+    RoomType,
     SearchBatchToolResult,
 )
 
@@ -44,19 +45,47 @@ class CommonAgentState(BaseModel):
 
     session_id: str | None = None
     branch_from_session_id: str | None = None
+    project_id: str | None = None
+    room_id: str | None = None
+    room_title: str | None = None
+    room_type: RoomType | None = None
     thread_id: str | None = None
     run_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)
-    revealed_preferences: list[RevealedPreferenceMemory] = Field(default_factory=list)
+    room_facts: list[KnownFactMemory] = Field(default_factory=list)
+    project_facts: list[KnownFactMemory] = Field(default_factory=list)
 
-    def remember_preference(self, preference: RevealedPreferenceMemory) -> None:
-        """Upsert one persisted preference record into in-memory AG-UI state."""
+    def remember_room_fact(self, fact: KnownFactMemory) -> None:
+        """Upsert one persisted room fact into in-memory AG-UI state."""
 
-        for index, existing in enumerate(self.revealed_preferences):
-            if existing.signal_key == preference.signal_key and existing.value == preference.value:
-                self.revealed_preferences[index] = preference
-                return
-        self.revealed_preferences.append(preference)
+        self.room_facts = _upsert_fact(self.room_facts, fact)
+
+    def remember_project_fact(self, fact: KnownFactMemory) -> None:
+        """Upsert one persisted project fact into in-memory AG-UI state."""
+
+        self.project_facts = _upsert_fact(self.project_facts, fact)
+
+    def set_room_profile(
+        self,
+        *,
+        project_id: str | None,
+        room_title: str | None,
+        room_type: RoomType | None,
+    ) -> None:
+        """Update the active durable room identity snapshot in AG-UI state."""
+
+        self.project_id = project_id
+        self.room_title = room_title
+        self.room_type = room_type
+
+
+def _upsert_fact(current: list[KnownFactMemory], fact: KnownFactMemory) -> list[KnownFactMemory]:
+    for index, existing in enumerate(current):
+        if existing.signal_key == fact.signal_key and existing.value == fact.value:
+            next_facts = list(current)
+            next_facts[index] = fact
+            return next_facts
+    return [*current, fact]
 
 
 class FloorPlanIntakeAgentState(CommonAgentState):

@@ -33,6 +33,7 @@ def test_build_room_3d_snapshot_context_payload_merges_state_and_persisted() -> 
     )
     persisted_snapshot = Room3DSnapshotEntry(
         room_3d_snapshot_id="snap-db-1",
+        room_id="room-1",
         thread_id="thread-1",
         run_id="run-1",
         snapshot_asset_id="asset-db-1",

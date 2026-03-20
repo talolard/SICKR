@@ -20,8 +20,14 @@ describe("thread-data route", () => {
     const { GET } = await import("./route");
 
     const response = await GET(
-      new NextRequest("http://127.0.0.1:3000/api/thread-data/threads/thread-1/known-facts"),
-      { params: Promise.resolve({ segments: ["threads", "thread-1", "known-facts"] }) },
+      new NextRequest(
+        "http://127.0.0.1:3000/api/thread-data/rooms/room-dev-default/threads/thread-1/known-facts",
+      ),
+      {
+        params: Promise.resolve({
+          segments: ["rooms", "room-dev-default", "threads", "thread-1", "known-facts"],
+        }),
+      },
     );
 
     expect(response.status).toBe(404);

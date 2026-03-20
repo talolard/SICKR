@@ -28,7 +28,7 @@ import {
   useFloorPlanPreviewState,
   useKnownFactsState,
   useSearchBundleState,
-  useThreadSnapshotSync,
+  useThreadMessagesHydration,
 } from "./agentPageHooks";
 
 const LazyFloorPlanPreviewPanel = dynamic(
@@ -52,21 +52,28 @@ const LazyFloorPlanPreviewPanel = dynamic(
   },
 );
 
-const traceCaptureEnabled = process.env.NEXT_PUBLIC_TRACE_CAPTURE_ENABLED === "1";
-
 export default function AgentChatPage(): ReactElement {
   const params = useParams<{ agent: string }>();
   const router = useRouter();
   const currentAgent = params.agent;
-  const { agentKey, agentName, threadId, threadIds, warning, selectThread, createThread, clearWarning } =
-    useThreadSession();
+  const {
+    agentKey,
+    agentName,
+    roomId,
+    sessionId,
+    threadId,
+    threadIds,
+    warning,
+    selectThread,
+    createThread,
+    clearWarning,
+  } = useThreadSession();
   const { agent } = useAgent({ agentId: agentKey });
-  const { messages, setMessages } = useCopilotMessagesContext();
+  const { setMessages } = useCopilotMessagesContext();
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
-  const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
   const { agents, metadata, agentListError, isLoadingAgents, metadataError } =
     useAgentMetadataState(currentAgent);
-  const { knownFacts, knownFactsError, isLoadingKnownFacts } = useKnownFactsState(threadId);
+  const { knownFacts, knownFactsError, isLoadingKnownFacts } = useKnownFactsState(roomId, threadId);
   const {
     activeBundleId,
     bundleProposalError,
@@ -74,32 +81,34 @@ export default function AgentChatPage(): ReactElement {
     isLoadingBundleProposals,
     setActiveBundleId,
     addBundleProposal,
-  } = useSearchBundleState(currentAgent, threadId);
+  } = useSearchBundleState(currentAgent, roomId, threadId);
   const { floorPlanPreview, saveRenderedFloorPlan } = useFloorPlanPreviewState(threadId);
   const searchAgent = isSearchAgent(currentAgent);
   const floorPlanAgent = isFloorPlanAgent(currentAgent);
   const imageAttachmentSupport = supportsImageAttachments(currentAgent);
   const replaceThreadMessages = useCallback((nextMessages: unknown[]) => {
-    setMessages(nextMessages as typeof messages);
+    setMessages(nextMessages as Parameters<typeof setMessages>[0]);
   }, [setMessages]);
 
   useCopilotAgentStateSync({
     agent,
     currentAgent,
+    roomId,
+    sessionId,
     threadId,
     imageAttachments,
     bundleProposals,
   });
-  useThreadSnapshotSync({
-    agentKey,
+  useThreadMessagesHydration({
+    roomId,
     threadId,
-    messages: messages as unknown[],
     replaceMessages: replaceThreadMessages,
   });
 
   const toolRenderers = (
     <CopilotToolRenderers
       onBundleSelected={setActiveBundleId}
+      roomId={roomId}
       threadId={threadId}
       onBundleProposed={addBundleProposal}
       onFloorPlanRendered={saveRenderedFloorPlan}
@@ -132,6 +141,7 @@ export default function AgentChatPage(): ReactElement {
       knownFacts={knownFacts}
       knownFactsError={knownFactsError}
       isLoadingKnownFacts={isLoadingKnownFacts}
+      roomId={roomId}
       threadId={threadId}
       threadIds={threadIds}
       warning={warning}
@@ -157,6 +167,7 @@ export default function AgentChatPage(): ReactElement {
       attachmentPanel={
         <AgentImageAttachmentPanel
           onReadyAttachmentsChange={setImageAttachments}
+          roomId={roomId}
           threadId={threadId}
           {...(floorPlanAgent
             ? {
@@ -167,14 +178,6 @@ export default function AgentChatPage(): ReactElement {
         />
       }
       chatPanel={<AgentChatSidebar currentAgent={currentAgent} />}
-      isTraceCaptureEnabled={traceCaptureEnabled}
-      isTraceDialogOpen={isTraceDialogOpen}
-      onOpenTraceDialog={() => {
-        setIsTraceDialogOpen(true);
-      }}
-      onCloseTraceDialog={() => {
-        setIsTraceDialogOpen(false);
-      }}
     />
   );
 }

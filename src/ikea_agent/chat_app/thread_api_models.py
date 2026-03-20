@@ -1,4 +1,4 @@
-"""Typed FastAPI response models for thread-scoped persistence APIs."""
+"""Typed FastAPI response models for room/thread persistence APIs."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ikea_agent.shared.types import RevealedPreferenceKind
+from ikea_agent.shared.types import KnownFactKind, KnownFactScope, RoomType
 
 
 class ThreadDetailItem(BaseModel):
@@ -14,6 +14,9 @@ class ThreadDetailItem(BaseModel):
 
     thread_id: str
     title: str | None
+    room_id: str
+    room_title: str
+    room_type: RoomType | None
     status: str
     last_activity_at: str | None
     run_count: int
@@ -21,6 +24,16 @@ class ThreadDetailItem(BaseModel):
     floor_plan_revision_count: int
     analysis_count: int
     search_count: int
+
+
+class ThreadListItem(BaseModel):
+    """Lightweight thread metadata for room-scoped thread pickers."""
+
+    thread_id: str
+    room_id: str
+    title: str | None
+    status: str
+    last_activity_at: str | None
 
 
 class AssetListItem(BaseModel):
@@ -39,10 +52,11 @@ class AssetListItem(BaseModel):
 
 
 class KnownFactItem(BaseModel):
-    """One thread-scoped durable fact or preference for UI display."""
+    """One durable room- or project-scoped fact for UI display."""
 
-    memory_id: str
-    kind: RevealedPreferenceKind
+    fact_id: str
+    scope: KnownFactScope
+    kind: KnownFactKind
     summary: str
     source_message_text: str
     updated_at: str
@@ -60,6 +74,12 @@ class AnalysisFeedbackCreateRequest(BaseModel):
     run_id: str | None = None
 
 
+class ThreadCreateRequest(BaseModel):
+    """Request payload to create one explicit thread row for a room."""
+
+    title: str | None = None
+
+
 class AnalysisFeedbackItem(BaseModel):
     """One persisted user feedback decision for an analysis entry."""
 
@@ -75,44 +95,9 @@ class AnalysisFeedbackItem(BaseModel):
     created_at: str
 
 
-class TraceReportCreateRequest(BaseModel):
-    """Request payload for persisting one current-thread trace report."""
+class ThreadTranscriptResponse(BaseModel):
+    """Canonical transcript payload for one room/thread pair."""
 
-    title: str = Field(min_length=1)
-    description: str | None = None
-    thread_id: str = Field(min_length=1)
-    agent_name: str = Field(min_length=1)
-    page_url: str | None = None
-    user_agent: str | None = None
-    include_console_log: bool = True
-    console_log: str | None = None
-
-
-class RecentTraceReportItem(BaseModel):
-    """Small summary payload for recent saved trace bundles."""
-
-    trace_id: str
-    title: str
-    created_at: str
-    thread_id: str | None = None
-    agent_name: str | None = None
-    directory: str
-    markdown_path: str
-
-
-class RecentTraceReportListResponse(BaseModel):
-    """Response payload for recent saved trace bundles."""
-
-    traces: list[RecentTraceReportItem] = Field(default_factory=list)
-
-
-class TraceReportCreateResponse(BaseModel):
-    """Response payload for one saved trace report bundle."""
-
-    trace_id: str
-    directory: str
-    trace_json_path: str
-    markdown_path: str
-    beads_epic_id: str | None = None
-    beads_task_id: str | None = None
-    status: Literal["saved_and_linked", "saved_without_beads"]
+    room_id: str
+    thread_id: str
+    messages: list[dict[str, object]]
