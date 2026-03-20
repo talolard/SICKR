@@ -39,13 +39,14 @@ function bundleItemDisplayName(item: BundleProposal["items"][number]): string {
 }
 
 function BundleValidationList({ proposal }: { proposal: BundleProposal }): ReactElement | null {
-  if (proposal.validations.length === 0) {
+  const visibleValidations = proposal.validations.filter((validation) => validation.status !== "pass");
+  if (visibleValidations.length === 0) {
     return null;
   }
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      {proposal.validations.map((validation) => (
+      {visibleValidations.map((validation) => (
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-medium ${validationTone(validation.status)}`}
           key={`${proposal.bundle_id}-${validation.kind}-${validation.message}`}
@@ -128,25 +129,17 @@ export function SearchBundlePanel({
 
   return (
     <section
-      className="editorial-panel-elevated flex h-full min-h-0 flex-col rounded-[30px] p-5"
+      className="editorial-panel-elevated flex h-full min-h-0 flex-col rounded-[30px] p-4"
       data-testid="search-bundle-panel-root"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="editorial-eyebrow">
-            Search bundles
-          </p>
-          <h2 className="editorial-display mt-3 text-[1.8rem] leading-none text-primary">
-            Bundles
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-            Summaries stay compact until you open the items and validation details.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+          {proposals.length} bundle{proposals.length === 1 ? "" : "s"}
+        </p>
         {isLoading ? <p className="text-xs text-on-surface-variant">Syncing saved bundles...</p> : null}
       </div>
       {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-      <div className="mt-5 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
         {proposals.map((proposal) => {
           const isExpanded = expandedBundleIds.has(proposal.bundle_id);
 
@@ -170,16 +163,8 @@ export function SearchBundlePanel({
                   id={`${bundleSummaryCardId(proposal.bundle_id)}-details`}
                 >
                   <BundleValidationList proposal={proposal} />
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-primary">Included items</p>
-                      <p className="text-xs text-on-surface-variant">
-                        Compare quantities, total cost, and rationale at a glance.
-                      </p>
-                    </div>
-                  </div>
                   <div
-                    className="mt-3 max-h-[32rem] space-y-3 overflow-y-auto pr-1"
+                    className="mt-4 max-h-[32rem] space-y-3 overflow-y-auto pr-1"
                     data-testid={`bundle-items-${proposal.bundle_id}`}
                   >
                     {proposal.items.map((item) => (

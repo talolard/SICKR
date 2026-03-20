@@ -17,6 +17,8 @@ Use this for both sides of the PR process:
   - the exact sibling routes intentionally left unchanged
 - Shared contracts affected:
   - shared shells, rails, renderers, or interaction rules
+- Surface mode:
+  - editorial vs workbench for each touched route
 - Design references checked:
   - exact screenshots, exported HTML, or design docs
 - Beads tasks closed in this PR
@@ -44,9 +46,11 @@ Reviewers should be able to answer these questions explicitly:
 4. If it touches only a local slice, does the PR description avoid app-wide claims?
 5. Were the touched routes compared against named design references?
 6. Were fresh-thread, existing-thread, success, and long-content states checked?
-7. If CopilotKit or transcript styling changed, were scroll ownership and long raw payload behavior checked?
-8. Are the Beads tasks and PR body synchronized about what is done versus deferred?
-9. If the branch follows a squash-merged predecessor, is the commit history still reviewer-friendly?
+7. On workbench routes, does the first screen show the first real artifact without multiple stacked framing cards?
+8. On workbench routes, are success-state badges and validation signals quieter than the actual content and next action?
+9. If CopilotKit or transcript styling changed, were scroll ownership, long raw payload behavior, and narrow-rail density checked?
+10. Are the Beads tasks and PR body synchronized about what is done versus deferred?
+11. If the branch follows a squash-merged predecessor, is the commit history still reviewer-friendly?
 
 ## Required validation for route-family work
 
@@ -57,13 +61,14 @@ For route-family or shared-shell work, the manual check should always include:
 - one existing thread
 - one realistic success path
 - one long-content or raw-tool-output stress case
+- for workbench routes, one active-thread check where the first primary artifact is visible in the first screenful
 
 Automated checks should normally include:
 
 - targeted Vitest coverage for touched components or renderers
 - targeted Playwright coverage when the behavior is user-visible
 - `make tidy`
-- `make ui-test-e2e-real-ui-smoke` when agent-page behavior changed
+- the deferred CI real-UI smoke lane when agent-page behavior changed; run `make ui-test-e2e-real-ui-smoke` locally only when debugging that path
 
 ## Review workflow formula
 
@@ -81,7 +86,7 @@ bd mol wisp frontend-pr-review \
   --var pr_title="Close Stitch rollout gaps in the agent workspaces" \
   --var routes_claimed="home, search workspace, floor-plan intake workspace, image-analysis workspace, consultation rail" \
   --var design_refs="design_references/stitch_design/, spec/uxui-march19/report.md" \
-  --var author_validation="make tidy; make ui-test-e2e-real-ui-smoke"
+  --var author_validation="make tidy; deferred CI real-UI smoke after PR CI and Dependency Review"
 ```
 
 Use the review wisp to track:

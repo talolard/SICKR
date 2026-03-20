@@ -43,6 +43,7 @@ describe("ProductResultsToolRenderer", () => {
     expect(screen.getByText("Storage options")).toBeInTheDocument();
     expect(screen.getByText("narrow wardrobe")).toBeInTheDocument();
     expect(screen.getByText("2 results")).toBeInTheDocument();
+    expect(screen.queryByText("Chat results")).not.toBeInTheDocument();
     expect(screen.queryByText("BRIMNES Wardrobe")).not.toBeInTheDocument();
     expect(screen.queryByText("PAX Shelf")).not.toBeInTheDocument();
     expect(screen.queryByTestId("product-results-panel-storage")).not.toBeInTheDocument();
