@@ -9,7 +9,9 @@ Active runtime uses Postgres for:
 - `catalog.product_embeddings` (seeded embedding snapshots used directly by pgvector retrieval)
 - `catalog.product_embedding_neighbors` (optional legacy precomputed neighbor rows; active MMR no longer depends on them)
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
-- `app.*` conversation and analysis tables managed by existing runtime migrations
+- `app.agent_runs` (run lifecycle and provenance)
+- `app.thread_message_segments` (canonical persisted PydanticAI message batches used for DB-backed thread continuation)
+- other `app.*` room, thread, fact, artifact, and analysis tables managed by runtime migrations
 - `ops.seed_state` (observable seed versions and refresh metadata)
   - includes `postgres_snapshot` rows after a versioned snapshot artifact is built
 

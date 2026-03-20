@@ -1,15 +1,24 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+import json
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
 import pytest
+from fastapi import Request, Response
 from fastapi.testclient import TestClient
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -17,6 +26,7 @@ from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
+from ikea_agent.chat_app import agui as agui_module
 from ikea_agent.chat_app.main import create_app
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.models import (
@@ -32,12 +42,21 @@ from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_USER_ID,
     ensure_default_dev_hierarchy,
 )
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 
 
 @dataclass
 class _PersistenceRuntimeStub:
     sqlalchemy_engine: object
     session_factory: sessionmaker[Session]
+
+
+@dataclass(frozen=True)
+class _FakeAgUiRunResult:
+    messages: list[ModelMessage]
+
+    def new_messages_json(self, *, _output_tool_return_content: str | None = None) -> bytes:
+        return ModelMessagesTypeAdapter.dump_json(self.messages)
 
 
 @pytest.fixture(autouse=True)
@@ -220,6 +239,92 @@ def test_agent_ag_ui_route_requires_explicit_room_context() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "AG-UI requests require explicit `roomId`."
+
+
+def test_agent_ag_ui_route_uses_db_backed_message_history(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    observed_histories: list[list[ModelMessage]] = []
+    observed_request_messages: list[list[dict[str, object]]] = []
+
+    async def _stub_handle_ag_ui_request(
+        _agent: Agent[object, str],
+        _request: Request,
+        *,
+        message_history: list[ModelMessage] | None = None,
+        on_complete: Callable[[_FakeAgUiRunResult], Awaitable[None]] | None = None,
+        **_: object,
+    ) -> Response:
+        run_number = len(observed_histories) + 1
+        observed_histories.append(list(message_history or []))
+        request_payload = json.loads((await _request.body()).decode("utf-8"))
+        observed_request_messages.append(
+            [
+                message
+                for message in request_payload.get("messages", [])
+                if isinstance(message, dict)
+            ]
+        )
+        if on_complete is not None:
+            await on_complete(
+                _FakeAgUiRunResult(
+                    messages=[
+                        ModelRequest(
+                            parts=[UserPromptPart(content=f"user-{run_number}")],
+                            run_id=f"model-run-{run_number}",
+                        ),
+                        ModelResponse(
+                            parts=[TextPart(content=f"assistant-{run_number}")],
+                            model_name="test-model",
+                            run_id=f"model-run-{run_number}",
+                        ),
+                    ]
+                )
+            )
+        return Response(content="ok", media_type="text/plain")
+
+    monkeypatch.setattr(agui_module, "handle_ag_ui_request", _stub_handle_ag_ui_request)
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    first_payload = _ag_ui_request_payload("hello")
+    second_payload = _ag_ui_request_payload("follow up")
+    second_payload["runId"] = "run-2"
+    second_payload["messages"] = [
+        {"id": "message-1", "role": "user", "content": "user-1"},
+        {"id": "message-2", "role": "assistant", "content": "assistant-1"},
+        {"id": "message-3", "role": "user", "content": "follow up"},
+    ]
+
+    first_response = client.post("/ag-ui/agents/search", json=first_payload)
+    second_response = client.post("/ag-ui/agents/search", json=second_payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert observed_histories[0] == []
+    assert len(observed_histories[1]) == 2
+    assert [message["content"] for message in observed_request_messages[0]] == ["hello"]
+    assert [message["content"] for message in observed_request_messages[1]] == ["follow up"]
+    assert isinstance(observed_histories[1][0], ModelRequest)
+    assert isinstance(observed_histories[1][1], ModelResponse)
+    first_request_part = observed_histories[1][0].parts[0]
+    first_response_part = observed_histories[1][1].parts[0]
+    assert isinstance(first_request_part, UserPromptPart)
+    assert isinstance(first_response_part, TextPart)
+    assert first_request_part.content == "user-1"
+    assert first_response_part.content == "assistant-1"
+
+    repository = RunHistoryRepository(runtime.session_factory)
+    persisted_history = repository.load_message_history(thread_id="thread-1")
+    assert len(persisted_history) == 4
 
 
 def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> None:

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from pydantic_ai.ui.ag_ui import AGUIAdapter
 
 from ikea_agent.chat.agents.index import AnyAgentDeps, clone_agent_deps_for_request
 from ikea_agent.persistence.context_fact_repository import (
@@ -21,6 +24,15 @@ from ikea_agent.persistence.run_history_repository import (
     extract_last_user_prompt,
 )
 from ikea_agent.shared.types import KnownFactMemory, RoomType
+
+JsonScalar = str | int | float | bool | None
+StableJsonValue = JsonScalar | list["StableJsonValue"] | dict[str, "StableJsonValue"]
+
+
+class _CompletedRunResult(Protocol):
+    """Completed PydanticAI run result surface needed by AG-UI persistence."""
+
+    def new_messages_json(self, *, output_tool_return_content: str | None = None) -> bytes: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +47,7 @@ class AgUiRunContext:
     thread_id: str
     room_facts: list[KnownFactMemory]
     project_facts: list[KnownFactMemory]
+    message_history: list[ModelMessage]
 
 
 def _load_room_context(
@@ -72,6 +85,65 @@ def _required_context_value(
         status_code=400,
         detail=f"AG-UI requests require explicit `{camel_key}`.",
     )
+
+
+_VOLATILE_MODEL_MESSAGE_FIELDS = frozenset(
+    {
+        "finish_reason",
+        "id",
+        "metadata",
+        "model_name",
+        "provider_details",
+        "provider_name",
+        "provider_response_id",
+        "provider_url",
+        "run_id",
+        "timestamp",
+        "usage",
+    }
+)
+
+
+def _stable_model_message_value(value: object) -> StableJsonValue:
+    if isinstance(value, list):
+        return [_stable_model_message_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _stable_model_message_value(item)
+            for key, item in value.items()
+            if key not in _VOLATILE_MODEL_MESSAGE_FIELDS
+        }
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    raise TypeError(f"Unsupported stable message value: {type(value)!r}")
+
+
+def _stable_model_history(messages: Sequence[ModelMessage]) -> StableJsonValue:
+    return _stable_model_message_value(
+        ModelMessagesTypeAdapter.dump_python(list(messages), mode="json")
+    )
+
+
+def _strip_persisted_message_prefix(
+    *,
+    body: bytes,
+    structured_messages: list[dict[str, object]],
+    persisted_message_history: Sequence[ModelMessage],
+) -> list[dict[str, object]]:
+    if not structured_messages or not persisted_message_history:
+        return structured_messages
+
+    try:
+        incoming_messages = list(AGUIAdapter.build_run_input(body).messages)
+    except Exception:
+        return structured_messages
+
+    persisted_history = _stable_model_history(persisted_message_history)
+    for prefix_length in range(len(incoming_messages) + 1):
+        prefix_history = AGUIAdapter.load_messages(incoming_messages[:prefix_length])
+        if _stable_model_history(prefix_history) == persisted_history:
+            return structured_messages[prefix_length:]
+    return structured_messages
 
 
 async def _parse_and_record_run_context(
@@ -117,6 +189,16 @@ async def _parse_and_record_run_context(
             )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+    message_history = (
+        run_history_repository.load_message_history(thread_id=thread_id)
+        if run_history_repository is not None
+        else []
+    )
+    payload["messages"] = _strip_persisted_message_prefix(
+        body=body,
+        structured_messages=structured_messages,
+        persisted_message_history=message_history,
+    )
 
     normalized_state["room_id"] = room_id
     normalized_state["thread_id"] = thread_id
@@ -151,6 +233,7 @@ async def _parse_and_record_run_context(
         thread_id=thread_id,
         room_facts=room_context.room_facts if room_context is not None else [],
         project_facts=room_context.project_facts if room_context is not None else [],
+        message_history=message_history,
     )
 
 
@@ -158,10 +241,13 @@ def _build_on_complete(
     run_history_repository: RunHistoryRepository | None,
     *,
     run_id: str,
-) -> Callable[[object], Awaitable[None]]:
-    async def _on_complete(_result: object) -> None:
+) -> Callable[[_CompletedRunResult], Awaitable[None]]:
+    async def _on_complete(result: _CompletedRunResult) -> None:
         if run_history_repository is not None:
-            run_history_repository.record_run_complete(run_id=run_id)
+            run_history_repository.record_run_complete(
+                run_id=run_id,
+                new_messages_json=result.new_messages_json(),
+            )
 
     return _on_complete
 
@@ -233,6 +319,7 @@ def _register_ag_ui_routes(
                     agent,
                     request,
                     deps=deps,
+                    message_history=context.message_history,
                     on_complete=on_complete,
                 )
         except Exception as exc:

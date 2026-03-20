@@ -134,6 +134,37 @@ class AgentRunRecord(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ThreadMessageSegmentRecord(Base):
+    """Canonical PydanticAI message batches appended to one thread."""
+
+    __tablename__ = "thread_message_segments"
+    __table_args__ = (
+        Index("ix_thread_message_segments_thread_id", "thread_id"),
+        UniqueConstraint("run_id", name="uq_thread_message_segments_run_id"),
+        UniqueConstraint(
+            "thread_id",
+            "sequence_no",
+            name="uq_thread_message_segments_thread_sequence",
+        ),
+        {"schema": APP_SCHEMA},
+    )
+
+    thread_message_segment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=False,
+    )
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    messages_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AssetRecord(Base):
     """File-backed artifact metadata and associations."""
 

@@ -91,6 +91,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             ("app", "rooms"),
             ("app", "threads"),
             ("app", "agent_runs"),
+            ("app", "thread_message_segments"),
             ("app", "assets"),
             ("app", "floor_plan_revisions"),
             ("app", "analysis_runs"),

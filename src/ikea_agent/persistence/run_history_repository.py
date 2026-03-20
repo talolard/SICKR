@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import select, update
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord
+from ikea_agent.persistence.models import AgentRunRecord, ThreadMessageSegmentRecord
 from ikea_agent.persistence.ownership import resolve_room_thread_context
 
 
@@ -17,7 +19,7 @@ def _utcnow() -> datetime:
 
 
 class RunHistoryRepository:
-    """Repository for persisting thread and run lifecycle state."""
+    """Repository for canonical thread transcript and run lifecycle state."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -78,17 +80,27 @@ class RunHistoryRepository:
 
             session.commit()
 
-    def record_run_complete(self, *, run_id: str) -> None:
+    def record_run_complete(
+        self,
+        *,
+        run_id: str,
+        new_messages_json: bytes | None = None,
+    ) -> None:
         """Mark one run as completed."""
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            run = session.get(AgentRunRecord, run_id)
+            if run is None:
                 session.commit()
                 return
+            self._upsert_thread_message_segment(
+                session,
+                run_id=run_id,
+                thread_id=run.thread_id,
+                new_messages_json=new_messages_json,
+                now=now,
+            )
             session.execute(
                 update(AgentRunRecord)
                 .where(AgentRunRecord.run_id == run_id)
@@ -113,6 +125,78 @@ class RunHistoryRepository:
                 .values(status="failed", ended_at=now, error_message=error_message)
             )
             session.commit()
+
+    def load_message_history(self, *, thread_id: str) -> list[ModelMessage]:
+        """Load the canonical ordered PydanticAI history for one thread."""
+
+        with self._session_factory() as session:
+            encoded_segments = session.execute(
+                select(ThreadMessageSegmentRecord.messages_json)
+                .where(ThreadMessageSegmentRecord.thread_id == thread_id)
+                .order_by(ThreadMessageSegmentRecord.sequence_no)
+            ).scalars()
+            history: list[ModelMessage] = []
+            for encoded_segment in encoded_segments:
+                history.extend(self._decode_messages_json(encoded_segment))
+            return history
+
+    def _upsert_thread_message_segment(
+        self,
+        session: Session,
+        *,
+        run_id: str,
+        thread_id: str,
+        new_messages_json: bytes | None,
+        now: datetime,
+    ) -> None:
+        if new_messages_json is None:
+            return
+
+        messages = self._decode_messages_json(new_messages_json)
+        if not messages:
+            return
+
+        serialized_messages = new_messages_json.decode("utf-8")
+        existing_segment = session.execute(
+            select(
+                ThreadMessageSegmentRecord.thread_message_segment_id,
+                ThreadMessageSegmentRecord.sequence_no,
+            ).where(ThreadMessageSegmentRecord.run_id == run_id)
+        ).one_or_none()
+        if existing_segment is None:
+            next_sequence = self._next_thread_sequence(session, thread_id=thread_id)
+            session.add(
+                ThreadMessageSegmentRecord(
+                    thread_message_segment_id=f"msgseg-{uuid4().hex[:20]}",
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    sequence_no=next_sequence,
+                    messages_json=serialized_messages,
+                    created_at=now,
+                )
+            )
+            return
+
+        session.execute(
+            update(ThreadMessageSegmentRecord)
+            .where(
+                ThreadMessageSegmentRecord.thread_message_segment_id
+                == existing_segment.thread_message_segment_id
+            )
+            .values(messages_json=serialized_messages)
+        )
+
+    def _next_thread_sequence(self, session: Session, *, thread_id: str) -> int:
+        current_max = session.execute(
+            select(func.max(ThreadMessageSegmentRecord.sequence_no)).where(
+                ThreadMessageSegmentRecord.thread_id == thread_id
+            )
+        ).scalar_one_or_none()
+        return int(current_max or 0) + 1
+
+    def _decode_messages_json(self, messages_json: bytes | str) -> list[ModelMessage]:
+        decoded_messages = ModelMessagesTypeAdapter.validate_json(messages_json)
+        return list(decoded_messages)
 
 
 def extract_last_user_prompt(messages: list[dict[str, Any]]) -> str | None:
