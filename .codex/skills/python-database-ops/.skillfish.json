@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "python-database-ops",
+  "owner": "0xdarkmatter",
+  "repo": "claude-mods",
+  "path": "skills/python-database-ops",
+  "branch": "main",
+  "sha": "6a997c07117697837fa47506ad91affc5fc80ba6",
+  "source": "manual"
+}
