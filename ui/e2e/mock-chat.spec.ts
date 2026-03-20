@@ -192,6 +192,53 @@ test("isolates thread history when switching to a new thread", async ({ page }) 
   );
 });
 
+test("keeps the home launcher rails aligned at canonical desktop width", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1200 });
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "Welcome to your Designer's Studio" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("studio-showcase-left-rail")).toBeVisible();
+  await expect(page.getByTestId("studio-showcase-right-rail")).toBeVisible();
+  await expect(page.getByRole("button", { name: "View All Archives" })).toBeVisible();
+
+  const metrics = await page.evaluate(() => {
+    const leftRail = document.querySelector(
+      "[data-testid='studio-showcase-left-rail']",
+    ) as HTMLElement | null;
+    const rightRail = document.querySelector(
+      "[data-testid='studio-showcase-right-rail']",
+    ) as HTMLElement | null;
+
+    return {
+      leftHeight: leftRail?.getBoundingClientRect().height ?? 0,
+      leftTop: leftRail?.getBoundingClientRect().top ?? 0,
+      rightHeight: rightRail?.getBoundingClientRect().height ?? 0,
+      rightTop: rightRail?.getBoundingClientRect().top ?? 0,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  expect(Math.abs(metrics.leftTop - metrics.rightTop)).toBeLessThanOrEqual(4);
+  expect(metrics.leftHeight).toBeGreaterThan(metrics.viewportHeight * 0.75);
+  expect(metrics.rightHeight).toBeGreaterThan(metrics.viewportHeight * 0.75);
+});
+
+test("keeps the home launcher coherent at narrower desktop widths", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 1100 });
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "Welcome to your Designer's Studio" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "My Designs" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Search workspace/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: "View All Archives" })).toBeVisible();
+  await expect(page.getByTestId("studio-showcase-left-rail")).toBeVisible();
+  await expect(page.getByTestId("studio-showcase-right-rail")).toBeHidden();
+});
+
 test("opens save-trace dialog on the agent page and saves with recent traces", async ({ page }) => {
   await page.route("**/api/traces/recent?limit=5", async (route) => {
     await route.fulfill({

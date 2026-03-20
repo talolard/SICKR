@@ -92,7 +92,7 @@ export function AppNavBanner({
 
   return (
     <header className="editorial-glass-nav sticky top-0 z-40">
-      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
         <div className="flex min-w-0 items-center gap-6">
           <button
             className="editorial-display text-2xl italic text-[color:var(--primary)] transition hover:opacity-80"
@@ -136,7 +136,7 @@ export function AppNavBanner({
           {launcherDisabled ? (
             <div
               aria-disabled="true"
-              className="editorial-launcher-shell px-4 py-2.5 text-left text-on-surface-variant"
+              className="rounded-full bg-[rgb(255_248_242_/_0.88)] px-4 py-2.5 text-left text-on-surface-variant shadow-[0_20px_40px_rgba(32,27,16,0.06)] backdrop-blur-[16px]"
               data-testid="app-nav-agent-launcher"
             >
               <span className="text-sm font-medium text-primary">Loading agent list...</span>
@@ -149,16 +149,14 @@ export function AppNavBanner({
             >
               <summary
                 aria-label="Open studio menu"
-                className="editorial-launcher-shell cursor-pointer p-1.5"
+                className="flex cursor-pointer items-center justify-center rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgb(24_36_27_/_0.18)]"
                 data-testid="app-nav-agent-launcher-trigger"
               >
-                <div className="flex items-center pl-0.5 pr-0.5">
-                  <div className="editorial-avatar flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase">
-                    {currentAgentName ? currentAgentLabel.charAt(0) : "T"}
-                  </div>
+                <div className="editorial-avatar flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase shadow-[0_16px_28px_rgba(130,84,41,0.18)] ring-4 ring-[rgb(255_248_242_/_0.72)]">
+                  {currentAgentName ? currentAgentLabel.charAt(0) : "T"}
                 </div>
               </summary>
-              <div className="editorial-launcher-menu absolute right-0 z-30 mt-3 w-[22rem] rounded-[28px] p-3">
+              <div className="editorial-launcher-menu absolute right-0 z-30 mt-2.5 w-[21rem] rounded-[26px] p-3">
                 {agentLoadError ? (
                   <p className="rounded-[20px] bg-red-50 px-3 py-2 text-xs text-red-700">
                     {agentLoadError}
