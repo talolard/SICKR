@@ -17,6 +17,7 @@ After bootstrap:
 - plain `make` targets automatically load `.tmp_untracked/worktree.env`
 - slot claims are rejected if another worktree or running process is already using that slot's ports
 - bootstrap ensures the slot-scoped Postgres dependency is prepared before dev servers start
+- `make dev human` is reserved for the canonical checkout and Tal's persistent human-owned slot `90`; agents must not use it from a worktree
 
 ## Rules
 
