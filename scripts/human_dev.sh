@@ -93,16 +93,22 @@ ensure_slot_not_claimed_by_other_worktree
 
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
-POSTGRES_PORT=$((15432 + SLOT))
 
 printf 'Preparing human dev slot %s in %s\n' "${SLOT}" "${WORKTREE_ROOT}"
 printf 'Backend: http://127.0.0.1:%s\n' "${BACKEND_PORT}"
 printf 'UI: http://127.0.0.1:%s/agents/search\n' "${UI_PORT}"
-printf 'Postgres: postgresql+psycopg://ikea:ikea@127.0.0.1:%s/ikea_agent\n' "${POSTGRES_PORT}"
+printf 'Postgres: repo-shared service bootstrapped via scripts/worktree/bootstrap.sh\n'
 
 bash "${WORKTREE_ROOT}/scripts/worktree/bootstrap.sh" \
   --slot "${SLOT}" \
   --canonical-root "${CANONICAL_ROOT}"
+
+WORKTREE_ENV="${WORKTREE_ROOT}/.tmp_untracked/worktree.env"
+if [[ -f "${WORKTREE_ENV}" ]]; then
+  # shellcheck disable=SC1090
+  source "${WORKTREE_ENV}"
+  printf 'Database: %s\n' "${DATABASE_URL}"
+fi
 
 if backend_is_running && ui_is_running; then
   printf 'Human dev is already running.\n'

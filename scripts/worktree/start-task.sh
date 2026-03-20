@@ -22,6 +22,21 @@ bd_cmd() {
   bd --allow-stale "$@"
 }
 
+resolve_canonical_root() {
+  local repo_root="$1"
+  local primary_root=""
+  primary_root="$(
+    git -C "${repo_root}" worktree list --porcelain 2>/dev/null \
+      | sed -n 's/^worktree //p' \
+      | head -n 1
+  )"
+  if [[ -n "${primary_root}" ]]; then
+    printf '%s\n' "${primary_root}"
+    return 0
+  fi
+  printf '%s\n' "${repo_root}"
+}
+
 to_slug() {
   local input="$1"
   local slug
@@ -125,11 +140,12 @@ require_cmd bd
 require_cmd git
 require_cmd jq
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-if [[ -z "${REPO_ROOT}" ]]; then
+SOURCE_ROOT="$(git rev-parse --show-toplevel)"
+if [[ -z "${SOURCE_ROOT}" ]]; then
   printf 'Unable to determine repository root.\n' >&2
   exit 1
 fi
+CANONICAL_ROOT="$(resolve_canonical_root "${SOURCE_ROOT}")"
 
 if [[ -z "${ISSUE_ID}" ]]; then
   matches_json="$(bd_cmd ready --json | jq --arg q "${QUERY}" '
@@ -180,7 +196,7 @@ WORKTREE_NAME="${EPIC_ID}-${SLUG}"
 WORKTREE_PATH="${ROOT_PATH%/}/${WORKTREE_NAME}"
 BRANCH_NAME="epic/${EPIC_ID}-${SLUG}"
 if [[ "${MODE}" == "full" ]]; then
-  bash "${REPO_ROOT}/scripts/worktree/check-slot.sh" --slot "${SLOT}"
+  bash "${SOURCE_ROOT}/scripts/worktree/check-slot.sh" --slot "${SLOT}"
 fi
 
 if (( DRY_RUN == 1 )); then
@@ -209,7 +225,7 @@ fi
 bd_cmd worktree create "${WORKTREE_PATH}" --branch "${BRANCH_NAME}" --json >/dev/null
 bd_cmd update "${ISSUE_ID}" --status in_progress --json >/dev/null || true
 
-bootstrap_cmd=("${WORKTREE_PATH}/scripts/worktree/bootstrap.sh" --mode "${MODE}" --canonical-root "${REPO_ROOT}")
+bootstrap_cmd=("${WORKTREE_PATH}/scripts/worktree/bootstrap.sh" --mode "${MODE}" --canonical-root "${CANONICAL_ROOT}")
 if [[ "${MODE}" == "full" ]]; then
   bootstrap_cmd+=(--slot "${SLOT}")
 fi
@@ -246,6 +262,6 @@ Mode: ${MODE}
 This worktree is ready for docs/research/spec work.
 Upgrade it later with:
   cd ${WORKTREE_PATH}
-  bash scripts/worktree/bootstrap.sh --mode full --slot <0-99> --canonical-root ${REPO_ROOT}
+  bash scripts/worktree/bootstrap.sh --mode full --slot <0-99> --canonical-root ${CANONICAL_ROOT}
 NEXT
 fi

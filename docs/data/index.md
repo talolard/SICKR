@@ -31,8 +31,8 @@ Active runtime uses Postgres for:
    seed versions in `ops.seed_state`, writes one `postgres_snapshot` metadata row, and emits a
    versioned `pg_dump` artifact plus manifest.
 3. Normal `scripts/worktree/deps.sh ensure-postgres` and worktree bootstrap restore the latest
-   snapshot artifact into a fresh slot-local Postgres volume instead of reseeding from canonical
-   files.
+   snapshot artifact into a shared template database, then clone one isolated
+   Postgres database per worktree instead of reseeding from canonical files.
 4. `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit maintenance workflow when a
    rebuild from canonical inputs is needed.
 5. Query flow retrieves semantic matches directly from Postgres pgvector tables, then derives the

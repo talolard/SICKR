@@ -54,6 +54,11 @@ if [[ -f "${WORKTREE_ENV}" ]]; then
   if [[ -n "${UI_PORT:-}" ]]; then
     lsof -tiTCP:"${UI_PORT}" -sTCP:LISTEN | xargs kill 2>/dev/null || true
   fi
+  if [[ "${WORKTREE_BOOTSTRAP_MODE:-}" == "full" ]]; then
+    bash "${WORKTREE_PATH}/scripts/worktree/deps.sh" down \
+      --canonical-root "${CANONICAL_ROOT:-${WORKTREE_PATH}}" \
+      --worktree-root "${WORKTREE_PATH}" || true
+  fi
 fi
 
 CURRENT_ROOT="$(git rev-parse --show-toplevel)"

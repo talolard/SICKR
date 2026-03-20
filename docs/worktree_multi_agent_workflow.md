@@ -29,7 +29,7 @@ After bootstrap:
 
 - plain `make` targets automatically load `.tmp_untracked/worktree.env`
 - full bootstrap slot claims are rejected if another worktree or running process is already using that slot's ports
-- full bootstrap ensures the slot-scoped Postgres dependency is prepared before dev servers start
+- full bootstrap ensures the repo-shared Postgres service plus an isolated per-worktree database before dev servers start
 - `make dev human` is reserved for the canonical checkout and Tal's persistent human-owned slot `90`; agents must not use it from a worktree
 - docs-mode worktrees must be upgraded before runtime commands:
 
@@ -51,14 +51,15 @@ bash scripts/worktree/bootstrap.sh --mode full --slot 7
 
 Per-worktree writable paths:
 
-- `DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:1543x/ikea_agent`
+- `DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_wt_<slug>_<hash>`
 - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
 - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
 
 Full-bootstrap dependency scopes:
 
-- one worktree-local Postgres Docker volume and service per slot
-- one worktree-local Postgres snapshot cache under `.tmp_untracked/docker-deps/snapshots`
+- one repo-managed Postgres Docker volume and service shared across worktrees
+- one isolated worktree database cloned from the shared template database
+- one canonical shared snapshot cache under `<canonical-root>/.tmp_untracked/shared-postgres/snapshots`
 - canonical catalog parquet under `data/parquet` remains shared read-only
 
 Docs-mode worktrees do not create runtime services or claim a slot.
@@ -71,7 +72,7 @@ Docs-mode worktrees do not create runtime services or claim a slot.
 3. Execute all related implementation in that worktree branch.
 4. If you started in docs mode and later need runtime, upgrade the same worktree
    with `bash scripts/worktree/bootstrap.sh --mode full --slot <n>`.
-5. Use `make deps-status SLOT=<slot>` or `scripts/worktree/deps.sh status --slot <slot>` when dependency diagnostics are needed for full bootstrap.
+5. Use `make deps-status SLOT=<slot>` or `scripts/worktree/deps.sh status --slot <slot>` when dependency diagnostics are needed for full bootstrap. The shared Postgres cache and service live under the canonical root, even when the current branch was started from another worktree.
 6. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; the real-UI smoke now runs in deferred CI after `PR CI` and `Dependency Review` succeed for the PR SHA. Run `make ui-test-e2e-real-ui-smoke` locally only when debugging the live CopilotKit or AG-UI path.
 7. Commit task-scoped changes.
 8. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
