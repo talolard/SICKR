@@ -169,7 +169,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - targeted `pnpm test` coverage for touched components
   - targeted Playwright coverage when behavior is user-visible
   - `make tidy`
-- For behavioral changes on agent pages, aim to keep `make ui-test-e2e-real-ui-smoke` green before calling the work ready.
+- For behavioral changes on agent pages, rely on targeted local checks plus the deferred CI real-UI smoke. That lane runs after `PR CI` and `Dependency Review` succeed for the PR SHA. Run `make ui-test-e2e-real-ui-smoke` locally only when debugging the live CopilotKit or AG-UI path.
 - For redesign work, include route-level visual verification notes for the touched pages and name the reference screenshot or export used for comparison.
 - Manual route review should include:
   - a fresh thread

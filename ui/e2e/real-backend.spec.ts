@@ -5,6 +5,11 @@ function shouldRunRealBackendSuite(): boolean {
   return process.env.RUN_REAL_BACKEND_E2E === "1";
 }
 
+function expectedSmokeAssistantText(): string | null {
+  const text = process.env.E2E_SMOKE_ASSISTANT_TEXT;
+  return text && text.length > 0 ? text : null;
+}
+
 const SEEDED_SEARCH_THREAD_ID = "e2e-search-thread";
 const SEEDED_BUNDLE_PROPOSAL = {
   bundle_id: "bundle-1",
@@ -92,16 +97,13 @@ test.describe("real backend smoke", () => {
   });
 
   test("sends and receives messages via CopilotKit UI", async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(45_000);
 
     await page.goto("/agents/search");
-    await expect(page.getByTestId("new-thread-button")).toBeVisible();
-    await page.getByTestId("new-thread-button").click();
 
     const chatInput = page.getByPlaceholder("Type a message...");
     const sendButton = page.getByRole("button", { name: "Send" });
     await expect(chatInput).toBeVisible();
-    await page.waitForTimeout(2_000);
 
     const prompt = "Give one short sentence recommending an IKEA storage item.";
     await chatInput.click();
@@ -110,9 +112,18 @@ test.describe("real backend smoke", () => {
     await sendButton.click();
     await expect(chatInput).toHaveValue("", { timeout: 10_000 });
 
+    const expectedText = expectedSmokeAssistantText();
+    if (expectedText) {
+      const deterministicResponse = page
+        .locator(".agent-chat-pane .copilotKitAssistantMessage")
+        .filter({ hasText: expectedText });
+      await expect(deterministicResponse).toBeVisible({ timeout: 15_000 });
+      return;
+    }
+
     const assistantMessages = page.locator(".agent-chat-pane .copilotKitAssistantMessage");
     await expect
-      .poll(async () => await assistantMessages.count(), { timeout: 60_000 })
+      .poll(async () => await assistantMessages.count(), { timeout: 20_000 })
       .toBeGreaterThan(0);
   });
 

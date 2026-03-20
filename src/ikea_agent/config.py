@@ -59,6 +59,13 @@ class AppSettings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("ALLOW_MODEL_REQUESTS", "APP_ALLOW_MODEL_REQUESTS"),
     )
+    deterministic_model_response_text: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "DETERMINISTIC_MODEL_RESPONSE_TEXT",
+            "APP_DETERMINISTIC_MODEL_RESPONSE_TEXT",
+        ),
+    )
 
     ikea_raw_csv_path: str = Field(default="data/IKEA_product_catalog.csv")
     database_url: str | None = Field(

@@ -50,7 +50,7 @@ Dependency scopes:
 2. Start worktree via `make agent-start ...`.
 3. Execute all related implementation in that worktree branch.
 4. Use `make deps-status SLOT=<slot>` or `scripts/worktree/deps.sh status --slot <slot>` when dependency diagnostics are needed.
-5. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; run `make ui-test-e2e-real-ui-smoke` separately when the change touches runtime/UI behavior.
+5. Run `make tidy` before completion. In this repo that covers backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; the real-UI smoke now runs in deferred CI after `PR CI` and `Dependency Review` succeed for the PR SHA. Run `make ui-test-e2e-real-ui-smoke` locally only when debugging the live CopilotKit or AG-UI path.
 6. Commit task-scoped changes.
 7. Queue merge under `awaiting-merge` as `merge-request` (blocked, assigned to `merger-agent`).
 8. Retire worktree after merge verification.

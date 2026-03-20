@@ -35,7 +35,7 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - Python environment and commands run through `uv`.
 - Required pre-commit quality gate: `make tidy`.
 - `make format-all` is the quick format and lint pass without the full test suite.
-- For behavioral or runtime changes, run `make ui-test-e2e-real-ui-smoke` before declaring readiness.
+- For behavioral or runtime changes, keep targeted local validation focused on the touched surface. The deferred real-UI smoke runs in CI after `PR CI` and `Dependency Review` succeed for the PR SHA; run `make ui-test-e2e-real-ui-smoke` locally only when debugging the live CopilotKit or AG-UI path.
 - Probe isolation, slot-based ports, and per-worktree writable paths are documented in [docs/worktree_multi_agent_workflow.md](docs/worktree_multi_agent_workflow.md).
 
 ## Typing and test expectations
@@ -70,7 +70,7 @@ Repository-wide invariants for work in `tal_maria_ikea`.
   - use in-flow chat primitives for page content and reserve sidebar primitives for actual sidebar UX
   - persist the rendered transcript state, not only the thread id, anywhere refresh rehydration matters
   - put user-facing labels in typed backend metadata instead of deriving them ad hoc in React
-  - treat cold-start `make ui-test-e2e-real-ui-smoke` behavior as a product contract, not only a CI wrapper detail
+  - treat the deferred real-UI smoke path as a product contract, not only a CI wrapper detail
   - when a new eval suite is needed, copy the strongest existing repo eval architecture and change case content before changing framework shape
 - Retrospective details: [docs/archive/floor_plan_agent_fixes_retrospective_2026-03-18.md](docs/archive/floor_plan_agent_fixes_retrospective_2026-03-18.md)
 

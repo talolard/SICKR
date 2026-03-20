@@ -89,7 +89,7 @@ For meaningful frontend work, validate in layers:
 2. targeted route or Playwright checks for user-visible behavior
 3. manual visual review on the running app
 4. full repo gate with `make tidy`
-5. route-level smoke check with `make ui-test-e2e-real-ui-smoke` when agent-page behavior changed
+5. deferred route-level smoke in CI when agent-page behavior changed; that lane now waits for `PR CI` and `Dependency Review` to succeed for the PR SHA, and `make ui-test-e2e-real-ui-smoke` is local debug-only
 
 During manual review, check at least:
 
