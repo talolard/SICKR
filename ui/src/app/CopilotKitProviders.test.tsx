@@ -26,12 +26,16 @@ vi.mock("@copilotkit/react-core", () => ({
   CopilotKit: ({
     agent,
     children,
+    enableInspector,
     runtimeUrl,
+    showDevConsole,
     threadId,
   }: {
     agent: string;
     children: ReactElement;
+    enableInspector?: boolean;
     runtimeUrl: string;
+    showDevConsole?: boolean;
     threadId?: string;
   }): ReactElement => {
     React.useEffect(() => {
@@ -44,7 +48,9 @@ vi.mock("@copilotkit/react-core", () => ({
     return (
       <div
         data-agent={agent}
+        data-enable-inspector={String(enableInspector)}
         data-runtime-url={runtimeUrl}
+        data-show-dev-console={String(showDevConsole)}
         data-testid="copilotkit-root"
         data-thread-id={threadId ?? ""}
       >
@@ -106,6 +112,8 @@ describe("CopilotKitProviders", () => {
     expect(screen.getByTestId("agent-key")).toHaveTextContent("agent_search");
     expect(screen.getByTestId("thread-ids")).toHaveTextContent("url-thread");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-agent", "agent_search");
+    expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-enable-inspector", "false");
+    expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-show-dev-console", "false");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-thread-id", "url-thread");
   });
 

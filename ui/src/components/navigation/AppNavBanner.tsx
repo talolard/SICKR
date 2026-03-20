@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import type { AgentItem } from "@/lib/agents";
 import { describeAgentCapability, formatAgentName } from "@/lib/agentLabels";
@@ -13,7 +13,19 @@ type AppNavBannerProps = {
   agentLoadError?: string | null;
 };
 
-function HeaderGlyph({ kind }: { kind: "grid" | "bell" }): React.ReactElement {
+type HomeNavItem = {
+  destination: "gallery" | "history" | "my-designs";
+  label: string;
+  path: string;
+};
+
+const homeNavItems: readonly HomeNavItem[] = [
+  { destination: "my-designs", label: "My Designs", path: "/" },
+  { destination: "gallery", label: "Gallery", path: "/agents" },
+  { destination: "history", label: "History", path: "/#archives" },
+];
+
+function HeaderGlyph({ kind }: { kind: "bell" | "settings" }): React.ReactElement {
   if (kind === "bell") {
     return (
       <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
@@ -22,13 +34,13 @@ function HeaderGlyph({ kind }: { kind: "grid" | "bell" }): React.ReactElement {
           stroke="currentColor"
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeWidth="1.4"
+          strokeWidth="1.2"
         />
         <path
           d="M8.5 14.4a1.7 1.7 0 0 0 3 0"
           stroke="currentColor"
           strokeLinecap="round"
-          strokeWidth="1.4"
+          strokeWidth="1.2"
         />
       </svg>
     );
@@ -36,10 +48,13 @@ function HeaderGlyph({ kind }: { kind: "grid" | "bell" }): React.ReactElement {
 
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
-      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="3.2" y="3.2" />
-      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="12.6" y="3.2" />
-      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="3.2" y="12.6" />
-      <rect height="4.2" rx="1.1" stroke="currentColor" strokeWidth="1.3" width="4.2" x="12.6" y="12.6" />
+      <path
+        d="M10 3.9v1.3M10 14.8v1.3M5.2 10H3.9M16.1 10h-1.3M6.2 6.2l-.9-.9M14.7 14.7l-.9-.9M13.8 6.2l.9-.9M5.3 14.7l.9-.9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.2"
+      />
+      <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.2" />
     </svg>
   );
 }
@@ -50,10 +65,12 @@ export function AppNavBanner({
   isLoadingAgents = false,
   agentLoadError = null,
 }: AppNavBannerProps): React.ReactElement {
+  const pathname = usePathname();
   const router = useRouter();
   const launcherRef = useRef<HTMLDetailsElement | null>(null);
   const currentAgentLabel = currentAgentName ? formatAgentName(currentAgentName) : "Studios";
   const launcherDisabled = isLoadingAgents || (agents.length === 0 && !agentLoadError);
+  const activeNav = pathname.startsWith("/agents") ? "gallery" : "my-designs";
 
   function navigateTo(nextPath: string): void {
     launcherRef.current?.removeAttribute("open");
@@ -65,6 +82,12 @@ export function AppNavBanner({
       "flex w-full items-center justify-between rounded-[22px] px-4 py-3 text-left transition",
       active ? "editorial-launcher-option-active" : "editorial-launcher-option",
     ].join(" ");
+  }
+
+  function homeNavItemClass(active: boolean): string {
+    return active
+      ? "border-b-2 border-[color:var(--primary)] pb-1 text-sm font-semibold text-[color:var(--primary)]"
+      : "editorial-quiet-copy pb-1 text-sm transition hover:text-[color:var(--primary)]";
   }
 
   return (
@@ -79,39 +102,35 @@ export function AppNavBanner({
             The Curated Home
           </button>
           <nav className="hidden items-center gap-5 md:flex">
-            <button
-              className="border-b-2 border-[color:var(--primary)] pb-1 text-sm font-semibold text-[color:var(--primary)]"
-              onClick={() => navigateTo("/")}
-              type="button"
-            >
-              My Designs
-            </button>
-            <button
-              className="editorial-quiet-copy pb-1 text-sm transition hover:text-[color:var(--primary)]"
-              onClick={() => navigateTo("/agents")}
-              type="button"
-            >
-              Workspaces
-            </button>
+            {homeNavItems.map((item) => (
+              <button
+                className={homeNavItemClass(item.destination === activeNav)}
+                key={item.destination}
+                onClick={() => navigateTo(item.path)}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            aria-label="Browse workspaces"
+            aria-label="Open notifications"
             className="editorial-nav-icon-button transition hover:-translate-y-0.5"
-            onClick={() => navigateTo("/agents")}
-            type="button"
-          >
-            <HeaderGlyph kind="grid" />
-          </button>
-          <button
-            aria-label="Open updates"
-            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
-            onClick={() => navigateTo("/")}
+            onClick={() => navigateTo("/#archives")}
             type="button"
           >
             <HeaderGlyph kind="bell" />
+          </button>
+          <button
+            aria-label="Open settings"
+            className="editorial-nav-icon-button transition hover:-translate-y-0.5"
+            onClick={() => launcherRef.current?.setAttribute("open", "")}
+            type="button"
+          >
+            <HeaderGlyph kind="settings" />
           </button>
 
           {launcherDisabled ? (
@@ -133,13 +152,10 @@ export function AppNavBanner({
                 className="editorial-launcher-shell cursor-pointer p-1.5"
                 data-testid="app-nav-agent-launcher-trigger"
               >
-                <div className="flex items-center gap-2 pl-1 pr-2">
+                <div className="flex items-center pl-0.5 pr-0.5">
                   <div className="editorial-avatar flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold uppercase">
                     {currentAgentName ? currentAgentLabel.charAt(0) : "T"}
                   </div>
-                  <span className="hidden text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant sm:block">
-                    Studios
-                  </span>
                 </div>
               </summary>
               <div className="editorial-launcher-menu absolute right-0 z-30 mt-3 w-[22rem] rounded-[28px] p-3">
