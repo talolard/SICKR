@@ -4,10 +4,10 @@ from pathlib import Path
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex
+from tests.shared.runtime_schema import ensure_runtime_schema
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.retrieval.schema import product_embeddings
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db_contract import (
     PRODUCT_EMBEDDING_DIMENSIONS,
     PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,

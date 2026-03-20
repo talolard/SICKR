@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlalchemy.dialects import postgresql
+from tests.shared.runtime_schema import ensure_runtime_schema
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.retrieval.catalog_repository import (
@@ -13,7 +14,6 @@ from ikea_agent.retrieval.catalog_repository import (
     _build_postgres_search_statement,
 )
 from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.types import (
     DimensionAxisFilter,
     DimensionFilter,

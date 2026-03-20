@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.shared.runtime_schema import ensure_runtime_schema
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.retrieval.catalog_repository import CatalogRepository, EmbeddingSnapshotRepository
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
 
 
 def test_replace_and_read_neighbor_similarities(tmp_path: Path) -> None:

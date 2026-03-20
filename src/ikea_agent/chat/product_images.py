@@ -39,30 +39,6 @@ def build_catalog_image_url(
     return build_ranked_image_url(product_id=product_id, ordinal=ordinal, base_url=base_url)
 
 
-def image_sort_key(
-    *,
-    is_og_image: bool,
-    image_rank: int | None,
-    stable_key: str,
-) -> tuple[int, int, str]:
-    """Return a deterministic image ordering key shared by lookup paths."""
-
-    return (
-        0 if is_og_image else 1,
-        image_rank if image_rank is not None else 2**31 - 1,
-        stable_key,
-    )
-
-
-def product_id_from_canonical_key(canonical_product_key: str) -> str:
-    """Derive raw IKEA `product_id` from the repo canonical key."""
-
-    head, separator, tail = canonical_product_key.rpartition("-")
-    if separator and tail.isalpha() and len(tail) in {2, 3}:
-        return head
-    return canonical_product_key
-
-
 def _join_base_url(*, base_url: str | None, path: str) -> str:
     if not base_url:
         return path

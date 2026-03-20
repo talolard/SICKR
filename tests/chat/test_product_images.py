@@ -11,7 +11,6 @@ from ikea_agent.chat.product_images import (
     build_catalog_image_url,
     build_primary_image_url,
     build_ranked_image_url,
-    product_id_from_canonical_key,
 )
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import create_app
@@ -58,12 +57,6 @@ def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:
     assert build_ranked_image_url(product_id="90458891", ordinal=3) == (
         "/static/product-images/90458891/3"
     )
-
-
-def test_product_id_from_canonical_key_splits_country_suffix() -> None:
-    assert product_id_from_canonical_key("28508-DE") == "28508"
-    assert product_id_from_canonical_key("90606797-SE") == "90606797"
-    assert product_id_from_canonical_key("product-without-country") == "product-without-country"
 
 
 @dataclass(frozen=True, slots=True)

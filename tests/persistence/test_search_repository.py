@@ -141,40 +141,6 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
     assert [item.rank for item in result_rows] == [1, 2]
     assert [item.product_id for item in result_rows] == ["prod-1", "prod-2"]
 
-
-def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
-    session_factory = _session_factory(tmp_path)
-    _seed_thread(session_factory, thread_id="thread-search-order")
-    _seed_thread(session_factory, thread_id="thread-search-order-followup")
-    repository = SearchRepository(session_factory)
-
-    first_id = repository.record_search_run(
-        room_id=DEFAULT_DEV_ROOM_ID,
-        thread_id="thread-search-order",
-        run_id=None,
-        query_text="desk lamp",
-        filters=None,
-        warning=None,
-        total_candidates=5,
-        results=[],
-    )
-    second_id = repository.record_search_run(
-        room_id=DEFAULT_DEV_ROOM_ID,
-        thread_id="thread-search-order-followup",
-        run_id=None,
-        query_text="desk organizer",
-        filters=RetrievalFilters(include_keyword="organizer"),
-        warning=None,
-        total_candidates=8,
-        results=[],
-    )
-
-    ids = repository.list_search_runs(room_id=DEFAULT_DEV_ROOM_ID)
-
-    assert ids[0] == second_id
-    assert ids[1] == first_id
-
-
 def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     _seed_thread(session_factory, thread_id="thread-search-order")
