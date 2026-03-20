@@ -15,7 +15,7 @@
 - Start UI against the mock backend: `make ui-dev-mock`
 - Run UI unit tests: `make ui-test`
 - Run UI mock E2E: `make ui-test-e2e`
-- Run real-backend UI smoke: `make ui-test-e2e-real-ui-smoke`
+- Run real-backend UI smoke locally when debugging the live CopilotKit or AG-UI path: `make ui-test-e2e-real-ui-smoke`
 
 ## Runtime Shape
 

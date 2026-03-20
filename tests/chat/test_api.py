@@ -59,6 +59,24 @@ def _chat_request_payload(user_text: str) -> dict[str, object]:
     }
 
 
+def _ag_ui_request_payload(user_text: str) -> dict[str, object]:
+    return {
+        "threadId": "thread-1",
+        "runId": "run-1",
+        "state": {},
+        "tools": [],
+        "context": [],
+        "forwardedProps": {},
+        "messages": [
+            {
+                "id": "message-1",
+                "role": "user",
+                "content": user_text,
+            }
+        ],
+    }
+
+
 def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
     async def _function(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[])
@@ -138,6 +156,29 @@ def test_agent_ag_ui_route_exists() -> None:
 
     response = client.post("/ag-ui/agents/floor_plan_intake", json={"messages": []})
     assert response.status_code != 404
+
+
+def test_agent_ag_ui_route_uses_deterministic_env_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DETERMINISTIC_MODEL_RESPONSE_TEXT",
+        "Deterministic smoke response from the local test model.",
+    )
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json=_ag_ui_request_payload("hello"),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "Deterministic smoke response from the local test model." in response.text
 
 
 def test_agent_metadata_route_returns_prompt_and_tools() -> None:

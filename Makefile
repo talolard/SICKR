@@ -32,6 +32,7 @@ FRONTEND_COVERAGE_SUMMARY ?= $(FRONTEND_COVERAGE_DIR)/coverage-summary.json
 FRONTEND_COVERAGE_LCOV ?= $(FRONTEND_COVERAGE_DIR)/lcov.info
 COVERAGE_SUMMARY_MD ?= $(COVERAGE_DIR)/summary.md
 COVERAGE_REPORT_JSON ?= $(COVERAGE_DIR)/report.json
+SMOKE_ASSISTANT_TEXT ?= Deterministic smoke response from the local test model.
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
 export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
@@ -164,7 +165,7 @@ ui-test-e2e-real-ui-smoke:
 		echo "Backend already running at http://$(HOST):$(PORT)"; \
 	else \
 		echo "Backend not running; starting temporary backend on http://$(HOST):$(PORT)"; \
-		ALLOW_MODEL_REQUESTS=0 uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >"$$BACKEND_LOG_PATH" 2>&1 & \
+			ALLOW_MODEL_REQUESTS=0 DETERMINISTIC_MODEL_RESPONSE_TEXT="$(SMOKE_ASSISTANT_TEXT)" uv run uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) >"$$BACKEND_LOG_PATH" 2>&1 & \
 		BACKEND_PID=$$!; \
 		BACKEND_STARTED=1; \
 		trap 'if [ "$$UI_STARTED" -eq 1 ] && [ -n "$$UI_PID" ]; then kill "$$UI_PID" 2>/dev/null || true; wait "$$UI_PID" 2>/dev/null || true; fi; if [ "$$BACKEND_STARTED" -eq 1 ] && [ -n "$$BACKEND_PID" ]; then kill "$$BACKEND_PID" 2>/dev/null || true; wait "$$BACKEND_PID" 2>/dev/null || true; fi' EXIT INT TERM; \
@@ -202,7 +203,7 @@ ui-test-e2e-real-ui-smoke:
 		fi; \
 	fi; \
 	curl -fsS "http://$(HOST):$(UI_PORT)/agents/search" >/dev/null 2>&1 || true; \
-	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PLAYWRIGHT_REUSE_EXISTING_SERVER=1 RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
+		cd $(UI_DIR) && UI_PORT=$(UI_PORT) PLAYWRIGHT_REUSE_EXISTING_SERVER=1 RUN_REAL_BACKEND_E2E=1 PY_AG_UI_URL=http://$(HOST):$(PORT)/ag-ui/ E2E_SMOKE_ASSISTANT_TEXT="$(SMOKE_ASSISTANT_TEXT)" pnpm playwright test --config playwright.real.config.ts --grep "sends and receives messages via CopilotKit UI"
 
 dev: dev-human
 

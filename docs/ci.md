@@ -16,10 +16,10 @@ Active jobs:
 - `e2e-mock`: Playwright against mock route (JUnit + report artifact)
 - `ci-summary`: one at-a-glance rollup of all CI lanes plus coverage numbers
 
-Disabled scaffold job:
-- `e2e-all-models` is present but gated with `if: ${{ false }}`.
-- It is intentionally disabled to avoid secret/model spend on every PR.
-- Enable it later by changing the condition and wiring required secrets.
+Deferred workflow:
+- `.github/workflows/e2e-real-ui-smoke.yml` runs after both `PR CI` and `Dependency Review` have succeeded for the same pull-request SHA.
+- It brings up the slot-0 snapshot-backed Postgres dependency stack, then runs `make ui-test-e2e-real-ui-smoke` against the checked-out PR head.
+- The backend is started with a deterministic local model override, so the smoke path does not depend on a paid or stochastic external model.
 
 ## Caching
 
@@ -54,7 +54,7 @@ Useful local commands:
 - `make frontend-coverage`
 - `make coverage`
 
-`make tidy` does not run GitHub annotations or Playwright E2E lanes. Use `make ui-test-e2e-real-ui-smoke` separately when the change affects runtime/UI behavior.
+`make tidy` does not run GitHub annotations or Playwright E2E lanes. The real-UI smoke is deferred to CI after `PR CI` and `Dependency Review` succeed for the PR SHA. Run `make ui-test-e2e-real-ui-smoke` locally only when you need to debug the live CopilotKit or AG-UI path directly.
 
 ## Coverage Reporting
 
