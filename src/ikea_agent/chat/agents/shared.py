@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Protocol, TypeVar
+from typing import Protocol, TypeVar, cast
 
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
+from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.state import CommonAgentState, Room3DSnapshotContext
 from ikea_agent.chat.known_fact_context import format_known_fact_context
@@ -823,6 +824,20 @@ def build_shared_context_tools(
         *build_shared_context_write_tools(services),
         *build_shared_context_read_tools(services),
     ]
+
+
+def build_first_class_agent_toolset[ToolDeps: _HasState](
+    *,
+    local_tools: list[Tool[ToolDeps]],
+    shared_context_services: SharedContextToolsetServices | None = None,
+) -> FunctionToolset[ToolDeps]:
+    """Compose shared room/project tools with one agent's local tool registrations."""
+
+    shared_tools = cast(
+        "list[Tool[ToolDeps]]",
+        build_shared_context_tools(shared_context_services),
+    )
+    return FunctionToolset(tools=[*shared_tools, *local_tools])
 
 
 def build_room_3d_snapshot_context_payload(

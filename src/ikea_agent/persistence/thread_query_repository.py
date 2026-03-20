@@ -34,6 +34,10 @@ from ikea_agent.persistence.models import (
     ThreadRecord,
 )
 from ikea_agent.persistence.ownership import create_thread_record, require_room_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
@@ -347,7 +351,7 @@ class ThreadQueryRepository:
             ).scalar_one_or_none()
             if analysis_exists is None:
                 return None
-            persisted_run_id = _resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             feedback_id = f"analysis-fbk-{uuid4().hex[:24]}"
             session.add(
                 AnalysisFeedbackRecord(
@@ -364,6 +368,7 @@ class ThreadQueryRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
             return AnalysisFeedbackItem(
                 analysis_feedback_id=feedback_id,
@@ -393,21 +398,6 @@ def _thread_exists_in_room(*, session: Session, room_id: str, thread_id: str) ->
         ).scalar_one_or_none()
         is not None
     )
-
-
-def _run_exists(*, session: Session, run_id: str) -> bool:
-    return (
-        session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
-        is not None
-    )
-
-
-def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-    if run_id is None:
-        return None
-    return run_id if _run_exists(session=session, run_id=run_id) else None
 
 
 def _as_bundle_items(value: object) -> list[BundleProposalLineItem]:

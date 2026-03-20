@@ -11,12 +11,15 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
-    AgentRunRecord,
     BundleProposalRecord,
     SearchResultRecord,
     SearchRunRecord,
 )
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
@@ -51,7 +54,7 @@ class SearchRepository:
         with self._session_factory() as session:
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             search_id = f"search-{uuid4().hex[:24]}"
             session.add(
                 SearchRunRecord(
@@ -91,6 +94,7 @@ class SearchRepository:
                         price_eur=item.price_eur,
                     )
                 )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
             return search_id
 
@@ -119,7 +123,7 @@ class SearchRepository:
         with self._session_factory() as session:
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.merge(
                 BundleProposalRecord(
                     bundle_id=proposal.bundle_id,
@@ -141,6 +145,7 @@ class SearchRepository:
                     created_at=created_at,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=created_at)
             session.commit()
         return proposal.bundle_id
 
@@ -181,14 +186,6 @@ class SearchRepository:
             )
             for item in rows
         ]
-
-    @staticmethod
-    def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        return session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
 
 
 def _load_bundle_items(raw_items: object) -> list[BundleProposalLineItem]:

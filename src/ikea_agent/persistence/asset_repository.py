@@ -9,8 +9,12 @@ from sqlalchemy import String, cast, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord, AssetRecord
+from ikea_agent.persistence.models import AssetRecord
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +63,7 @@ class AssetRepository:
         now = datetime.now(UTC)
         with self._session_factory() as session:
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
 
             existing_asset_id = session.execute(
                 select(AssetRecord.asset_id).where(AssetRecord.asset_id == asset_id)
@@ -103,6 +107,7 @@ class AssetRepository:
                     )
                 )
 
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
     def list_room_images(self, *, room_id: str) -> list[AssetSnapshot]:
@@ -168,14 +173,6 @@ class AssetRepository:
             for snapshot in (_asset_snapshot_from_row(row) for row in rows)
         }
         return [snapshots_by_id[asset_id] for asset_id in asset_ids if asset_id in snapshots_by_id]
-
-    @staticmethod
-    def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        return session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
 
 
 def _asset_snapshot_from_row(row: RowMapping) -> AssetSnapshot:

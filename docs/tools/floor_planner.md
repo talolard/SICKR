@@ -58,7 +58,8 @@ Then proceed with incremental placement updates via `changes`.
 - YAML is an interop/edit format; numeric truth remains in structured scene fields.
 
 ## Durable Revision Persistence
-- Revisions are persisted per thread in `app.floor_plan_revisions` with scene JSON + summary JSON.
+- Revisions are persisted as room-owned snapshots in `app.floor_plan_revisions` with scene JSON + summary JSON.
+- Revision numbers are unique per room even when multiple threads contribute revisions over time.
 - `render_floor_plan` stores linked `svg_asset_id` / `png_asset_id` so UI can query artifacts.
 - `export_floor_plan_scene_yaml` can restore latest persisted revision after process restart.
 

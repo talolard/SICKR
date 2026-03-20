@@ -10,7 +10,9 @@ Active runtime uses Postgres for:
 - `catalog.product_embedding_neighbors` (optional legacy precomputed neighbor rows; active MMR no longer depends on them)
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
 - `app.agent_runs` (run lifecycle and provenance)
+- `app.threads` (room-bound thread metadata, including durable activity timestamps used for room thread ordering)
 - `app.thread_message_segments` (canonical persisted PydanticAI message batches used for DB-backed thread continuation)
+- `app.floor_plan_revisions` (room-owned floor-plan snapshots with unique revision numbers per room)
 - other `app.*` room, thread, fact, artifact, and analysis tables managed by runtime migrations
 - `ops.seed_state` (observable seed versions and refresh metadata)
   - includes `postgres_snapshot` rows after a versioned snapshot artifact is built
