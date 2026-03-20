@@ -4,12 +4,18 @@ import type { AgentMetadata } from "@/lib/agents";
 import type { KnownFactItem } from "@/lib/api/threadDataClient";
 import { useEffect, useState } from "react";
 
+import {
+  resolveWorkspacePresentation,
+  type WorkspaceRailIcon,
+} from "@/components/agents/workspacePresentation";
+
 type MarkdownRenderer = {
   ReactMarkdown: typeof import("react-markdown").default;
   remarkGfm: typeof import("remark-gfm").default;
 };
 
 type AgentInspectorPanelProps = {
+  currentAgent: string;
   metadata: AgentMetadata | null;
   metadataError: string;
   knownFacts: KnownFactItem[];
@@ -17,7 +23,79 @@ type AgentInspectorPanelProps = {
   isLoadingKnownFacts?: boolean;
 };
 
+function RailGlyph({ icon }: { icon: WorkspaceRailIcon }): React.ReactElement {
+  switch (icon) {
+    case "camera":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <path
+            d="M5.2 6.2h2.1l1-1.4h3.4l1 1.4h2.1c1 0 1.9.8 1.9 1.9v5.7c0 1-.9 1.9-1.9 1.9H5.2c-1 0-1.9-.9-1.9-1.9V8.1c0-1.1.9-1.9 1.9-1.9Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+          />
+          <circle cx="10" cy="10.9" r="2.5" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case "favorite":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <path
+            d="M10 15.6s-4.8-2.8-4.8-6.6a2.8 2.8 0 0 1 5-1.8 2.8 2.8 0 0 1 5 1.8c0 3.8-5.2 6.6-5.2 6.6Z"
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+          />
+        </svg>
+      );
+    case "light":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <path
+            d="M10 3.2a4 4 0 0 0-2.8 6.9c.6.6.9 1.3 1 2h3.6c.1-.7.4-1.4 1-2A4 4 0 0 0 10 3.2Z"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+          />
+          <path d="M8.6 14h2.8M8.9 16h2.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+        </svg>
+      );
+    case "materials":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <path
+            d="M5 5.5h10M5 10h10M5 14.5h10M6.5 4v12M10 4v12M13.5 4v12"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="1.3"
+          />
+        </svg>
+      );
+    case "payments":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <path
+            d="M4 6.2c0-.9.7-1.7 1.7-1.7h8.6c.9 0 1.7.8 1.7 1.7v7.6c0 .9-.8 1.7-1.7 1.7H5.7c-1 0-1.7-.8-1.7-1.7z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+          />
+          <path d="M4.5 8.2h11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+          <path d="M8.2 12.4h2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+        </svg>
+      );
+    case "info":
+      return (
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="6.7" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M10 8.3v4M10 6.1h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+        </svg>
+      );
+  }
+}
+
 export function AgentInspectorPanel({
+  currentAgent,
   metadata,
   metadataError,
   knownFacts,
@@ -27,6 +105,7 @@ export function AgentInspectorPanel({
   const [isDebugOpen, setIsDebugOpen] = useState<boolean>(false);
   const [isPromptOpen, setIsPromptOpen] = useState<boolean>(false);
   const [markdownRenderer, setMarkdownRenderer] = useState<MarkdownRenderer | null>(null);
+  const presentation = resolveWorkspacePresentation(currentAgent, metadata?.description);
 
   useEffect(() => {
     if (!isDebugOpen || !isPromptOpen || markdownRenderer) {
@@ -50,43 +129,87 @@ export function AgentInspectorPanel({
   }, [isDebugOpen, isPromptOpen, markdownRenderer]);
 
   return (
-    <aside className="flex min-h-[70vh] flex-col gap-4 rounded-[28px] border border-slate-200/80 bg-white/92 p-4 text-sm text-slate-800 shadow-[0_18px_48px_-38px_rgba(15,23,42,0.45)] backdrop-blur xl:min-h-0 xl:overflow-y-auto">
-      <div className="rounded-[22px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.86))] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Thread context
-        </p>
-        <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">Known facts</p>
-        <p className="mt-1 text-xs leading-5 text-slate-600">
-          Durable household context collected across this thread.
+    <aside className="editorial-panel flex min-h-[70vh] flex-col gap-4 rounded-[32px] p-4 text-sm text-on-surface xl:min-h-0 xl:overflow-y-auto">
+      <div className="rounded-[28px] bg-[color:var(--surface-container-lowest)] px-5 py-5 shadow-[var(--panel-shadow)]">
+        <p className="editorial-eyebrow">{presentation.railEyebrow}</p>
+        <h2 className="editorial-display mt-3 text-[1.9rem] leading-none text-primary">
+          {presentation.railTitle}
+        </h2>
+        <p className="mt-4 text-sm leading-6 text-on-surface-variant">
+          {presentation.railDescription}
         </p>
       </div>
-      {knownFactsError ? <p className="text-xs text-red-700">{knownFactsError}</p> : null}
-      {isLoadingKnownFacts ? <p className="text-xs text-gray-500">Loading known facts...</p> : null}
-      {!isLoadingKnownFacts && !knownFactsError && knownFacts.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3 text-xs leading-5 text-slate-600">
-          Known facts will appear here after the agents store durable facts or preferences for this
-          thread.
+
+      <nav className="editorial-rail-list" aria-label={`${presentation.railTitle} sections`}>
+        {presentation.railItems.map((item, index) => (
+          <button
+            className={`editorial-rail-item ${index === 0 ? "editorial-rail-item-active" : ""}`}
+            key={item.label}
+            type="button"
+          >
+            <span className="editorial-rail-glyph">
+              <RailGlyph icon={item.icon} />
+            </span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <section
+        className="rounded-[28px] bg-[color:var(--surface-container-lowest)] px-5 py-5 shadow-[var(--panel-shadow)]"
+        data-testid="agent-known-facts-panel"
+      >
+        <p className="editorial-eyebrow">Known facts</p>
+        <h3 className="mt-3 text-lg font-semibold tracking-tight text-primary">Current brief</h3>
+        <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+          Durable context collected across this thread stays here so the room brief remains visible.
         </p>
-      ) : null}
-      {knownFacts.length > 0 ? (
-        <ul className="space-y-3">
-          {knownFacts.map((fact) => (
-            <li
-              className="rounded-[22px] border border-slate-200 bg-slate-50/70 px-4 py-3 shadow-[0_12px_30px_-32px_rgba(15,23,42,0.55)]"
-              key={fact.memory_id}
-            >
-              <p className="text-sm font-medium text-slate-900">{fact.summary}</p>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+        {metadata?.description ? (
+          <div className="mt-4 rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Agent focus
+            </p>
+            <p className="mt-2 text-sm leading-6 text-on-surface">{metadata.description}</p>
+          </div>
+        ) : null}
+        {knownFactsError ? (
+          <p className="mt-4 rounded-[22px] bg-red-50 px-4 py-3 text-xs text-red-700">
+            {knownFactsError}
+          </p>
+        ) : null}
+        {isLoadingKnownFacts ? (
+          <p className="mt-4 text-xs text-on-surface-variant">Loading known facts...</p>
+        ) : null}
+        {!isLoadingKnownFacts && !knownFactsError && knownFacts.length === 0 ? (
+          <p className="mt-4 rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-on-surface-variant">
+            Known facts will appear here after the agent stores durable room constraints or
+            preferences for this thread.
+          </p>
+        ) : null}
+        {knownFacts.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {knownFacts.map((fact) => (
+              <li
+                className="rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4 shadow-[0_14px_30px_rgba(32,27,16,0.06)]"
+                key={fact.memory_id}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant">
+                  Brief note
+                </p>
+                <p className="mt-2 text-sm leading-6 text-on-surface">{fact.summary}</p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
       {metadataError ? (
-        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+        <p className="rounded-[22px] bg-red-50 px-4 py-3 text-xs text-red-700">
           {metadataError}
         </p>
       ) : metadata ? (
         <details
-          className="rounded-[22px] border border-slate-200 bg-white"
+          className="rounded-[28px] bg-[color:var(--surface-container-lowest)] p-1 shadow-[var(--panel-shadow)]"
           data-testid="agent-inspector-debug-details"
           onToggle={(event) => {
             const nextOpen = event.currentTarget.open;
@@ -96,31 +219,31 @@ export function AgentInspectorPanel({
             }
           }}
         >
-          <summary className="cursor-pointer list-none px-4 py-3">
+          <summary className="cursor-pointer list-none rounded-[24px] px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <p className="editorial-eyebrow">
                   Debug details
                 </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
+                <p className="mt-2 text-sm font-semibold text-primary">
                   Agent instructions and runtime notes
                 </p>
               </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+              <span className="rounded-full bg-[color:var(--tertiary-fixed)] px-3 py-1 text-xs font-medium text-on-surface-variant">
                 Secondary
               </span>
             </div>
           </summary>
-          <div className="border-t border-slate-200 px-4 py-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <div className="px-4 pb-4">
+            <div className="rounded-[24px] bg-[color:var(--surface-container-low)] p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
                 Runtime overview
               </p>
-              <p className="mt-2 text-sm text-slate-700">{metadata.description}</p>
+              <p className="mt-2 text-sm leading-6 text-on-surface">{metadata.description}</p>
               <ul className="mt-3 flex flex-wrap gap-2 text-xs">
                 {metadata.tools.map((toolName) => (
                   <li
-                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700"
+                    className="rounded-full bg-[color:var(--surface-container-lowest)] px-2.5 py-1 text-on-surface"
                     key={toolName}
                   >
                     {toolName}
@@ -128,36 +251,36 @@ export function AgentInspectorPanel({
                 ))}
               </ul>
               {metadata.notes ? (
-                <p className="mt-3 text-xs leading-5 text-slate-600">{metadata.notes}</p>
+                <p className="mt-3 text-xs leading-5 text-on-surface-variant">{metadata.notes}</p>
               ) : null}
             </div>
             <details
-              className="mt-4 rounded-2xl border border-slate-200 bg-white"
+              className="mt-4 rounded-[24px] bg-[color:var(--surface-container-low)] p-1"
               onToggle={(event) => setIsPromptOpen(event.currentTarget.open)}
               open={isPromptOpen}
             >
-              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">
+              <summary className="cursor-pointer list-none rounded-[20px] px-4 py-3 text-sm font-semibold text-primary">
                 Prompt and instructions
               </summary>
-              <div className="border-t border-slate-200 px-4 py-4">
+              <div className="px-4 pb-4">
                 {isPromptOpen ? (
-                  <div className="max-h-80 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-800">
+                  <div className="max-h-80 overflow-auto rounded-[20px] bg-[color:var(--surface-container-lowest)] p-3 text-xs leading-relaxed text-on-surface">
                     {markdownRenderer ? (
                       <markdownRenderer.ReactMarkdown
                         remarkPlugins={[markdownRenderer.remarkGfm]}
                         components={{
                           h1: ({ children }) => (
-                            <h3 className="mb-2 mt-3 text-sm font-semibold text-slate-900">
+                            <h3 className="mb-2 mt-3 text-sm font-semibold text-primary">
                               {children}
                             </h3>
                           ),
                           h2: ({ children }) => (
-                            <h4 className="mb-2 mt-3 text-sm font-semibold text-slate-900">
+                            <h4 className="mb-2 mt-3 text-sm font-semibold text-primary">
                               {children}
                             </h4>
                           ),
                           h3: ({ children }) => (
-                            <h5 className="mb-1 mt-2 font-semibold text-slate-900">{children}</h5>
+                            <h5 className="mb-1 mt-2 font-semibold text-primary">{children}</h5>
                           ),
                           p: ({ children }) => (
                             <p className="mb-2 whitespace-pre-wrap">{children}</p>
@@ -169,18 +292,18 @@ export function AgentInspectorPanel({
                             <ol className="mb-2 list-decimal space-y-1 pl-5">{children}</ol>
                           ),
                           code: ({ children }) => (
-                            <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px] text-slate-900">
+                            <code className="rounded bg-[color:var(--surface-container-high)] px-1 py-0.5 font-mono text-[11px] text-primary">
                               {children}
                             </code>
                           ),
                           pre: ({ children }) => (
-                            <pre className="mb-2 overflow-auto rounded border border-slate-200 bg-white p-2 font-mono text-[11px] text-slate-900">
+                            <pre className="mb-2 overflow-auto rounded bg-[color:var(--surface-container-low)] p-2 font-mono text-[11px] text-primary">
                               {children}
                             </pre>
                           ),
                           a: ({ children, href }) => (
                             <a
-                              className="text-blue-700 underline"
+                              className="text-primary underline"
                               href={href}
                               rel="noreferrer"
                               target="_blank"
@@ -193,7 +316,7 @@ export function AgentInspectorPanel({
                         {metadata.prompt_markdown}
                       </markdownRenderer.ReactMarkdown>
                     ) : (
-                      <p className="text-xs text-slate-600">Loading markdown renderer...</p>
+                      <p className="text-xs text-on-surface-variant">Loading markdown renderer...</p>
                     )}
                   </div>
                 ) : null}
@@ -202,7 +325,7 @@ export function AgentInspectorPanel({
           </div>
         </details>
       ) : (
-        <p className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs text-slate-500">
+        <p className="rounded-[22px] bg-[color:var(--surface-container-lowest)] px-4 py-3 text-xs text-on-surface-variant">
           Loading agent metadata...
         </p>
       )}

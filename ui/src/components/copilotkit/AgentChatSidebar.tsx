@@ -3,19 +3,50 @@
 import type { ReactElement } from "react";
 import { CopilotChat } from "@copilotkit/react-ui";
 
+import { resolveWorkspacePresentation } from "@/components/agents/workspacePresentation";
 import { CopilotChatInlineError } from "@/components/copilotkit/CopilotChatInlineError";
 
-export function AgentChatSidebar(): ReactElement {
+type AgentChatSidebarProps = {
+  currentAgent: string;
+};
+
+function SparkGlyph(): ReactElement {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+      <path
+        d="M10 3.2l1.4 3.5 3.4 1.3-3.4 1.3-1.4 3.5-1.4-3.5-3.4-1.3 3.4-1.3z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+export function AgentChatSidebar({ currentAgent }: AgentChatSidebarProps): ReactElement {
+  const presentation = resolveWorkspacePresentation(currentAgent);
+
   return (
     <section
-      className="flex h-full min-h-[60vh] min-w-0 flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.88))] shadow-[0_16px_42px_-36px_rgba(15,23,42,0.45)] xl:min-h-0"
+      className="editorial-panel flex h-full min-h-[60vh] min-w-0 flex-col overflow-hidden rounded-[32px] p-3 xl:min-h-0"
       data-testid="agent-chat-sidebar"
     >
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="text-sm font-semibold text-slate-950">Chat</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">
-          Follow-up questions and long tool outputs stay inside this pane.
+      <div className="rounded-[26px] bg-[color:var(--surface-container-lowest)] px-5 py-5 shadow-[var(--panel-shadow)]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[color:var(--primary)] text-white shadow-[0_20px_35px_rgba(24,36,27,0.18)]">
+            <SparkGlyph />
+          </div>
+          <div>
+            <p className="editorial-eyebrow">{presentation.consultationEyebrow}</p>
+            <h2 className="editorial-display mt-2 text-[1.55rem] leading-none text-primary">
+              {presentation.consultationTitle}
+            </h2>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-6 text-on-surface-variant">
+          {presentation.consultationDescription}
         </p>
+        <div className="mt-4 inline-flex items-center rounded-full bg-[color:var(--tertiary-fixed)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+          {presentation.consultationModeLabel}
+        </div>
       </div>
       <style jsx global>{`
         .agent-chat-pane.copilotKitChat {
@@ -23,9 +54,8 @@ export function AgentChatSidebar(): ReactElement {
           flex-direction: column;
           min-height: 0;
           flex: 1;
-          background:
-            linear-gradient(180deg, rgb(248 250 252 / 0.95) 0%, rgb(255 255 255) 18%),
-            rgb(255 255 255);
+          background: transparent;
+          overflow: hidden;
         }
 
         .agent-chat-pane .copilotKitMessages {
@@ -34,72 +64,101 @@ export function AgentChatSidebar(): ReactElement {
           flex: 1;
           flex-direction: column;
           gap: 0;
+          overflow: hidden;
         }
 
         .agent-chat-pane .copilotKitMessagesContainer {
+          display: flex;
+          flex-direction: column;
           min-height: 0;
           flex: 1;
-          gap: 0.85rem;
+          gap: 1rem;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 1rem 1rem 0.75rem;
+          padding: 1rem 0.55rem 0.55rem;
+        }
+
+        .agent-chat-pane .copilotKitMessagesContainer > * {
+          flex-shrink: 0;
         }
 
         .agent-chat-pane .copilotKitMessagesFooter {
           flex-shrink: 0;
-          width: calc(100% - 1.5rem);
+          width: calc(100% - 1rem);
           margin-top: 0;
-          padding: 0 0 0.5rem;
+          padding: 0 0 0.4rem;
         }
 
         .agent-chat-pane .copilotKitMessage {
-          max-width: min(92%, 44rem);
+          max-width: min(92%, 28rem);
           margin-bottom: 0;
-          border-radius: 1.1rem;
-          box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+          border-radius: 1.5rem;
+          box-shadow: var(--panel-shadow);
         }
 
         .agent-chat-pane .copilotKitMessage.copilotKitAssistantMessage {
-          background: rgb(248 250 252);
-          border: 1px solid rgb(226 232 240);
-          border-radius: 1.1rem 1.1rem 1.1rem 0.4rem;
+          background: var(--surface-container-lowest);
+          border: 0;
+          border-radius: 1.5rem 1.5rem 1.5rem 0.6rem;
           overflow: hidden;
-          padding: 0.8rem 0.95rem 1.25rem;
+          padding: 1rem;
           max-width: 100%;
         }
 
         .agent-chat-pane .copilotKitMessage.copilotKitUserMessage {
-          border-radius: 1.1rem 1.1rem 0.4rem 1.1rem;
-          padding: 0.8rem 0.95rem;
+          background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+          color: white;
+          margin-left: auto;
+          border-radius: 1.5rem 1.5rem 0.6rem 1.5rem;
+          padding: 1rem;
         }
 
         .agent-chat-pane .copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
-          left: 0.95rem;
-          bottom: 0.35rem;
+          position: static;
+          left: auto;
+          right: auto;
+          bottom: auto;
+          margin-top: 0.85rem;
+          justify-content: flex-end;
+          gap: 0.3rem;
+          border-top: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
+          padding-top: 0.55rem;
         }
 
         .agent-chat-pane .copilotKitInputContainer {
-          border-top: 1px solid rgb(226 232 240);
-          background: rgb(255 255 255 / 0.94);
-          padding: 0.85rem 0.75rem 0.55rem;
+          background: color-mix(in srgb, var(--surface-container-low) 90%, transparent);
+          border-top: 0;
+          margin-top: 0.25rem;
+          padding: 0.75rem 0.5rem 0.35rem;
         }
 
         .agent-chat-pane .copilotKitInput {
           width: 100%;
-          min-height: 68px;
-          border-radius: 1rem;
-          border-color: rgb(203 213 225);
-          padding: 0.85rem 0.95rem;
-          box-shadow: inset 0 1px 2px rgb(15 23 42 / 0.03);
+          min-height: 72px;
+          border-radius: 1.35rem;
+          background: var(--surface-container-lowest);
+          border: 0;
+          padding: 0.95rem 1rem;
+          box-shadow: 0 0 0 1px rgb(24 36 27 / 0.08), var(--panel-shadow);
         }
 
         .agent-chat-pane .copilotKitInput textarea {
+          color: var(--on-surface);
           font-size: 0.95rem;
           line-height: 1.5;
         }
 
+        .agent-chat-pane .copilotKitInput textarea::placeholder {
+          color: color-mix(in srgb, var(--on-surface-variant) 82%, transparent);
+        }
+
+        .agent-chat-pane .copilotKitInputControls {
+          color: var(--primary);
+        }
+
         .agent-chat-pane .poweredBy {
-          padding-top: 0.15rem !important;
+          color: color-mix(in srgb, var(--on-surface-variant) 58%, transparent) !important;
+          padding-top: 0.3rem !important;
           padding-bottom: 0 !important;
         }
       `}</style>

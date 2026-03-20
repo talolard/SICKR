@@ -32,13 +32,17 @@ export function mapCopilotToolStatus(status: CopilotHookStatus): CopilotToolRend
 }
 
 export function ToolCard({ children }: ToolCardProps): ReactElement {
-  return <div className="rounded border bg-white p-2">{children}</div>;
+  return (
+    <div className="rounded-[24px] bg-[color:var(--surface-container-lowest)] p-3 shadow-[var(--panel-shadow)]">
+      {children}
+    </div>
+  );
 }
 
 export function LoadingToolMessage({ message }: LoadingToolMessageProps): ReactElement {
   return (
     <ToolCard>
-      <p className="text-sm text-gray-700">{message}</p>
+      <p className="text-sm leading-6 text-on-surface-variant">{message}</p>
     </ToolCard>
   );
 }

@@ -137,7 +137,7 @@ export function AgentImageAttachmentPanel({
         onRemoveAttachment={handleRemoveAttachment}
         onRetryAttachment={handleRetryAttachment}
       />
-      <p className="mt-1 text-xs text-gray-600">
+      <p className="mt-3 px-1 text-xs leading-5 text-on-surface-variant">
         {helperText}
       </p>
     </section>

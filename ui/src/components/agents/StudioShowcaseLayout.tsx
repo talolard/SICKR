@@ -192,7 +192,7 @@ export function StudioShowcaseLayout({
           <p className="mt-6 rounded-[22px] bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <div className="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.82fr)_minmax(0,1fr)] xl:items-start">
+        <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {isLoadingAgents
             ? Array.from({ length: 3 }, (_, index) => (
                 <div
@@ -200,28 +200,19 @@ export function StudioShowcaseLayout({
                   key={`agent-loading-${index}`}
                 />
               ))
-            : agents.map((agent, index) => (
-                <div
-                  className={
-                    index === 1
-                      ? "xl:translate-y-7"
-                      : index === 2
-                        ? "xl:-translate-y-3"
-                        : ""
-                  }
-                  key={agent.name}
-                >
+            : agents.map((agent) => (
+                <div className="h-full" key={agent.name}>
                   <AgentLauncherCard agent={agent} />
                 </div>
               ))}
         </div>
 
-        <div className="mt-4 flex flex-wrap justify-center gap-3 xl:-ml-16">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Compare Fabrics</span>
           <span className="editorial-chip px-5 py-2.5 text-sm font-medium">Lighting Modes</span>
         </div>
 
-        <section className="mt-14">
+        <section className="mt-16">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="editorial-eyebrow">The Archives</p>

@@ -30,6 +30,7 @@ describe("AgentInspectorPanel", () => {
   it("renders known facts and metadata details when provided", () => {
     render(
       <AgentInspectorPanel
+        currentAgent="floor_plan_intake"
         metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={knownFacts}
@@ -45,6 +46,7 @@ describe("AgentInspectorPanel", () => {
   it("renders an empty known-facts state", () => {
     render(
       <AgentInspectorPanel
+        currentAgent="floor_plan_intake"
         metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={[]}
@@ -58,6 +60,7 @@ describe("AgentInspectorPanel", () => {
   it("keeps known facts visible while metadata is still loading", () => {
     render(
       <AgentInspectorPanel
+        currentAgent="floor_plan_intake"
         metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={knownFacts}
@@ -72,6 +75,7 @@ describe("AgentInspectorPanel", () => {
   it("renders error state", () => {
     render(
       <AgentInspectorPanel
+        currentAgent="floor_plan_intake"
         metadataError="Failed"
         isLoadingKnownFacts={false}
         knownFacts={[]}
@@ -87,6 +91,7 @@ describe("AgentInspectorPanel", () => {
 
     render(
       <AgentInspectorPanel
+        currentAgent="floor_plan_intake"
         metadataError=""
         isLoadingKnownFacts={false}
         knownFacts={knownFacts}
