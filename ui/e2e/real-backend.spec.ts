@@ -127,10 +127,12 @@ test.describe("real backend smoke", () => {
       .toBeGreaterThan(0);
   });
 
-  test("creates a fresh thread on search and floor-plan agent pages", async ({ page }) => {
+  test("creates a fresh thread on search, floor-plan, and image-analysis agent pages", async ({
+    page,
+  }) => {
     test.setTimeout(120_000);
 
-    for (const agentName of ["search", "floor_plan_intake"] as const) {
+    for (const agentName of ["search", "floor_plan_intake", "image_analysis"] as const) {
       await page.goto(`/agents/${agentName}`);
       await expect(page.getByTestId("agent-thread-select")).toBeVisible();
       const previousThreadId = await page.getByTestId("agent-thread-select").inputValue();

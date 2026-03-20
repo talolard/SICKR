@@ -1,6 +1,61 @@
 import { expect, test } from "@playwright/test";
 
 const HARNESS_URL = "/debug/agui-harness?mock=1";
+const SEEDED_SEARCH_THREAD_ID = "mock-seeded-search-thread";
+const SEEDED_BUNDLE_PROPOSAL = {
+  bundle_id: "bundle-1",
+  title: "Desk setup",
+  notes:
+    "Portable lighting for the hallway without drilling. Use adhesive-friendly pieces and keep the explanation fully visible.",
+  budget_cap_eur: 200,
+  items: [
+    {
+      item_id: "chair-1",
+      product_name: "Chair One",
+      display_title: "Chair One Ergonomic Desk Chair",
+      product_url: "https://www.ikea.com/de/de/p/chair-one-12345678/",
+      description_text: "Desk chair",
+      price_eur: 79.99,
+      quantity: 2,
+      line_total_eur: 159.98,
+      reason: "Two matching chairs",
+      image_urls: [],
+    },
+  ],
+  bundle_total_eur: 159.98,
+  validations: [
+    {
+      kind: "pricing_complete",
+      status: "pass",
+      message: "All bundle items have prices, so the total is complete.",
+    },
+    {
+      kind: "duplicate_items",
+      status: "warn",
+      message: "Merged 1 repeated product entry into combined quantities.",
+    },
+  ],
+  created_at: "2026-03-11T11:00:00Z",
+  run_id: "run-1",
+};
+
+function seedSearchBundleStateScript(): string {
+  return `
+    (() => {
+      const threadId = ${JSON.stringify(SEEDED_SEARCH_THREAD_ID)};
+      localStorage.setItem("copilotkit_ui_active_thread_agent_search", threadId);
+      localStorage.setItem("copilotkit_ui_thread_ids_agent_search", JSON.stringify([threadId]));
+      sessionStorage.setItem(
+        "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
+        JSON.stringify([threadId]),
+      );
+      localStorage.setItem(
+        "copilotkit_ui_bundle_proposals_" + threadId,
+        JSON.stringify([${JSON.stringify(SEEDED_BUNDLE_PROPOSAL)}]),
+      );
+    })();
+  `;
+}
 
 test("streams assistant text from mock AG-UI route", async ({ page }) => {
   await page.goto(HARNESS_URL);
@@ -212,4 +267,25 @@ test("shows partial-success save-trace messaging when Beads creation fails", asy
   await expect(
     page.getByText(/Saved trace trace-partial at \/tmp\/traces\/trace-partial, but Beads creation did not complete\./),
   ).toBeVisible();
+});
+
+test("keeps active-thread search pages compact and hides pass-state validations", async ({
+  page,
+}) => {
+  await page.addInitScript(seedSearchBundleStateScript());
+  await page.goto(`/agents/search?thread=${SEEDED_SEARCH_THREAD_ID}`);
+
+  await expect(page.getByRole("heading", { name: "Search" })).toBeVisible();
+  await expect(page.getByText("Desk setup")).toBeVisible();
+  await expect(page.getByText("Find products that fit your style, budget, and room needs.")).toHaveCount(0);
+
+  const threadDataDisclosure = page.locator("details", {
+    has: page.getByText("Thread data"),
+  });
+  await expect(threadDataDisclosure).not.toHaveAttribute("open", "");
+
+  const bundleToggle = page.getByRole("button", { name: /Desk setup/i });
+  await bundleToggle.click();
+  await expect(page.getByText(/Duplicates:/)).toBeVisible();
+  await expect(page.getByText(/Pricing:/)).toHaveCount(0);
 });

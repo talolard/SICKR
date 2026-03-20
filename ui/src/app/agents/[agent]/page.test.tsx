@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { useEffect, useRef } from "react";
 import { vi } from "vitest";
@@ -10,6 +10,7 @@ import type { AttachmentRef } from "@/lib/attachments";
 const {
   useParamsMock,
   useRouterMock,
+  routerPushMock,
   useThreadSessionMock,
   useAgentMock,
   useCopilotMessagesContextMock,
@@ -26,7 +27,8 @@ const {
   copilotToolRendererPropsMock,
 } = vi.hoisted(() => ({
   useParamsMock: vi.fn<() => { agent: string }>(() => ({ agent: "search" })),
-  useRouterMock: vi.fn(() => ({ push: vi.fn() })),
+  routerPushMock: vi.fn(),
+  useRouterMock: vi.fn(() => ({ push: routerPushMock })),
   useThreadSessionMock: vi.fn(),
   useAgentMock: vi.fn(),
   useCopilotMessagesContextMock: vi.fn(),
@@ -212,6 +214,12 @@ describe("AgentChatPage", () => {
         agent_key: "agent_floor_plan_intake",
         ag_ui_path: "/ag-ui/agents/floor_plan_intake",
       },
+      {
+        name: "image_analysis",
+        description: "Review room photos.",
+        agent_key: "agent_image_analysis",
+        ag_ui_path: "/ag-ui/agents/image_analysis",
+      },
     ]);
     fetchAgentMetadataMock.mockImplementation(async (agent) => ({
       name: agent,
@@ -258,6 +266,7 @@ describe("AgentChatPage", () => {
     saveThreadSnapshotMock.mockReset();
     saveFloorPlanPreviewMock.mockReset();
     copilotToolRendererPropsMock.mockReset();
+    routerPushMock.mockReset();
   });
 
   it("rehydrates thread messages and renders the search-specific shell without attachment panels", async () => {
@@ -345,5 +354,107 @@ describe("AgentChatPage", () => {
     expect(copilotToolRendererPropsMock).toHaveBeenCalledWith({
       threadId: "thread-floor-plan",
     });
+  });
+
+  it("keeps active-thread search chrome compact and hides the route description", async () => {
+    useParamsMock.mockReturnValue({ agent: "search" });
+
+    render(<AgentChatPage />);
+
+    expect(await screen.findByRole("heading", { name: "Search" })).toBeInTheDocument();
+    expect(screen.queryByText("Find products.")).not.toBeInTheDocument();
+    expect(screen.getByText("Thread data")).toBeInTheDocument();
+    expect(screen.getByText("Workbench")).toBeInTheDocument();
+    expect(screen.getByText("Results")).toBeInTheDocument();
+
+    const threadDataDetails = screen.getByText("Thread data").closest("details");
+    expect(threadDataDetails).not.toHaveAttribute("open");
+  });
+
+  it("shows first-visit route guidance when no tracked thread exists", async () => {
+    useParamsMock.mockReturnValue({ agent: "search" });
+    useThreadSessionMock.mockReturnValue({
+      agentKey: "agent_search",
+      agentName: "search",
+      threadId: null,
+      threadIds: [],
+      warning: null,
+      selectThread: vi.fn(),
+      createThread: vi.fn(),
+      clearWarning: vi.fn(),
+    });
+
+    render(<AgentChatPage />);
+
+    expect(
+      await screen.findByText(
+        "Curate products that solve the room brief without losing the design mood.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Thread data")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-thread-select")).toBeDisabled();
+  });
+
+  it("renders the image-analysis workspace with the compact empty-state board", async () => {
+    useParamsMock.mockReturnValue({ agent: "image_analysis" });
+    useThreadSessionMock.mockReturnValue({
+      agentKey: "agent_image_analysis",
+      agentName: "image_analysis",
+      threadId: "thread-image",
+      threadIds: ["thread-image"],
+      warning: null,
+      selectThread: vi.fn(),
+      createThread: vi.fn(),
+      clearWarning: vi.fn(),
+    });
+
+    render(<AgentChatPage />);
+
+    expect(await screen.findByTestId("image-analysis-workspace-panel")).toBeInTheDocument();
+    expect(screen.getByText("Visual context")).toBeInTheDocument();
+    expect(screen.getByText("1 image ready")).toBeInTheDocument();
+    expect(screen.getByText("Primary reference")).toBeInTheDocument();
+    expect(screen.getByText("preview.png")).toBeInTheDocument();
+  });
+
+  it("renders warning state and dismiss affordance inside the route shell", async () => {
+    useParamsMock.mockReturnValue({ agent: "search" });
+    useThreadSessionMock.mockReturnValue({
+      agentKey: "agent_search",
+      agentName: "search",
+      threadId: "thread-warning",
+      threadIds: ["thread-warning"],
+      warning: "archived-thread is not available",
+      selectThread: vi.fn(),
+      createThread: vi.fn(),
+      clearWarning: vi.fn(),
+    });
+
+    render(<AgentChatPage />);
+
+    expect(await screen.findByText("archived-thread is not available")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+  });
+
+  it("renders the unknown-agent fallback and routes home from the action", async () => {
+    useParamsMock.mockReturnValue({ agent: "not_real" });
+    useThreadSessionMock.mockReturnValue({
+      agentKey: "agent_not_real",
+      agentName: "not_real",
+      threadId: "thread-unknown",
+      threadIds: ["thread-unknown"],
+      warning: null,
+      selectThread: vi.fn(),
+      createThread: vi.fn(),
+      clearWarning: vi.fn(),
+    });
+
+    render(<AgentChatPage />);
+
+    expect(await screen.findByText("Unknown agent `not_real`.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Return home" }));
+
+    expect(routerPushMock).toHaveBeenCalledWith("/");
   });
 });
