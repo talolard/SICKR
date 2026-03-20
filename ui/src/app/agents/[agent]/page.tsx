@@ -11,6 +11,7 @@ import { useThreadSession } from "@/app/CopilotKitProviders";
 import { AgentImageAttachmentPanel } from "@/components/attachments/AgentImageAttachmentPanel";
 import { AgentChatSidebar } from "@/components/copilotkit/AgentChatSidebar";
 import { CopilotToolRenderers } from "@/components/copilotkit/CopilotToolRenderers";
+import { ImageAnalysisWorkspacePanel } from "@/components/tooling/ImageAnalysisWorkspacePanel";
 import type { AttachmentRef } from "@/lib/attachments";
 
 import {
@@ -38,9 +39,14 @@ const LazyFloorPlanPreviewPanel = dynamic(
   {
     ssr: false,
     loading: () => (
-      <section className="rounded-lg border bg-white p-4">
-        <h2 className="text-lg font-semibold text-gray-900">Floor Plan Preview</h2>
-        <p className="mt-2 text-sm text-gray-600">Loading preview panel...</p>
+      <section className="editorial-panel-elevated rounded-[30px] p-4">
+        <p className="editorial-eyebrow">Floor plan preview</p>
+        <h2 className="editorial-display mt-3 text-[1.8rem] leading-none text-primary">
+          Drafting surface
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-on-surface-variant">
+          Loading preview panel...
+        </p>
       </section>
     ),
   },
@@ -133,7 +139,6 @@ export default function AgentChatPage(): ReactElement {
       onCreateThread={createThread}
       onDismissWarning={clearWarning}
       isSearchAgent={searchAgent}
-      isFloorPlanAgent={floorPlanAgent}
       supportsImageAttachments={imageAttachmentSupport}
       activeBundleId={activeBundleId}
       bundleProposalError={bundleProposalError}
@@ -141,7 +146,13 @@ export default function AgentChatPage(): ReactElement {
       isLoadingBundleProposals={isLoadingBundleProposals}
       toolRenderers={toolRenderers}
       previewPanel={
-        !searchAgent ? <LazyFloorPlanPreviewPanel preview={floorPlanPreview} /> : null
+        !searchAgent ? (
+          floorPlanAgent ? (
+            <LazyFloorPlanPreviewPanel preview={floorPlanPreview} />
+          ) : (
+            <ImageAnalysisWorkspacePanel attachments={imageAttachments} />
+          )
+        ) : null
       }
       attachmentPanel={
         <AgentImageAttachmentPanel
@@ -155,7 +166,7 @@ export default function AgentChatPage(): ReactElement {
             : {})}
         />
       }
-      chatPanel={<AgentChatSidebar />}
+      chatPanel={<AgentChatSidebar currentAgent={currentAgent} />}
       isTraceCaptureEnabled={traceCaptureEnabled}
       isTraceDialogOpen={isTraceDialogOpen}
       onOpenTraceDialog={() => {

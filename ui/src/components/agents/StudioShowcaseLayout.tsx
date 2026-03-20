@@ -192,7 +192,7 @@ export function StudioShowcaseLayout({
           <p className="mt-6 rounded-[22px] bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
         ) : null}
 
-        <div className="mt-10 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.82fr)_minmax(0,1fr)] xl:items-start">
+        <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.82fr)_minmax(0,1fr)] xl:items-start">
           {isLoadingAgents
             ? Array.from({ length: 3 }, (_, index) => (
                 <div
@@ -204,10 +204,10 @@ export function StudioShowcaseLayout({
                 <div
                   className={
                     index === 1
-                      ? "xl:translate-y-7"
+                      ? "h-full xl:translate-y-7"
                       : index === 2
-                        ? "xl:-translate-y-3"
-                        : ""
+                        ? "h-full xl:-translate-y-3"
+                        : "h-full"
                   }
                   key={agent.name}
                 >

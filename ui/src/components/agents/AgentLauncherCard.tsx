@@ -119,6 +119,25 @@ function AgentAccentGlyph({ accent }: { accent: AgentStudioCardContent["accent"]
   );
 }
 
+function ArrowGlyph(): React.ReactElement {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4 transition group-hover:translate-x-0.5" fill="none" viewBox="0 0 20 20">
+      <path
+        d="M5 10h9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M10.5 5.5 15 10l-4.5 4.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
 export function AgentLauncherCard({
   agent,
 }: AgentLauncherCardProps): React.ReactElement {
@@ -150,8 +169,8 @@ export function AgentLauncherCard({
           </h3>
         </div>
       </div>
-      <div className="editorial-card-footer flex flex-1 items-end justify-between gap-4 px-5 py-5">
-        <div className="min-w-0">
+      <div className="editorial-card-footer flex flex-1 flex-col px-5 py-5">
+        <div className="min-w-0 flex-1">
           <span className="inline-flex w-fit rounded-full bg-surface-container-lowest px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant shadow-[0_10px_20px_rgba(32,27,16,0.05)]">
             {agentLabel}
           </span>
@@ -159,10 +178,10 @@ export function AgentLauncherCard({
             {content.summary}
           </p>
         </div>
-        <div className="mt-auto flex items-center justify-between pt-6 text-sm font-semibold text-primary">
+        <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">
           <span>{content.cta}</span>
-          <span className="transition group-hover:translate-x-1">Open studio</span>
-        </div>
+          <ArrowGlyph />
+        </span>
       </div>
     </Link>
   );

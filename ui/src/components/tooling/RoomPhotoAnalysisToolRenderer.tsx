@@ -18,20 +18,23 @@ export function RoomPhotoAnalysisToolRenderer(
 ): ReactElement {
   const { result } = props;
   return (
-    <section className="rounded border bg-white p-2" data-testid="room-photo-analysis-output">
+    <section className="space-y-3" data-testid="room-photo-analysis-output">
       <ImageToolOutputRenderer caption={result.caption} images={result.images} />
-      <div className="mt-2">
-        <p className="text-sm font-medium">Room hints</p>
+      <div className="rounded-[22px] bg-[color:var(--surface-container-low)] px-4 py-4">
+        <p className="editorial-eyebrow">Room hints</p>
         {result.room_hints.length > 0 ? (
-          <ul className="mt-1 space-y-1 text-sm" data-testid="room-hints-list">
+          <ul className="mt-3 flex flex-wrap gap-2 text-sm" data-testid="room-hints-list">
             {result.room_hints.map((hint, index) => (
-              <li className="rounded border px-2 py-1" key={`${hint}-${index}`}>
+              <li
+                className="rounded-full bg-[color:var(--surface-container-lowest)] px-3 py-1.5 text-on-surface"
+                key={`${hint}-${index}`}
+              >
                 {hint}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-gray-600">No room hints returned.</p>
+          <p className="mt-3 text-sm text-on-surface-variant">No room hints returned.</p>
         )}
       </div>
     </section>
