@@ -24,10 +24,12 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `catalog.*` holds seeded product metadata, embeddings, image metadata, and optional precomputed
   embedding neighbors; `app.*` remains the runtime schema for conversation and analysis tables.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
-- Worktree bootstrap writes `DATABASE_URL` into `.tmp_untracked/worktree.env` and uses
+- Full worktree bootstrap writes `DATABASE_URL` into `.tmp_untracked/worktree.env` and uses
   `scripts/worktree/deps.sh` to ensure the slot-local Postgres service.
-- Normal `ensure-postgres` and bootstrap flows restore the latest versioned snapshot from the
-  worktree-local cache at `.tmp_untracked/docker-deps/snapshots/latest.json`.
+- Lightweight docs-mode bootstrap writes only a minimal `.tmp_untracked/worktree.env` and does
+  not prepare runtime dependencies.
+- Normal `ensure-postgres` and full bootstrap flows restore the latest versioned snapshot from
+  the worktree-local cache at `.tmp_untracked/docker-deps/snapshots/latest.json`.
 - When the worktree-local cache is empty or incomplete, `scripts/worktree/deps.sh` now attempts
   to fetch a published snapshot artifact from the repo's `Postgres Snapshot` GitHub Actions
   workflow before failing.

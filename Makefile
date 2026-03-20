@@ -9,7 +9,7 @@ endif
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
-	dev human dev-human dev-all dev-all-mock reset agent-start merge-list merge-list-all \
+	dev human dev-human dev-all dev-all-mock reset agent-start agent-start-docs merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
 HOST ?= 127.0.0.1
@@ -87,7 +87,14 @@ backend-coverage:
 preflight:
 	./scripts/preflight.sh
 
-chat:
+guard-full-bootstrap:
+	@if [ "$(WORKTREE_BOOTSTRAP_MODE)" = "docs" ]; then \
+		echo "This worktree is bootstrapped in docs mode and is not runnable yet."; \
+		echo "Upgrade it first with: bash scripts/worktree/bootstrap.sh --mode full --slot <0-99>"; \
+		exit 1; \
+	fi
+
+chat: guard-full-bootstrap
 	$(UV_RUN) uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
 
 ui-install:
@@ -124,13 +131,13 @@ coverage: backend-coverage frontend-coverage
 
 ui-validate: ui-lint ui-typecheck frontend-coverage
 
-ui-dev:
+ui-dev: guard-full-bootstrap
 	cd $(UI_DIR) && pnpm dev --port $(UI_PORT)
 
-ui-dev-mock:
+ui-dev-mock: guard-full-bootstrap
 	cd $(UI_DIR) && pnpm dev:mock --port $(UI_PORT)
 
-ui-dev-real:
+ui-dev-real: guard-full-bootstrap
 	cd $(UI_DIR) && NEXT_PUBLIC_USE_MOCK_AGENT=0 PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm dev --port $(UI_PORT)
 
 ui-test: ui-ensure-install
@@ -142,7 +149,7 @@ ui-test-e2e:
 ui-test-e2e-real:
 	cd $(UI_DIR) && UI_PORT=$(UI_PORT) PY_AG_UI_URL=$(PY_AG_UI_URL) pnpm test:e2e:real
 
-ui-test-e2e-real-ui-smoke:
+ui-test-e2e-real-ui-smoke: guard-full-bootstrap
 	@set -eu; \
 	BACKEND_STARTED=0; \
 	BACKEND_PID=""; \
@@ -213,7 +220,7 @@ human: dev-human
 dev-human:
 	@HUMAN_DEV_SLOT="$(HUMAN_DEV_SLOT)" ./scripts/human_dev.sh
 
-dev-all:
+dev-all: guard-full-bootstrap
 	@set -e; \
 	trap 'kill 0' INT TERM EXIT; \
 	$(MAKE) chat & \
@@ -221,7 +228,7 @@ dev-all:
 	$(MAKE) ui-dev-real & \
 	wait
 
-dev-all-mock:
+dev-all-mock: guard-full-bootstrap
 	@set -e; \
 	trap 'kill 0' INT TERM EXIT; \
 	$(MAKE) ui-dev-mock & \
@@ -240,6 +247,16 @@ agent-start:
 		./scripts/worktree/start-task.sh --query "$(QUERY)" --slot "$(SLOT)"; \
 	else \
 		echo "Usage: make agent-start SLOT=<0-99> ISSUE=<id> OR QUERY=\"text\""; \
+		exit 1; \
+	fi
+
+agent-start-docs:
+	@if [ -n "$(ISSUE)" ]; then \
+		./scripts/worktree/start-task.sh --issue "$(ISSUE)" --mode docs; \
+	elif [ -n "$(QUERY)" ]; then \
+		./scripts/worktree/start-task.sh --query "$(QUERY)" --mode docs; \
+	else \
+		echo "Usage: make agent-start-docs ISSUE=<id> OR QUERY=\"text\""; \
 		exit 1; \
 	fi
 
