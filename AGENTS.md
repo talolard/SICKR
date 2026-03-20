@@ -61,6 +61,9 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - Tool rendering and user-visible tool UX policy: [docs/subagent_tool_rendering_policy.md](docs/subagent_tool_rendering_policy.md)
 - CopilotKit and AG-UI backend protocol notes: [external_docs/pydantic_ai_ag_ui.md](external_docs/pydantic_ai_ag_ui.md)
 - UI integration spec: [spec/ui/pydanticai_copilotkit_integration.md](spec/ui/pydanticai_copilotkit_integration.md)
+- Frontend planning and execution guidance: [docs/frontend_delivery_guidelines.md](docs/frontend_delivery_guidelines.md)
+- Frontend epic and task authoring guidance: [docs/frontend_epic_authoring.md](docs/frontend_epic_authoring.md)
+- Frontend PR review and validation guidance: [docs/frontend_pr_review_guidelines.md](docs/frontend_pr_review_guidelines.md)
 - Effective patterns from the March 18 floor-plan fixes:
   - prefer capability-based shared agent-shell logic over hard-coding one agent into shared flows
   - use in-flow chat primitives for page content and reserve sidebar primitives for actual sidebar UX
