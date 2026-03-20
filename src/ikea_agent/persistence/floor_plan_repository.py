@@ -13,12 +13,8 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
-from ikea_agent.persistence.models import (
-    AgentRunRecord,
-    AssetRecord,
-    FloorPlanRevisionRecord,
-    ThreadRecord,
-)
+from ikea_agent.persistence.models import AgentRunRecord, AssetRecord, FloorPlanRevisionRecord
+from ikea_agent.persistence.ownership import ensure_thread_record
 from ikea_agent.tools.floorplanner.models import FloorPlanScene
 
 _FLOOR_PLAN_SCENE_ADAPTER = TypeAdapter(FloorPlanScene)
@@ -178,22 +174,7 @@ class FloorPlanRepository:
 
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        existing_thread_id = session.execute(
-            select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-        ).scalar_one_or_none()
-        if existing_thread_id is None:
-            session.add(
-                ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-            )
-            return
+        ensure_thread_record(session, thread_id=thread_id, now=now)
 
     def _resolve_existing_run_id(self, *, run_id: str | None) -> str | None:
         if run_id is None:

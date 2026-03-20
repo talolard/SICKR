@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import AssetRecord, ThreadRecord, ensure_persistence_schema
+from ikea_agent.persistence.ownership import ensure_default_dev_hierarchy
 from ikea_agent.persistence.room_3d_repository import Room3DRepository
 
 
@@ -19,10 +20,11 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
 def _seed_source_assets(session_factory: sessionmaker[Session], *, tmp_path: Path) -> None:
     now = datetime.now(UTC)
     with session_factory() as session:
+        hierarchy = ensure_default_dev_hierarchy(session, now=now)
         session.add(
             ThreadRecord(
                 thread_id="thread-room3d",
-                owner_id=None,
+                room_id=hierarchy.room_id,
                 title=None,
                 status="active",
                 created_at=now,

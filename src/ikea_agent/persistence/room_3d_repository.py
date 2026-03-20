@@ -11,12 +11,8 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import (
-    AgentRunRecord,
-    Room3DAssetRecord,
-    Room3DSnapshotRecord,
-    ThreadRecord,
-)
+from ikea_agent.persistence.models import AgentRunRecord, Room3DAssetRecord, Room3DSnapshotRecord
+from ikea_agent.persistence.ownership import ensure_thread_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,21 +221,7 @@ class Room3DRepository:
 
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        existing_thread_id = session.execute(
-            select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-        ).scalar_one_or_none()
-        if existing_thread_id is None:
-            session.add(
-                ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-            )
+        ensure_thread_record(session, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

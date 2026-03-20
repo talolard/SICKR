@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord, AssetRecord, ThreadRecord
+from ikea_agent.persistence.models import AgentRunRecord, AssetRecord
+from ikea_agent.persistence.ownership import ensure_thread_record
 
 
 class AssetRepository:
@@ -84,21 +85,7 @@ class AssetRepository:
 
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        existing_thread_id = session.execute(
-            select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-        ).scalar_one_or_none()
-        if existing_thread_id is None:
-            session.add(
-                ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-            )
+        ensure_thread_record(session, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

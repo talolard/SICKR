@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -9,11 +10,31 @@ from fastapi.testclient import TestClient
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat.agents.index import AgentCatalogItem
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import create_app
 from ikea_agent.config import get_settings
+from ikea_agent.persistence.models import (
+    ProjectRecord,
+    RoomRecord,
+    UserRecord,
+    ensure_persistence_schema,
+)
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_PROJECT_ID,
+    DEFAULT_DEV_ROOM_ID,
+    DEFAULT_DEV_USER_ID,
+)
+
+
+@dataclass
+class _PersistenceRuntimeStub:
+    sqlalchemy_engine: object
+    session_factory: sessionmaker[Session]
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +100,13 @@ def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
         deps_type=object,
         output_type=str,
     )
+
+
+def _runtime_with_persistence(tmp_path: Path) -> _PersistenceRuntimeStub:
+    engine = create_sqlite_engine(tmp_path / "app_bootstrap_test.sqlite")
+    ensure_persistence_schema(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    return _PersistenceRuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:
@@ -162,6 +190,21 @@ def test_agent_ag_ui_route_uses_deterministic_env_model(monkeypatch: pytest.Monk
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "Deterministic smoke response from the local test model." in response.text
+
+
+def test_create_app_seeds_default_dev_hierarchy_for_persistence_runtime(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+
+    create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False, mount_ag_ui=False)
+
+    with runtime.session_factory() as session:
+        user_ids = session.execute(select(UserRecord.user_id)).scalars().all()
+        project_ids = session.execute(select(ProjectRecord.project_id)).scalars().all()
+        room_ids = session.execute(select(RoomRecord.room_id)).scalars().all()
+
+    assert user_ids == [DEFAULT_DEV_USER_ID]
+    assert project_ids == [DEFAULT_DEV_PROJECT_ID]
+    assert room_ids == [DEFAULT_DEV_ROOM_ID]
 
 
 def test_agent_metadata_route_returns_prompt_and_tools() -> None:

@@ -54,7 +54,7 @@ if TYPE_CHECKING:
         AnalysisFeedbackItem.query_text,
         AppSettings.embedding_provider,
         AppSettings.retrieval_candidate_limit,
-        ThreadRecord.owner_id,
+        ThreadRecord.room_id,
         ThreadRecord.updated_at,
         SearchResultRecord.search_result_id,
         RerankedItem.rank_before,

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import AgentRunRecord, ThreadRecord, ensure_persistence_schema
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
     extract_last_user_prompt,
@@ -136,10 +137,11 @@ def test_record_run_start_creates_thread_row(tmp_path: Path) -> None:
 
     with session_factory() as session:
         thread_row = session.execute(
-            select(ThreadRecord.thread_id, ThreadRecord.status).where(
+            select(ThreadRecord.thread_id, ThreadRecord.room_id, ThreadRecord.status).where(
                 ThreadRecord.thread_id == "thread-z"
             )
         ).one()
 
     assert thread_row.thread_id == "thread-z"
+    assert thread_row.room_id == DEFAULT_DEV_ROOM_ID
     assert thread_row.status == "active"

@@ -21,6 +21,7 @@ from ikea_agent.persistence.models import (
     ThreadRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.ownership import ensure_default_dev_hierarchy
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
 
 
@@ -40,10 +41,11 @@ def _runtime(tmp_path: Path) -> _RuntimeStub:
 def _seed(runtime: _RuntimeStub, *, tmp_path: Path) -> None:
     now = datetime.now(UTC)
     with runtime.session_factory() as session:
+        hierarchy = ensure_default_dev_hierarchy(session, now=now)
         session.add(
             ThreadRecord(
                 thread_id="thread-api",
-                owner_id=None,
+                room_id=hierarchy.room_id,
                 title="Initial title",
                 status="active",
                 created_at=now,

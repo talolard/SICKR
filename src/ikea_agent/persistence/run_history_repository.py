@@ -8,7 +8,8 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord, ThreadRecord
+from ikea_agent.persistence.models import AgentRunRecord
+from ikea_agent.persistence.ownership import ensure_thread_record
 
 
 def _utcnow() -> datetime:
@@ -34,20 +35,7 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_thread_id = session.execute(
-                select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-            ).scalar_one_or_none()
-            if existing_thread_id is None:
-                thread = ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-                session.add(thread)
+            ensure_thread_record(session, thread_id=thread_id, now=now)
             session.flush()
 
             existing_run_id = session.execute(

@@ -25,18 +25,83 @@ class Base(DeclarativeBase):
     """Declarative base for persistence models."""
 
 
+class UserRecord(Base):
+    """Application user/account owner."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("external_key", name="uq_users_external_key"),
+        {"schema": APP_SCHEMA},
+    )
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    external_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectRecord(Base):
+    """Top-level design project owned by one user."""
+
+    __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_user_id", "user_id"),
+        UniqueConstraint("user_id", "title", name="uq_projects_user_title"),
+        {"schema": APP_SCHEMA},
+    )
+
+    project_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.users.user_id"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RoomRecord(Base):
+    """One room within a project."""
+
+    __tablename__ = "rooms"
+    __table_args__ = (
+        Index("ix_rooms_project_id", "project_id"),
+        UniqueConstraint("project_id", "title", name="uq_rooms_project_title"),
+        {"schema": APP_SCHEMA},
+    )
+
+    room_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.projects.project_id"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    room_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ThreadRecord(Base):
-    """Top-level thread metadata, including user-facing title."""
+    """Conversation thread metadata bound to one room."""
 
     __tablename__ = "threads"
     __table_args__ = (
-        Index("ix_threads_owner_id", "owner_id"),
+        Index("ix_threads_room_id", "room_id"),
         Index("ix_threads_last_activity_at", "last_activity_at"),
         {"schema": APP_SCHEMA},
     )
 
     thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
