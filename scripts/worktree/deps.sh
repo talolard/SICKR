@@ -6,7 +6,7 @@ usage() {
 Manage Dockerized local dependencies for one worktree slot.
 
 Usage:
-  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|build-snapshot> \
+  scripts/worktree/deps.sh <up|down|reset|reseed|status|ensure-postgres|build-snapshot|fetch-snapshot> \
     [--slot <0-99>] [--canonical-root <path>] [--worktree-root <path>]
 EOF
 }
@@ -99,7 +99,7 @@ BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
 POSTGRES_ENV_DIR="${WORKTREE_ROOT}/.tmp_untracked/docker-deps/postgres"
 POSTGRES_ENV_FILE="${POSTGRES_ENV_DIR}/compose.env"
-SNAPSHOT_ROOT="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/snapshots"
+SNAPSHOT_ROOT="${WORKTREE_ROOT}/.tmp_untracked/docker-deps/snapshots"
 SNAPSHOT_LATEST_FILE="${SNAPSHOT_ROOT}/latest.json"
 POSTGRES_DATABASE_URL="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 POSTGRES_COMPOSE_FILE="${WORKTREE_ROOT}/docker/compose.postgres.yml"
@@ -157,13 +157,36 @@ snapshot_field() {
     "${field}"
 }
 
-require_snapshot_artifact() {
+snapshot_artifact_ready() {
+  local artifact_path=""
+  local manifest_path=""
   if [[ ! -f "${SNAPSHOT_LATEST_FILE}" ]]; then
-    printf 'Missing snapshot metadata at %s. Build it first with scripts/worktree/deps.sh build-snapshot --slot %s.\n' \
-      "${SNAPSHOT_LATEST_FILE}" \
-      "${SLOT}" >&2
-    exit 1
+    return 1
   fi
+  artifact_path="$(snapshot_field "artifact_path" 2>/dev/null || true)"
+  manifest_path="$(snapshot_field "manifest_path" 2>/dev/null || true)"
+  [[ -n "${artifact_path}" && -f "${artifact_path}" && -n "${manifest_path}" && -f "${manifest_path}" ]]
+}
+
+fetch_snapshot_artifact() {
+  mkdir -p "${SNAPSHOT_ROOT}"
+  env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.fetch_postgres_snapshot \
+    --repo-root "${WORKTREE_ROOT}" \
+    --output-root "${SNAPSHOT_ROOT}"
+}
+
+require_snapshot_artifact() {
+  if snapshot_artifact_ready; then
+    return 0
+  fi
+  printf 'Snapshot cache missing or incomplete in %s; attempting to fetch a published artifact.\n' \
+    "${SNAPSHOT_ROOT}" >&2
+  if fetch_snapshot_artifact >/dev/null && snapshot_artifact_ready; then
+    return 0
+  fi
+  printf 'No usable snapshot artifact is available. Build one locally with scripts/worktree/deps.sh build-snapshot --slot %s, or make sure gh is authenticated so the published CI artifact can be fetched.\n' \
+    "${SLOT}" >&2
+  exit 1
 }
 
 latest_snapshot_version() {
@@ -267,7 +290,7 @@ force_reseed() {
 }
 
 build_snapshot() {
-  local snapshot_output_root="${CANONICAL_ROOT}/.tmp_untracked/docker-deps/snapshots"
+  local snapshot_output_root="${SNAPSHOT_ROOT}"
   local snapshot_builder_port=$((25432 + SLOT))
   local snapshot_validator_port=$((26432 + SLOT))
   local snapshot_project_prefix="ikea-slot-${SLOT_PADDED}-snapshot"
@@ -307,6 +330,9 @@ case "${COMMAND}" in
     require_docker
     build_snapshot
     ;;
+  fetch-snapshot)
+    fetch_snapshot_artifact
+    ;;
   status)
     require_docker
     printf 'Worktree root: %s\n' "${WORKTREE_ROOT}"
@@ -314,8 +340,10 @@ case "${COMMAND}" in
     printf 'Slot: %s\n' "${SLOT}"
     printf 'Backend/UI ports: %s / %s\n' "${BACKEND_PORT}" "${UI_PORT}"
     printf 'DATABASE_URL: %s\n' "${POSTGRES_DATABASE_URL}"
-    if [[ -f "${SNAPSHOT_LATEST_FILE}" ]]; then
+    printf 'Snapshot cache root: %s\n' "${SNAPSHOT_ROOT}"
+    if snapshot_artifact_ready; then
       printf 'Latest snapshot version: %s\n' "$(latest_snapshot_version)"
+      printf 'Latest snapshot source: %s\n' "$(snapshot_field "source_kind")"
     fi
     printf 'Current DB snapshot version: %s\n' "$(current_snapshot_version)"
     compose_postgres ps || true

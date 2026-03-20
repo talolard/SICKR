@@ -142,6 +142,8 @@ def build_postgres_snapshot(
     output_root.mkdir(parents=True, exist_ok=True)
     migration_head = _migration_head(repo_root)
     builder_fingerprint = _builder_fingerprint(repo_root)
+    head_branch = _git_output(repo_root, "rev-parse", "--abbrev-ref", "HEAD")
+    head_sha = _git_output(repo_root, "rev-parse", "HEAD")
 
     with tempfile.TemporaryDirectory(prefix="ikea-postgres-snapshot-") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
@@ -236,9 +238,15 @@ def build_postgres_snapshot(
             latest_path.write_text(
                 json.dumps(
                     {
+                        "artifact_name": f"local-{snapshot_version}",
                         "artifact_path": str(artifact_path),
+                        "built_at": datetime.now(tz=UTC).isoformat(),
+                        "head_branch": head_branch,
+                        "head_sha": head_sha,
                         "manifest_path": str(manifest_path),
+                        "migration_head": migration_head,
                         "snapshot_version": snapshot_version,
+                        "source_kind": "local_build",
                     },
                     indent=2,
                     sort_keys=True,
@@ -561,7 +569,11 @@ def _validate_restored_snapshot(
 def _migration_head(repo_root: Path) -> str:
     config = Config(str(repo_root / "alembic.ini"))
     config.set_main_option("script_location", str(repo_root / "migrations"))
-    return ScriptDirectory.from_config(config).get_current_head()
+    current_head = ScriptDirectory.from_config(config).get_current_head()
+    if current_head is None:
+        msg = f"Could not resolve the Alembic migration head under {repo_root / 'migrations'}."
+        raise RuntimeError(msg)
+    return current_head
 
 
 def _builder_fingerprint(repo_root: Path) -> str:
@@ -574,6 +586,15 @@ def _builder_fingerprint(repo_root: Path) -> str:
             repo_root / "src" / "ingest" / "precompute_embedding_neighbors.py",
         ]
     )
+
+
+def _git_output(repo_root: Path, *args: str) -> str:
+    result = _run("git", "-C", str(repo_root), *args, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        msg = stderr or f"git {' '.join(args)} failed with exit code {result.returncode}"
+        raise RuntimeError(msg)
+    return result.stdout.strip()
 
 
 def _sha256_for_path(path: Path) -> str:

@@ -81,8 +81,11 @@ flowchart LR
 ```
 
 Local bootstrap restores a versioned Postgres snapshot into the slot-local
-Docker volume during normal setup. The slow rebuild-from-source path remains an
-explicit maintenance flow via `scripts/worktree/deps.sh reseed --slot <n>`.
+Docker volume during normal setup. Bootstrap first checks the worktree-local
+snapshot cache and, when that cache is empty, attempts to fetch the latest
+published snapshot artifact from the repo's `Postgres Snapshot` workflow. The
+slow rebuild-from-source path remains an explicit maintenance flow via
+`scripts/worktree/deps.sh reseed --slot <n>`.
 
 ## Testing and quality
 

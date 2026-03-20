@@ -26,7 +26,7 @@ bash scripts/worktree/deps.sh build-snapshot --slot 7
 That command builds the artifact under:
 
 ```text
-<CANONICAL_ROOT>/.tmp_untracked/docker-deps/snapshots/<snapshot_version>/
+<WORKTREE_ROOT>/.tmp_untracked/docker-deps/snapshots/<snapshot_version>/
 ```
 
 Each versioned directory contains:
@@ -34,8 +34,8 @@ Each versioned directory contains:
 - `postgres.dump`
 - `manifest.json`
 
-The snapshot root also keeps `latest.json`, which points at the newest local
-artifact and manifest.
+The worktree-local snapshot root also keeps `latest.json`, which points at the
+artifact and manifest currently preferred by bootstrap for that worktree.
 
 ### Local build steps
 
@@ -51,8 +51,8 @@ The builder:
 
 ## Normal Restore
 
-Normal local startup now restores from the latest published local snapshot instead
-of reseeding from canonical files.
+Normal local startup now restores from the latest locally available snapshot
+instead of reseeding from canonical files.
 
 Primary entrypoint:
 
@@ -63,11 +63,13 @@ bash scripts/worktree/deps.sh ensure-postgres --slot 7
 Restore behavior:
 
 1. starts the slot-local Postgres container
-2. reads `latest.json` from the shared snapshot cache
-3. compares the expected snapshot version with the local database's
+2. reads `latest.json` from the worktree-local snapshot cache
+3. if the cache is empty or incomplete, attempts to fetch a published snapshot
+   artifact from GitHub Actions into the worktree-local cache
+4. compares the expected snapshot version with the local database's
    `ops.seed_state` row for `postgres_snapshot`
-4. restores the dump when the slot is empty, stale, or missing snapshot metadata
-5. runs Alembic `upgrade head` after restore verification
+5. restores the dump when the slot is empty, stale, or missing snapshot metadata
+6. runs Alembic `upgrade head` after restore verification
 
 Explicit rebuild-from-source remains:
 
@@ -89,6 +91,12 @@ Workflow:
 Artifact naming:
 
 - `postgres-snapshot-<snapshot_version>`
+
+Published artifact fetch command:
+
+```bash
+bash scripts/worktree/deps.sh fetch-snapshot --slot 7
+```
 
 ## Versioning
 

@@ -91,6 +91,8 @@ The artifact must be:
 - buildable, validated, versioned, and published in CI
 - restorable into a fresh local Postgres instance without rebuilding from
   canonical source files
+- consumed through a worktree-local cache so one branch does not overwrite
+  another branch's active snapshot pointer
 
 ### Canonical build inputs
 
@@ -132,7 +134,8 @@ The rewrite must expose one explicit local command that:
 2. loads canonical catalog and image inputs
 3. loads pgvector embeddings and any required derived neighbor state
 4. validates restore into a fresh Postgres instance
-5. writes the snapshot artifact plus manifest into the local snapshot cache
+5. writes the snapshot artifact plus manifest into the worktree-local snapshot
+   cache
 
 ### CI snapshot creation
 
@@ -145,7 +148,9 @@ The rewrite must expose one CI workflow that:
 ### Bootstrap restore
 
 Normal worktree startup must consume the produced artifact, not rebuild from
-source by default.
+source by default. When the worktree-local cache is empty, bootstrap should
+fetch the published artifact into that cache rather than mutating a shared
+cross-worktree `latest.json`.
 
 ## Validation
 

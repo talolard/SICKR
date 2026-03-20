@@ -26,9 +26,13 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
 - Worktree bootstrap writes `DATABASE_URL` into `.tmp_untracked/worktree.env` and uses
   `scripts/worktree/deps.sh` to ensure the slot-local Postgres service.
-- Normal `ensure-postgres` and bootstrap flows now restore the latest versioned snapshot from
-  `<CANONICAL_ROOT>/.tmp_untracked/docker-deps/snapshots/latest.json` instead of reseeding from
-  canonical parquet and image inputs.
+- Normal `ensure-postgres` and bootstrap flows restore the latest versioned snapshot from the
+  worktree-local cache at `.tmp_untracked/docker-deps/snapshots/latest.json`.
+- When the worktree-local cache is empty or incomplete, `scripts/worktree/deps.sh` now attempts
+  to fetch a published snapshot artifact from the repo's `Postgres Snapshot` GitHub Actions
+  workflow before failing.
+- `scripts/worktree/deps.sh fetch-snapshot --slot <n>` can be used explicitly when you want to
+  refresh the local snapshot cache without starting Postgres.
 - `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit rebuild-from-source
   maintenance path.
 - Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the

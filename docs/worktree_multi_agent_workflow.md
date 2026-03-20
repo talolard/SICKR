@@ -40,6 +40,7 @@ Per-worktree writable paths:
 Dependency scopes:
 
 - one worktree-local Postgres Docker volume and service per slot
+- one worktree-local Postgres snapshot cache under `.tmp_untracked/docker-deps/snapshots`
 - canonical catalog parquet under `data/parquet` remains shared read-only
 
 ## Lifecycle Checklist
