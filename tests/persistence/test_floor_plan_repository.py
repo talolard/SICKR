@@ -7,6 +7,7 @@ from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 from ikea_agent.tools.floorplanner.models import BaselineFloorPlanScene, scene_to_summary
 
 
@@ -64,6 +65,7 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
     second = _scene("second")
 
     saved_first = first_repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-floor",
         scene=first,
         summary=scene_to_summary(first),
@@ -71,7 +73,8 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
         png_asset_id="asset-png-1",
     )
     saved_second = first_repository.save_revision(
-        thread_id="thread-floor",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-floor-followup",
         scene=second,
         summary=scene_to_summary(second),
         svg_asset_id="asset-svg-2",
@@ -79,11 +82,13 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
     )
 
     restarted_repository = FloorPlanRepository(session_factory)
-    latest = restarted_repository.get_latest_revision(thread_id="thread-floor")
+    latest = restarted_repository.get_latest_revision(room_id=DEFAULT_DEV_ROOM_ID)
 
     assert saved_first.revision == 1
     assert saved_second.revision == 2
     assert latest is not None
+    assert latest.room_id == DEFAULT_DEV_ROOM_ID
+    assert latest.thread_id == "thread-floor-followup"
     assert latest.revision == 2
     assert latest.svg_asset_id is None
     assert latest.scene.placements[0].placement_id == "second-wardrobe"
@@ -95,6 +100,7 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     scene = _scene("confirmed")
 
     repository.save_revision(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-floor-confirm",
         scene=scene,
         summary=scene_to_summary(scene),
@@ -103,7 +109,7 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     )
 
     confirmed = repository.confirm_revision(
-        thread_id="thread-floor-confirm",
+        room_id=DEFAULT_DEV_ROOM_ID,
         revision=None,
         run_id=None,
         confirmation_note="User confirmed this layout.",

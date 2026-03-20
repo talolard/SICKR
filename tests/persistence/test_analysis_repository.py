@@ -45,6 +45,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=source.ref.attachment_id,
@@ -65,6 +66,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
         analysis_row = session.execute(
             select(
                 AnalysisRunRecord.analysis_id,
+                AnalysisRunRecord.room_id,
                 AnalysisRunRecord.thread_id,
                 AnalysisRunRecord.input_asset_id,
                 AnalysisRunRecord.tool_name,
@@ -88,6 +90,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
             ).where(AnalysisInputAssetRecord.analysis_id == analysis_id)
         ).all()
 
+    assert analysis_row.room_id == DEFAULT_DEV_ROOM_ID
     assert analysis_row.thread_id == "thread-analysis"
     assert analysis_row.input_asset_id == source.ref.attachment_id
     assert analysis_row.tool_name == "detect_objects_in_image"
@@ -110,6 +113,7 @@ def test_record_analysis_returns_none_for_missing_input_asset(tmp_path: Path) ->
 
     analysis_id = repository.record_analysis(
         tool_name="estimate_depth_map",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id="missing-asset",
@@ -147,6 +151,7 @@ def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path)
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=first.ref.attachment_id,
@@ -194,6 +199,7 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=source.ref.attachment_id,
@@ -211,3 +217,45 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
 
     assert analysis_rows == []
     assert input_rows == []
+
+
+def test_record_analysis_accepts_new_thread_for_same_room_assets(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+    ):
+        source = store.save_image_bytes(
+            content=b"source-image",
+            mime_type="image/png",
+            filename="source.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    analysis_id = repository.record_analysis(
+        tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-followup",
+        run_id=None,
+        input_asset_id=source.ref.attachment_id,
+        request_json={"image": {"attachment_id": source.ref.attachment_id}},
+        result_json={"detections": []},
+        detections=[],
+    )
+
+    assert analysis_id is not None
+
+    with session_factory() as session:
+        row = session.execute(
+            select(AnalysisRunRecord.room_id, AnalysisRunRecord.thread_id).where(
+                AnalysisRunRecord.analysis_id == analysis_id
+            )
+        ).one()
+
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
+    assert row.thread_id == "thread-analysis-followup"

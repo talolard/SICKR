@@ -42,6 +42,7 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
         row = session.execute(
             select(
                 AssetRecord.asset_id,
+                AssetRecord.room_id,
                 AssetRecord.thread_id,
                 AssetRecord.run_id,
                 AssetRecord.kind,
@@ -53,6 +54,7 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
         ).one()
 
     assert row.asset_id == stored.ref.attachment_id
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
     assert row.thread_id == "thread-asset"
     assert row.run_id is None
     assert row.kind == "user_upload"
@@ -84,11 +86,14 @@ def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> Non
         )
 
     with session_factory() as session:
-        thread_id = session.execute(
-            select(AssetRecord.thread_id).where(AssetRecord.asset_id == stored.ref.attachment_id)
-        ).scalar_one()
+        row = session.execute(
+            select(AssetRecord.room_id, AssetRecord.thread_id).where(
+                AssetRecord.asset_id == stored.ref.attachment_id
+            )
+        ).one()
 
-    assert thread_id == "thread-explicit"
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
+    assert row.thread_id == "thread-explicit"
 
 
 def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(

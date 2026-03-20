@@ -139,6 +139,7 @@ class AssetRecord(Base):
 
     __tablename__ = "assets"
     __table_args__ = (
+        Index("ix_assets_room_id", "room_id"),
         Index("ix_assets_thread_id", "thread_id"),
         Index("ix_assets_run_id", "run_id"),
         Index("ix_assets_sha256", "sha256"),
@@ -146,6 +147,11 @@ class AssetRecord(Base):
     )
 
     asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -173,11 +179,17 @@ class FloorPlanRevisionRecord(Base):
 
     __tablename__ = "floor_plan_revisions"
     __table_args__ = (
+        Index("ix_floor_plan_revisions_room_id", "room_id"),
         Index("ix_floor_plan_revisions_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
 
     floor_plan_revision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -208,16 +220,22 @@ class FloorPlanRevisionRecord(Base):
 
 
 class Room3DAssetRecord(Base):
-    """Thread-scoped OpenUSD asset bindings for room-scene workflows."""
+    """Room-owned OpenUSD asset bindings for room-scene workflows."""
 
     __tablename__ = "room_3d_assets"
     __table_args__ = (
+        Index("ix_room_3d_assets_room_id", "room_id"),
         Index("ix_room_3d_assets_thread_id", "thread_id"),
         Index("ix_room_3d_assets_source_asset_id", "source_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     room_3d_asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -239,16 +257,22 @@ class Room3DAssetRecord(Base):
 
 
 class Room3DSnapshotRecord(Base):
-    """Persisted 3D camera snapshots and linked metadata for one thread."""
+    """Persisted 3D camera snapshots and linked metadata for one room."""
 
     __tablename__ = "room_3d_snapshots"
     __table_args__ = (
+        Index("ix_room_3d_snapshots_room_id", "room_id"),
         Index("ix_room_3d_snapshots_thread_id", "thread_id"),
         Index("ix_room_3d_snapshots_snapshot_asset_id", "snapshot_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     room_3d_snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -280,12 +304,18 @@ class AnalysisRunRecord(Base):
 
     __tablename__ = "analysis_runs"
     __table_args__ = (
+        Index("ix_analysis_runs_room_id", "room_id"),
         Index("ix_analysis_runs_thread_id", "thread_id"),
         Index("ix_analysis_runs_input_asset_id", "input_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     analysis_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -366,6 +396,7 @@ class AnalysisFeedbackRecord(Base):
     __tablename__ = "analysis_feedback"
     __table_args__ = (
         Index("ix_analysis_feedback_analysis_id", "analysis_id"),
+        Index("ix_analysis_feedback_room_id", "room_id"),
         Index("ix_analysis_feedback_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
@@ -374,6 +405,11 @@ class AnalysisFeedbackRecord(Base):
     analysis_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.analysis_runs.analysis_id"),
+        nullable=False,
+    )
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
         nullable=False,
     )
     thread_id: Mapped[str] = mapped_column(
@@ -399,11 +435,17 @@ class SearchRunRecord(Base):
 
     __tablename__ = "search_runs"
     __table_args__ = (
+        Index("ix_search_runs_room_id", "room_id"),
         Index("ix_search_runs_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
 
     search_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -450,16 +492,22 @@ class SearchResultRecord(Base):
 
 
 class BundleProposalRecord(Base):
-    """Persisted search bundle proposal payloads keyed by thread and run."""
+    """Persisted room-scoped search bundle proposal payloads with provenance."""
 
     __tablename__ = "bundle_proposals"
     __table_args__ = (
+        Index("ix_bundle_proposals_room_id", "room_id"),
         Index("ix_bundle_proposals_thread_id", "thread_id"),
         Index("ix_bundle_proposals_run_id", "run_id"),
         {"schema": APP_SCHEMA},
     )
 
     bundle_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),

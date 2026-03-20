@@ -28,7 +28,7 @@ from ikea_agent.shared.types import (
 
 
 class SearchRepository:
-    """Repository for storing thread-scoped search snapshots and result rows."""
+    """Repository for storing room-owned search snapshots with thread provenance."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -36,6 +36,7 @@ class SearchRepository:
     def record_search_run(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         query_text: str,
@@ -48,7 +49,7 @@ class SearchRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
             session.flush()
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
@@ -56,6 +57,7 @@ class SearchRepository:
             session.add(
                 SearchRunRecord(
                     search_id=search_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     query_text=query_text,
@@ -93,13 +95,13 @@ class SearchRepository:
             session.commit()
             return search_id
 
-    def list_search_runs(self, *, thread_id: str) -> list[str]:
-        """Return search ids for a thread ordered newest-first."""
+    def list_search_runs(self, *, room_id: str) -> list[str]:
+        """Return search ids for a room ordered newest-first."""
 
         with self._session_factory() as session:
             rows = session.execute(
                 select(SearchRunRecord.search_id)
-                .where(SearchRunRecord.thread_id == thread_id)
+                .where(SearchRunRecord.room_id == room_id)
                 .order_by(SearchRunRecord.created_at.desc())
             ).scalars()
             return [str(item) for item in rows]
@@ -107,21 +109,28 @@ class SearchRepository:
     def record_bundle_proposal(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         proposal: BundleProposalToolResult,
     ) -> str:
-        """Persist one hydrated bundle proposal for later thread reloads."""
+        """Persist one hydrated bundle proposal for later room reloads."""
 
         created_at = datetime.fromisoformat(proposal.created_at)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=created_at)
+            self._ensure_thread(
+                session=session,
+                room_id=room_id,
+                thread_id=thread_id,
+                now=created_at,
+            )
             session.flush()
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             session.merge(
                 BundleProposalRecord(
                     bundle_id=proposal.bundle_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     title=proposal.title,
@@ -142,8 +151,8 @@ class SearchRepository:
             session.commit()
         return proposal.bundle_id
 
-    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
-        """Return bundle proposals for a thread ordered newest-first."""
+    def list_bundle_proposals(self, *, room_id: str) -> list[BundleProposalToolResult]:
+        """Return bundle proposals for a room ordered newest-first."""
 
         with self._session_factory() as session:
             rows = session.execute(
@@ -158,7 +167,7 @@ class SearchRepository:
                     BundleProposalRecord.validations_json,
                     cast(BundleProposalRecord.created_at, String),
                 )
-                .where(BundleProposalRecord.thread_id == thread_id)
+                .where(BundleProposalRecord.room_id == room_id)
                 .order_by(BundleProposalRecord.created_at.desc())
             ).all()
         return [
@@ -181,8 +190,8 @@ class SearchRepository:
         ]
 
     @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, thread_id=thread_id, now=now)
+    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
+        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

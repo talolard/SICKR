@@ -95,11 +95,12 @@ class _SearchRepositorySpy:
     def record_bundle_proposal(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         proposal: BundleProposalToolResult,
     ) -> str:
-        _ = (thread_id, run_id)
+        _ = (room_id, thread_id, run_id)
         self.proposals.append(proposal)
         return proposal.bundle_id
 
@@ -162,7 +163,7 @@ def _run_context(
             ),
         ),
         attachment_store=cast("AttachmentStore", object()),
-        state=SearchAgentState(thread_id="thread-1", run_id="run-1"),
+        state=SearchAgentState(room_id="room-1", thread_id="thread-1", run_id="run-1"),
     )
     return cast("RunContext[SearchAgentDeps]", SimpleNamespace(deps=deps))
 

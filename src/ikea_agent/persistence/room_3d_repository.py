@@ -11,7 +11,12 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord, Room3DAssetRecord, Room3DSnapshotRecord
+from ikea_agent.persistence.models import (
+    AgentRunRecord,
+    AssetRecord,
+    Room3DAssetRecord,
+    Room3DSnapshotRecord,
+)
 from ikea_agent.persistence.ownership import ensure_thread_record
 
 
@@ -20,6 +25,7 @@ class Room3DAssetEntry:
     """One persisted room 3D asset binding."""
 
     room_3d_asset_id: str
+    room_id: str
     thread_id: str
     run_id: str | None
     source_asset_id: str
@@ -33,6 +39,7 @@ class Room3DSnapshotEntry:
     """One persisted room 3D snapshot metadata row."""
 
     room_3d_snapshot_id: str
+    room_id: str
     thread_id: str
     run_id: str | None
     snapshot_asset_id: str
@@ -52,6 +59,7 @@ class Room3DRepository:
     def create_room_3d_asset(
         self,
         *,
+        room_id: str,
         thread_id: str,
         source_asset_id: str,
         usd_format: str,
@@ -64,11 +72,18 @@ class Room3DRepository:
         room_3d_asset_id = f"room3d-asset-{uuid4().hex[:16]}"
 
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
+            if not self._asset_exists_in_room(
+                session=session,
+                room_id=room_id,
+                asset_id=source_asset_id,
+            ):
+                raise ValueError(f"Unknown source asset `{source_asset_id}` for room `{room_id}`.")
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             session.add(
                 Room3DAssetRecord(
                     room_3d_asset_id=room_3d_asset_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     source_asset_id=source_asset_id,
@@ -84,14 +99,15 @@ class Room3DRepository:
             raise ValueError("Stored room_3d_asset row was not found after insert.")
         return stored
 
-    def list_room_3d_assets(self, *, thread_id: str) -> list[Room3DAssetEntry]:
-        """Return all room 3D assets for one thread."""
+    def list_room_3d_assets(self, *, room_id: str) -> list[Room3DAssetEntry]:
+        """Return all room 3D assets for one room."""
 
         with self._session_factory() as session:
             rows = (
                 session.execute(
                     select(
                         Room3DAssetRecord.room_3d_asset_id,
+                        Room3DAssetRecord.room_id,
                         Room3DAssetRecord.thread_id,
                         Room3DAssetRecord.run_id,
                         Room3DAssetRecord.source_asset_id,
@@ -99,7 +115,7 @@ class Room3DRepository:
                         Room3DAssetRecord.metadata_json,
                         cast(Room3DAssetRecord.created_at, String),
                     )
-                    .where(Room3DAssetRecord.thread_id == thread_id)
+                    .where(Room3DAssetRecord.room_id == room_id)
                     .order_by(Room3DAssetRecord.created_at.desc())
                 )
                 .mappings()
@@ -115,6 +131,7 @@ class Room3DRepository:
                 session.execute(
                     select(
                         Room3DAssetRecord.room_3d_asset_id,
+                        Room3DAssetRecord.room_id,
                         Room3DAssetRecord.thread_id,
                         Room3DAssetRecord.run_id,
                         Room3DAssetRecord.source_asset_id,
@@ -133,6 +150,7 @@ class Room3DRepository:
     def create_room_3d_snapshot(
         self,
         *,
+        room_id: str,
         thread_id: str,
         snapshot_asset_id: str,
         camera: dict[str, object],
@@ -147,11 +165,28 @@ class Room3DRepository:
         room_3d_snapshot_id = f"room3d-snapshot-{uuid4().hex[:16]}"
 
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
+            if not self._asset_exists_in_room(
+                session=session,
+                room_id=room_id,
+                asset_id=snapshot_asset_id,
+            ):
+                raise ValueError(
+                    f"Unknown snapshot asset `{snapshot_asset_id}` for room `{room_id}`."
+                )
+            if room_3d_asset_id is not None and not self._room_3d_asset_exists_in_room(
+                session=session,
+                room_id=room_id,
+                room_3d_asset_id=room_3d_asset_id,
+            ):
+                raise ValueError(
+                    f"Unknown room_3d_asset_id `{room_3d_asset_id}` for room `{room_id}`."
+                )
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             session.add(
                 Room3DSnapshotRecord(
                     room_3d_snapshot_id=room_3d_snapshot_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     snapshot_asset_id=snapshot_asset_id,
@@ -169,14 +204,15 @@ class Room3DRepository:
             raise ValueError("Stored room_3d_snapshot row was not found after insert.")
         return stored
 
-    def list_room_3d_snapshots(self, *, thread_id: str) -> list[Room3DSnapshotEntry]:
-        """Return all room 3D snapshots for one thread."""
+    def list_room_3d_snapshots(self, *, room_id: str) -> list[Room3DSnapshotEntry]:
+        """Return all room 3D snapshots for one room."""
 
         with self._session_factory() as session:
             rows = (
                 session.execute(
                     select(
                         Room3DSnapshotRecord.room_3d_snapshot_id,
+                        Room3DSnapshotRecord.room_id,
                         Room3DSnapshotRecord.thread_id,
                         Room3DSnapshotRecord.run_id,
                         Room3DSnapshotRecord.snapshot_asset_id,
@@ -186,7 +222,7 @@ class Room3DRepository:
                         Room3DSnapshotRecord.comment,
                         cast(Room3DSnapshotRecord.created_at, String),
                     )
-                    .where(Room3DSnapshotRecord.thread_id == thread_id)
+                    .where(Room3DSnapshotRecord.room_id == room_id)
                     .order_by(Room3DSnapshotRecord.created_at.desc())
                 )
                 .mappings()
@@ -202,6 +238,7 @@ class Room3DRepository:
                 session.execute(
                     select(
                         Room3DSnapshotRecord.room_3d_snapshot_id,
+                        Room3DSnapshotRecord.room_id,
                         Room3DSnapshotRecord.thread_id,
                         Room3DSnapshotRecord.run_id,
                         Room3DSnapshotRecord.snapshot_asset_id,
@@ -220,8 +257,8 @@ class Room3DRepository:
         return _snapshot_from_row(row)
 
     @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, thread_id=thread_id, now=now)
+    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
+        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
@@ -231,10 +268,38 @@ class Room3DRepository:
             select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
         ).scalar_one_or_none()
 
+    @staticmethod
+    def _asset_exists_in_room(*, session: Session, room_id: str, asset_id: str) -> bool:
+        return (
+            session.execute(
+                select(AssetRecord.asset_id)
+                .where(AssetRecord.asset_id == asset_id)
+                .where(AssetRecord.room_id == room_id)
+            ).scalar_one_or_none()
+            is not None
+        )
+
+    @staticmethod
+    def _room_3d_asset_exists_in_room(
+        *,
+        session: Session,
+        room_id: str,
+        room_3d_asset_id: str,
+    ) -> bool:
+        return (
+            session.execute(
+                select(Room3DAssetRecord.room_3d_asset_id)
+                .where(Room3DAssetRecord.room_3d_asset_id == room_3d_asset_id)
+                .where(Room3DAssetRecord.room_id == room_id)
+            ).scalar_one_or_none()
+            is not None
+        )
+
 
 def _asset_from_row(row: RowMapping) -> Room3DAssetEntry:
     return Room3DAssetEntry(
         room_3d_asset_id=str(row["room_3d_asset_id"]),
+        room_id=str(row["room_id"]),
         thread_id=str(row["thread_id"]),
         run_id=str(row["run_id"]) if row["run_id"] is not None else None,
         source_asset_id=str(row["source_asset_id"]),
@@ -247,6 +312,7 @@ def _asset_from_row(row: RowMapping) -> Room3DAssetEntry:
 def _snapshot_from_row(row: RowMapping) -> Room3DSnapshotEntry:
     return Room3DSnapshotEntry(
         room_3d_snapshot_id=str(row["room_3d_snapshot_id"]),
+        room_id=str(row["room_id"]),
         thread_id=str(row["thread_id"]),
         run_id=str(row["run_id"]) if row["run_id"] is not None else None,
         snapshot_asset_id=str(row["snapshot_asset_id"]),

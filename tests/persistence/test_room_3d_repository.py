@@ -36,6 +36,7 @@ def _seed_source_assets(session_factory: sessionmaker[Session], *, tmp_path: Pat
         session.add(
             AssetRecord(
                 asset_id="usd-source-asset",
+                room_id=hierarchy.room_id,
                 thread_id="thread-room3d",
                 run_id=None,
                 created_by_tool="test_seed",
@@ -53,6 +54,7 @@ def _seed_source_assets(session_factory: sessionmaker[Session], *, tmp_path: Pat
         session.add(
             AssetRecord(
                 asset_id="snapshot-png-asset",
+                room_id=hierarchy.room_id,
                 thread_id="thread-room3d",
                 run_id=None,
                 created_by_tool="test_seed",
@@ -76,6 +78,7 @@ def test_room_3d_repository_round_trip_assets_and_snapshots(tmp_path: Path) -> N
     repository = Room3DRepository(session_factory)
 
     stored_asset = repository.create_room_3d_asset(
+        room_id="room-dev-default",
         thread_id="thread-room3d",
         source_asset_id="usd-source-asset",
         usd_format="usda",
@@ -84,6 +87,7 @@ def test_room_3d_repository_round_trip_assets_and_snapshots(tmp_path: Path) -> N
     )
 
     stored_snapshot = repository.create_room_3d_snapshot(
+        room_id="room-dev-default",
         thread_id="thread-room3d",
         snapshot_asset_id="snapshot-png-asset",
         room_3d_asset_id=stored_asset.room_3d_asset_id,
@@ -93,20 +97,22 @@ def test_room_3d_repository_round_trip_assets_and_snapshots(tmp_path: Path) -> N
         run_id=None,
     )
 
-    listed_assets = repository.list_room_3d_assets(thread_id="thread-room3d")
-    listed_snapshots = repository.list_room_3d_snapshots(thread_id="thread-room3d")
+    listed_assets = repository.list_room_3d_assets(room_id="room-dev-default")
+    listed_snapshots = repository.list_room_3d_snapshots(room_id="room-dev-default")
     loaded_asset = repository.get_room_3d_asset(room_3d_asset_id=stored_asset.room_3d_asset_id)
     loaded_snapshot = repository.get_room_3d_snapshot(
         room_3d_snapshot_id=stored_snapshot.room_3d_snapshot_id
     )
 
     assert stored_asset.usd_format == "usda"
+    assert stored_asset.room_id == "room-dev-default"
     assert stored_asset.metadata["mesh_count"] == 14
     assert len(listed_assets) == 1
     assert loaded_asset is not None
     assert loaded_asset.source_asset_id == "usd-source-asset"
 
     assert stored_snapshot.snapshot_asset_id == "snapshot-png-asset"
+    assert stored_snapshot.room_id == "room-dev-default"
     assert stored_snapshot.comment == "Need brighter desk area."
     assert len(listed_snapshots) == 1
     assert loaded_snapshot is not None

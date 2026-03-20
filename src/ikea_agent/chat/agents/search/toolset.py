@@ -17,6 +17,7 @@ from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
     build_room_3d_snapshot_context_payload,
     build_shared_context_tools,
+    require_room_id,
     require_thread_id,
     room_3d_repository,
     search_repository,
@@ -115,6 +116,7 @@ async def _run_search_graph_with_services(
     if search_repo is not None:
         for query_input, query_output in zip(normalized_queries, output.queries, strict=True):
             search_repo.record_search_run(
+                room_id=require_room_id(ctx.deps.state),
                 thread_id=require_thread_id(ctx.deps.state),
                 run_id=ctx.deps.state.run_id,
                 query_text=query_input.semantic_query,
@@ -356,6 +358,7 @@ def _propose_bundle_with_services(
     repository = services.get_search_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_bundle_proposal(
+            room_id=require_room_id(ctx.deps.state),
             thread_id=require_thread_id(ctx.deps.state),
             run_id=ctx.deps.state.run_id,
             proposal=result,
@@ -425,8 +428,8 @@ def _list_room_3d_snapshot_context_with_services(
 ) -> dict[str, object]:
     persisted: list[Room3DSnapshotEntry] = []
     repository = services.get_room_3d_repository(ctx.deps.runtime)
-    if repository is not None and ctx.deps.state.thread_id is not None:
-        persisted = repository.list_room_3d_snapshots(thread_id=ctx.deps.state.thread_id)
+    if repository is not None:
+        persisted = repository.list_room_3d_snapshots(room_id=require_room_id(ctx.deps.state))
     payload = build_room_3d_snapshot_context_payload(
         state_snapshots=ctx.deps.state.room_3d_snapshots,
         persisted_snapshots=persisted,

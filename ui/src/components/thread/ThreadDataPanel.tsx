@@ -63,8 +63,8 @@ export function ThreadDataPanel({ threadId }: Props): ReactElement {
 
   return (
     <section className="rounded-[24px] bg-[color:var(--surface-container-lowest)] px-4 py-4 text-xs text-on-surface shadow-[var(--panel-shadow)]">
-      <p className="editorial-eyebrow">Tracked thread</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <p className="editorial-eyebrow">Active room</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <MetricCard label="Room" value={detail.room_title} />
         <MetricCard label="Room type" value={detail.room_type ?? "(unset)"} />
         <MetricCard label="Assets" value={String(detail.asset_count)} />

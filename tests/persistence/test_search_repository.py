@@ -13,6 +13,7 @@ from ikea_agent.persistence.models import (
     SearchRunRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
@@ -38,6 +39,7 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
     repository = SearchRepository(session_factory)
 
     search_id = repository.record_search_run(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-search",
         run_id=None,
         query_text="narrow wardrobe for hallway",
@@ -87,6 +89,7 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
     with session_factory() as session:
         run_row = session.execute(
             select(
+                SearchRunRecord.room_id,
                 SearchRunRecord.thread_id,
                 SearchRunRecord.query_text,
                 SearchRunRecord.filters_json,
@@ -108,6 +111,7 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
     parsed_filters = json.loads(run_row.filters_json)
     parsed_warning = json.loads(run_row.warning_json)
 
+    assert run_row.room_id == DEFAULT_DEV_ROOM_ID
     assert run_row.thread_id == "thread-search"
     assert run_row.query_text == "narrow wardrobe for hallway"
     assert run_row.total_candidates == 36
@@ -124,6 +128,7 @@ def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
     repository = SearchRepository(session_factory)
 
     first_id = repository.record_search_run(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-search-order",
         run_id=None,
         query_text="desk lamp",
@@ -133,7 +138,8 @@ def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
         results=[],
     )
     second_id = repository.record_search_run(
-        thread_id="thread-search-order",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-search-order-followup",
         run_id=None,
         query_text="desk organizer",
         filters=RetrievalFilters(include_keyword="organizer"),
@@ -142,7 +148,7 @@ def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
         results=[],
     )
 
-    ids = repository.list_search_runs(thread_id="thread-search-order")
+    ids = repository.list_search_runs(room_id=DEFAULT_DEV_ROOM_ID)
 
     assert ids[0] == second_id
     assert ids[1] == first_id
@@ -153,6 +159,7 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
     repository = SearchRepository(session_factory)
 
     bundle_id = repository.record_bundle_proposal(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-search-order",
         run_id=None,
         proposal=BundleProposalToolResult(
@@ -193,6 +200,7 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
     with session_factory() as session:
         row = session.execute(
             select(
+                BundleProposalRecord.room_id,
                 BundleProposalRecord.thread_id,
                 BundleProposalRecord.title,
                 BundleProposalRecord.items_json,
@@ -200,10 +208,11 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
             ).where(BundleProposalRecord.bundle_id == bundle_id)
         ).one()
 
-    listed = repository.list_bundle_proposals(thread_id="thread-search-order")
+    listed = repository.list_bundle_proposals(room_id=DEFAULT_DEV_ROOM_ID)
     parsed_items = json.loads(row.items_json)
     parsed_validations = json.loads(row.validations_json)
 
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
     assert row.thread_id == "thread-search-order"
     assert row.title == "Desk starter bundle"
     assert parsed_items[0]["item_id"] == "chair-1"
@@ -276,10 +285,20 @@ def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) 
         run_id=None,
     )
 
-    repository.record_bundle_proposal(thread_id="thread-search", run_id=None, proposal=first)
-    repository.record_bundle_proposal(thread_id="thread-search", run_id=None, proposal=second)
+    repository.record_bundle_proposal(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-search",
+        run_id=None,
+        proposal=first,
+    )
+    repository.record_bundle_proposal(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-search-followup",
+        run_id=None,
+        proposal=second,
+    )
 
-    listed = repository.list_bundle_proposals(thread_id="thread-search")
+    listed = repository.list_bundle_proposals(room_id=DEFAULT_DEV_ROOM_ID)
 
     assert [item.bundle_id for item in listed] == ["bundle-2", "bundle-1"]
     assert listed[0].validations[0].kind == "duplicate_items"

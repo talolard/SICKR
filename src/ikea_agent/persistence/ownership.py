@@ -117,6 +117,8 @@ def ensure_thread_record(
         return str(existing_room_id)
 
     resolved_room_id = room_id or ensure_default_dev_hierarchy(session, now=now).room_id
+    if resolved_room_id == DEFAULT_DEV_ROOM_ID:
+        ensure_default_dev_hierarchy(session, now=now)
     session.flush()
     room_exists = session.execute(
         select(RoomRecord.room_id).where(RoomRecord.room_id == resolved_room_id)

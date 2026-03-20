@@ -30,6 +30,7 @@ class AnalysisRepository:
         self,
         *,
         tool_name: str,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         input_asset_id: str,
@@ -47,9 +48,13 @@ class AnalysisRepository:
         now = datetime.now(UTC)
         resolved_input_asset_ids = input_asset_ids or [input_asset_id]
         with self._session_factory() as session:
-            if not self._all_assets_exist(session=session, asset_ids=resolved_input_asset_ids):
+            if not self._all_assets_exist(
+                session=session,
+                room_id=room_id,
+                asset_ids=resolved_input_asset_ids,
+            ):
                 return None
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
             session.flush()
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
@@ -57,6 +62,7 @@ class AnalysisRepository:
             session.add(
                 AnalysisRunRecord(
                     analysis_id=analysis_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     tool_name=tool_name,
@@ -99,15 +105,17 @@ class AnalysisRepository:
             return analysis_id
 
     @staticmethod
-    def _all_assets_exist(*, session: Session, asset_ids: list[str]) -> bool:
+    def _all_assets_exist(*, session: Session, room_id: str, asset_ids: list[str]) -> bool:
         existing_asset_ids = session.execute(
-            select(AssetRecord.asset_id).where(AssetRecord.asset_id.in_(asset_ids))
+            select(AssetRecord.asset_id)
+            .where(AssetRecord.asset_id.in_(asset_ids))
+            .where(AssetRecord.room_id == room_id)
         ).scalars()
         return len(set(existing_asset_ids)) == len(set(asset_ids))
 
     @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, thread_id=thread_id, now=now)
+    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
+        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

@@ -49,6 +49,7 @@ class AssetRepository:
                 session.add(
                     AssetRecord(
                         asset_id=asset_id,
+                        room_id=room_id,
                         thread_id=thread_id,
                         run_id=persisted_run_id,
                         created_by_tool=created_by_tool,
@@ -68,6 +69,7 @@ class AssetRepository:
                     update(AssetRecord)
                     .where(AssetRecord.asset_id == asset_id)
                     .values(
+                        room_id=room_id,
                         thread_id=thread_id,
                         run_id=persisted_run_id,
                         created_by_tool=created_by_tool,

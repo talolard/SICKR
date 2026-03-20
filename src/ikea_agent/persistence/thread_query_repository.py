@@ -40,8 +40,8 @@ from ikea_agent.shared.types import (
 AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
 
 
-def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, str]:
-    """Return readable display labels for floor-plan revision assets in one thread."""
+def _floor_plan_asset_labels(session: Session, *, room_id: str) -> dict[str, str]:
+    """Return readable display labels for floor-plan revision assets in one room."""
 
     rows = session.execute(
         select(
@@ -49,7 +49,7 @@ def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, s
             FloorPlanRevisionRecord.svg_asset_id,
             FloorPlanRevisionRecord.png_asset_id,
         )
-        .where(FloorPlanRevisionRecord.thread_id == thread_id)
+        .where(FloorPlanRevisionRecord.room_id == room_id)
         .order_by(FloorPlanRevisionRecord.revision.desc())
     ).all()
     labels: dict[str, str] = {}
@@ -97,25 +97,25 @@ class ThreadQueryRepository:
                 session=session,
                 statement=select(func.count())
                 .select_from(AssetRecord)
-                .where(AssetRecord.thread_id == thread_id),
+                .where(AssetRecord.room_id == str(row.room_id)),
             )
             floor_plan_revision_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(FloorPlanRevisionRecord)
-                .where(FloorPlanRevisionRecord.thread_id == thread_id),
+                .where(FloorPlanRevisionRecord.room_id == str(row.room_id)),
             )
             analysis_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(AnalysisRunRecord)
-                .where(AnalysisRunRecord.thread_id == thread_id),
+                .where(AnalysisRunRecord.room_id == str(row.room_id)),
             )
             search_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(SearchRunRecord)
-                .where(SearchRunRecord.thread_id == thread_id),
+                .where(SearchRunRecord.room_id == str(row.room_id)),
             )
 
         return ThreadDetailItem(
@@ -136,10 +136,13 @@ class ThreadQueryRepository:
         )
 
     def list_assets(self, *, thread_id: str) -> list[AssetListItem]:
-        """Return thread-linked assets ordered by creation time descending."""
+        """Return room-linked assets visible from one thread."""
 
         with self._session_factory() as session:
-            floor_plan_labels = _floor_plan_asset_labels(session, thread_id=thread_id)
+            room_id = _resolve_room_id(session=session, thread_id=thread_id)
+            if room_id is None:
+                return []
+            floor_plan_labels = _floor_plan_asset_labels(session, room_id=room_id)
             rows = session.execute(
                 select(
                     AssetRecord.asset_id,
@@ -152,7 +155,7 @@ class ThreadQueryRepository:
                     AssetRecord.size_bytes,
                     cast(AssetRecord.created_at, String),
                 )
-                .where(AssetRecord.thread_id == thread_id)
+                .where(AssetRecord.room_id == room_id)
                 .order_by(AssetRecord.created_at.desc())
             ).all()
         return [
@@ -174,9 +177,12 @@ class ThreadQueryRepository:
         ]
 
     def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
-        """Return persisted bundle proposals for one thread."""
+        """Return persisted bundle proposals visible from one thread."""
 
         with self._session_factory() as session:
+            room_id = _resolve_room_id(session=session, thread_id=thread_id)
+            if room_id is None:
+                return []
             rows = session.execute(
                 select(
                     BundleProposalRecord.bundle_id,
@@ -189,7 +195,7 @@ class ThreadQueryRepository:
                     BundleProposalRecord.validations_json,
                     cast(BundleProposalRecord.created_at, String),
                 )
-                .where(BundleProposalRecord.thread_id == thread_id)
+                .where(BundleProposalRecord.room_id == room_id)
                 .order_by(BundleProposalRecord.created_at.desc())
             ).all()
         return [
@@ -242,13 +248,16 @@ class ThreadQueryRepository:
         note: str | None,
         run_id: str | None,
     ) -> AnalysisFeedbackItem | None:
-        """Persist one analysis feedback row when the analysis exists for thread."""
+        """Persist one analysis feedback row when the analysis exists for the room."""
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
+            room_id = _resolve_room_id(session=session, thread_id=thread_id)
+            if room_id is None:
+                return None
             analysis_exists = session.execute(
                 select(AnalysisRunRecord.analysis_id)
-                .where(AnalysisRunRecord.thread_id == thread_id)
+                .where(AnalysisRunRecord.room_id == room_id)
                 .where(AnalysisRunRecord.analysis_id == analysis_id)
             ).scalar_one_or_none()
             if analysis_exists is None:
@@ -259,6 +268,7 @@ class ThreadQueryRepository:
                 AnalysisFeedbackRecord(
                     analysis_feedback_id=feedback_id,
                     analysis_id=analysis_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     feedback_kind=feedback_kind,
@@ -287,6 +297,13 @@ class ThreadQueryRepository:
 def _count_rows(*, session: Session, statement: Select[tuple[int]]) -> int:
     count_value = session.execute(statement).scalar_one()
     return int(count_value)
+
+
+def _resolve_room_id(*, session: Session, thread_id: str) -> str | None:
+    room_id = session.execute(
+        select(ThreadRecord.room_id).where(ThreadRecord.thread_id == thread_id)
+    ).scalar_one_or_none()
+    return str(room_id) if room_id is not None else None
 
 
 def _run_exists(*, session: Session, run_id: str) -> bool:
