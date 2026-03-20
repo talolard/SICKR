@@ -89,8 +89,9 @@ if [[ -z "${WORKTREE_ROOT}" ]]; then
 fi
 
 if [[ -z "${CANONICAL_ROOT}" ]]; then
-  CANONICAL_ROOT="$(resolve_canonical_root "${WORKTREE_ROOT}")"
+  CANONICAL_ROOT="${WORKTREE_ROOT}"
 fi
+CANONICAL_ROOT="$(resolve_canonical_root "${CANONICAL_ROOT}")"
 
 cd "${WORKTREE_ROOT}"
 
@@ -134,7 +135,14 @@ bash "${WORKTREE_ROOT}/scripts/worktree/deps.sh" up \
 
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
-POSTGRES_PORT=$((15432 + SLOT))
+POSTGRES_RUNTIME_ENV="${WORKTREE_ROOT}/.tmp_untracked/docker-deps/postgres/runtime.env"
+if [[ ! -f "${POSTGRES_RUNTIME_ENV}" ]]; then
+  printf 'Shared Postgres runtime env was not written by deps bootstrap: %s\n' "${POSTGRES_RUNTIME_ENV}" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${POSTGRES_RUNTIME_ENV}"
 
 cat > "${WORKTREE_ENV}" <<EOF
 export WORKTREE_BOOTSTRAP_MODE=full
@@ -143,12 +151,15 @@ export CANONICAL_ROOT=${CANONICAL_ROOT}
 export BACKEND_PORT=${BACKEND_PORT}
 export PORT=${BACKEND_PORT}
 export UI_PORT=${UI_PORT}
-export POSTGRES_HOST=127.0.0.1
+export POSTGRES_HOST=${POSTGRES_HOST}
 export POSTGRES_PORT=${POSTGRES_PORT}
-export POSTGRES_DB=ikea_agent
-export POSTGRES_USER=ikea
-export POSTGRES_PASSWORD=ikea
-export DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:${POSTGRES_PORT}/ikea_agent
+export POSTGRES_DB=${POSTGRES_DB}
+export POSTGRES_DB_NAME=${POSTGRES_DB_NAME}
+export POSTGRES_USER=${POSTGRES_USER}
+export POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+export DATABASE_URL=${DATABASE_URL}
+export SHARED_POSTGRES_ROOT=${SHARED_POSTGRES_ROOT}
+export SHARED_POSTGRES_TEMPLATE_DB=${SHARED_POSTGRES_TEMPLATE_DB}
 export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
 export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
 export PY_AG_UI_URL=http://127.0.0.1:${BACKEND_PORT}/ag-ui/
@@ -167,5 +178,6 @@ Environment file: ${WORKTREE_ENV}
 Backend port: ${BACKEND_PORT}
 UI port: ${UI_PORT}
 Postgres port: ${POSTGRES_PORT}
+Postgres database: ${POSTGRES_DB}
 UI deps installed: $([[ "${SKIP_UI_INSTALL}" == "0" ]] && printf 'yes' || printf 'no (skipped)')
 EOF

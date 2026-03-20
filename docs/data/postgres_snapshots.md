@@ -26,7 +26,7 @@ bash scripts/worktree/deps.sh build-snapshot --slot 7
 That command builds the artifact under:
 
 ```text
-<WORKTREE_ROOT>/.tmp_untracked/docker-deps/snapshots/<snapshot_version>/
+<CANONICAL_ROOT>/.tmp_untracked/shared-postgres/snapshots/<snapshot_version>/
 ```
 
 Each versioned directory contains:
@@ -34,8 +34,9 @@ Each versioned directory contains:
 - `postgres.dump`
 - `manifest.json`
 
-The worktree-local snapshot root also keeps `latest.json`, which points at the
-artifact and manifest currently preferred by bootstrap for that worktree.
+The canonical shared snapshot root also keeps `latest.json`, which points at
+the artifact and manifest currently preferred by bootstrap for every worktree in
+the repo.
 
 ### Local build steps
 
@@ -62,14 +63,14 @@ bash scripts/worktree/deps.sh ensure-postgres --slot 7
 
 Restore behavior:
 
-1. starts the slot-local Postgres container
-2. reads `latest.json` from the worktree-local snapshot cache
+1. starts the repo-shared Postgres container on the shared local port
+2. reads `latest.json` from the canonical shared snapshot cache
 3. if the cache is empty or incomplete, attempts to fetch a published snapshot
-   artifact from GitHub Actions into the worktree-local cache
-4. compares the expected snapshot version with the local database's
-   `ops.seed_state` row for `postgres_snapshot`
-5. restores the dump when the slot is empty, stale, or missing snapshot metadata
-6. runs Alembic `upgrade head` after restore verification
+   artifact from GitHub Actions into the canonical shared cache
+4. restores the dump into the shared template database when the template is
+   empty, stale, or missing snapshot metadata
+5. clones one isolated worktree database from that template
+6. runs Alembic `upgrade head` against the worktree database after clone verification
 
 Explicit rebuild-from-source remains:
 
@@ -95,7 +96,7 @@ Artifact naming:
 Published artifact fetch command:
 
 ```bash
-bash scripts/worktree/deps.sh fetch-snapshot --slot 7
+bash scripts/worktree/deps.sh fetch-snapshot
 ```
 
 ## Versioning
