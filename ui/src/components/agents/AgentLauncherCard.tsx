@@ -11,7 +11,6 @@ type AgentLauncherCardProps = {
 };
 
 type AgentStudioCardContent = {
-  eyebrow: string;
   headline: string;
   summary: string;
   cta: string;
@@ -24,7 +23,6 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
   switch (agentName) {
     case "search":
       return {
-        eyebrow: "Product discovery",
         headline: "Find the right pieces for your space",
         summary: "Discover furniture that solves the room problem without losing the mood.",
         cta: "Start Designing",
@@ -34,7 +32,6 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       };
     case "floor_plan_intake":
       return {
-        eyebrow: "Room planning",
         headline: "Plan your room with confidence",
         summary: "Map the space first so layout and scale feel deliberate before you buy.",
         cta: "Begin Planning",
@@ -44,7 +41,6 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       };
     case "image_analysis":
       return {
-        eyebrow: "Image review",
         headline: "Get design guidance from your space",
         summary: "Read the room through a photo and pull out styling opportunities quickly.",
         cta: "Get Guidance",
@@ -54,7 +50,6 @@ function getAgentStudioCardContent(agentName: string): AgentStudioCardContent {
       };
     default:
       return {
-        eyebrow: "Specialized workflow",
         headline: `Open ${formatAgentName(agentName)}`,
         summary: "Step into a focused workspace built for a specific interior-design task.",
         cta: "Open Workspace",
@@ -119,6 +114,17 @@ function AgentAccentGlyph({ accent }: { accent: AgentStudioCardContent["accent"]
   );
 }
 
+function accentCircleClass(accent: AgentStudioCardContent["accent"]): string {
+  switch (accent) {
+    case "terracotta":
+      return "bg-[color:var(--secondary-container)] text-[color:var(--secondary)]";
+    case "stone":
+      return "bg-[color:var(--primary-container)] text-white";
+    default:
+      return "bg-[color:var(--primary-container)] text-white";
+  }
+}
+
 function ArrowGlyph(): React.ReactElement {
   return (
     <svg aria-hidden="true" className="h-4 w-4 transition group-hover:translate-x-0.5" fill="none" viewBox="0 0 20 20">
@@ -138,6 +144,7 @@ function ArrowGlyph(): React.ReactElement {
     </svg>
   );
 }
+
 export function AgentLauncherCard({
   agent,
 }: AgentLauncherCardProps): React.ReactElement {
@@ -146,10 +153,11 @@ export function AgentLauncherCard({
 
   return (
     <Link
+      aria-label={`${agentLabel} workspace. ${content.headline}`}
       className="group editorial-card flex h-full flex-col overflow-hidden rounded-[32px] transition hover:-translate-y-1 hover:shadow-[0_50px_90px_rgba(32,27,16,0.12)]"
       href={`/agents/${agent.name}`}
     >
-      <div className="relative h-72 overflow-hidden bg-surface-container-low">
+      <div className="relative h-52 overflow-hidden bg-surface-container-low">
         <Image
           alt={content.imageAlt}
           className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
@@ -159,26 +167,20 @@ export function AgentLauncherCard({
           width={640}
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(32,27,16,0.02)_0%,rgba(32,27,16,0.12)_100%)]" />
-        <div className="absolute left-5 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-white shadow-[0_16px_30px_rgba(24,36,27,0.22)]">
+      </div>
+      <div className="flex flex-1 flex-col bg-[linear-gradient(180deg,var(--surface-container-lowest)_0%,#fbf2e4_100%)] px-6 pb-6 pt-5">
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-full shadow-[0_16px_30px_rgba(32,27,16,0.12)] ${accentCircleClass(content.accent)}`}
+        >
           <AgentAccentGlyph accent={content.accent} />
         </div>
-        <div className="editorial-moodboard-label absolute bottom-5 left-5 max-w-[82%] rounded-[24px] px-5 py-4">
-          <p className="editorial-eyebrow">{content.eyebrow}</p>
-          <h3 className="editorial-display mt-3 text-[1.9rem] leading-[0.96] text-primary">
-            {content.headline}
-          </h3>
-        </div>
-      </div>
-      <div className="editorial-card-footer flex flex-1 flex-col px-5 py-5">
-        <div className="min-w-0 flex-1">
-          <span className="inline-flex w-fit rounded-full bg-surface-container-lowest px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-on-surface-variant shadow-[0_10px_20px_rgba(32,27,16,0.05)]">
-            {agentLabel}
-          </span>
-          <p className="editorial-body-copy mt-3 max-w-[18rem] text-sm leading-6">
-            {content.summary}
-          </p>
-        </div>
-        <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+        <h3 className="editorial-display mt-5 max-w-[15rem] text-[2rem] leading-[0.96] text-primary">
+          {content.headline}
+        </h3>
+        <p className="editorial-body-copy mt-4 max-w-[16rem] text-sm leading-6">
+          {content.summary}
+        </p>
+        <span className="mt-auto inline-flex items-center gap-2 pt-6 text-sm font-semibold text-primary">
           <span>{content.cta}</span>
           <ArrowGlyph />
         </span>

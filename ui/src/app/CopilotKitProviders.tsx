@@ -163,8 +163,10 @@ export function CopilotKitProviders({
     <ThreadSessionContext.Provider value={contextValue}>
       <CopilotKit
         key={copilotBoundaryKey}
-        runtimeUrl="/api/copilotkit"
         agent={agentKey}
+        enableInspector={false}
+        runtimeUrl="/api/copilotkit"
+        showDevConsole={false}
         {...(threadId ? { threadId } : {})}
       >
         {children}

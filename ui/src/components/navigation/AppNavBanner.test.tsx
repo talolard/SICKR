@@ -4,21 +4,24 @@ import { vi } from "vitest";
 
 import { AppNavBanner } from "./AppNavBanner";
 
-const { pushMock, useRouterMock } = vi.hoisted(() => {
+const { pushMock, usePathnameMock, useRouterMock } = vi.hoisted(() => {
   const pushMock = vi.fn<(path: string) => void>();
   const useRouterMock = vi.fn<() => { push: (path: string) => void }>(() => ({
     push: pushMock,
   }));
-  return { pushMock, useRouterMock };
+  const usePathnameMock = vi.fn<() => string>(() => "/");
+  return { pushMock, usePathnameMock, useRouterMock };
 });
 
 vi.mock("next/navigation", () => ({
+  usePathname: usePathnameMock,
   useRouter: useRouterMock,
 }));
 
 describe("AppNavBanner", () => {
   beforeEach(() => {
     pushMock.mockReset();
+    usePathnameMock.mockReturnValue("/");
   });
 
   it("shows a disabled launcher while agent data is loading", () => {
@@ -55,5 +58,16 @@ describe("AppNavBanner", () => {
     await user.click(screen.getByRole("button", { name: /Floor Plan Intake/i }));
 
     expect(pushMock).toHaveBeenCalledWith("/agents/floor_plan_intake");
+  });
+
+  it("renders the Stitch home navigation labels and top-right chrome", () => {
+    render(<AppNavBanner agents={[]} currentAgentName={null} />);
+
+    expect(screen.getByRole("button", { name: "My Designs" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gallery" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Workspaces" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open notifications" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
   });
 });
