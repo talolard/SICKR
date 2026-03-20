@@ -32,6 +32,23 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Keep business rules, parsing, and agent-specific state shaping in typed hooks or `ui/src/lib/*`, not inline inside JSX branches.
 - Treat the UI as a product surface, not a debug console.
 
+## Frontend delivery workflow
+
+- Before editing, name:
+  - touched routes
+  - deferred routes
+  - reference artifacts
+  - required states: empty, loading, success, long-content, and error
+- For redesign work, implement in this order unless there is a strong reason not to:
+  - shared shell contract
+  - scroll ownership and height boundaries
+  - route-specific center-surface content
+  - route-local polish
+  - tests and visual verification
+- Do not describe a slice as route-family parity if only one route or the home surface was changed.
+- When debugging layout or overflow, reproduce it on the running page before changing CSS.
+- For broader process guidance, see [docs/frontend_delivery_guidelines.md](../docs/frontend_delivery_guidelines.md).
+
 ## Current stack
 
 - Next.js App Router, React 19, TypeScript, Tailwind CSS v4.
@@ -76,6 +93,9 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Keep CopilotKit CSS overrides shallow and documented. If a selector is fragile or library-internal, add a short comment explaining why it exists.
 - Do not take on chat-surface architecture changes casually. Inline chat, sidebar chat, and popup chat are product-level decisions and should be called out explicitly in plans.
 - When structured outputs become primary artifacts, prefer promoting them into the main work area instead of only leaving them buried in the transcript.
+- Inspect the real CopilotKit DOM before assuming which element owns overflow, padding, or control positioning.
+- Raw tool payloads, long strings, and JSON must wrap safely inside narrow chat rails.
+- Bulky tool outputs inside the consultation rail should usually start collapsed by default.
 
 ## Information hierarchy
 
@@ -147,3 +167,8 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - `make tidy`
 - For behavioral changes on agent pages, aim to keep `make ui-test-e2e-real-ui-smoke` green before calling the work ready.
 - For redesign work, include route-level visual verification notes for the touched pages and name the reference screenshot or export used for comparison.
+- Manual route review should include:
+  - a fresh thread
+  - an existing thread
+  - one realistic success case
+  - one long-content or raw-tool-output stress case
