@@ -10,7 +10,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, AssetRecord
-from ikea_agent.persistence.ownership import resolve_room_thread_context
+from ikea_agent.persistence.ownership import require_thread_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,8 +58,7 @@ class AssetRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
 
             existing_asset_id = session.execute(
@@ -169,15 +168,6 @@ class AssetRepository:
             for snapshot in (_asset_snapshot_from_row(row) for row in rows)
         }
         return [snapshots_by_id[asset_id] for asset_id in asset_ids if asset_id in snapshots_by_id]
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
-        resolve_room_thread_context(
-            session,
-            room_id=room_id,
-            thread_id=thread_id,
-            now=now,
-        )
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
 from ikea_agent.persistence.models import AgentRunRecord, AssetRecord, FloorPlanRevisionRecord
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import require_thread_record
 from ikea_agent.tools.floorplanner.models import FloorPlanScene
 
 _FLOOR_PLAN_SCENE_ADAPTER = TypeAdapter(FloorPlanScene)
@@ -59,7 +59,7 @@ class FloorPlanRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
             next_revision = self._next_revision(session=session, room_id=room_id)
             revision_id = f"fprev-{room_id[:20]}-{next_revision:06d}"
@@ -189,10 +189,6 @@ class FloorPlanRepository:
             )
         ).scalar_one_or_none()
         return int(current_max or 0) + 1
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     def _resolve_existing_run_id(self, *, run_id: str | None) -> str | None:
         if run_id is None:

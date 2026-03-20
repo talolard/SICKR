@@ -30,7 +30,6 @@ from ikea_agent.config import get_settings
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.context_fact_repository import ContextFactRepository
-from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.ownership import ensure_default_dev_hierarchy_for_session_factory
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
@@ -93,8 +92,6 @@ def create_app(
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
-    if hasattr(chat_runtime, "sqlalchemy_engine"):
-        ensure_persistence_schema(chat_runtime.sqlalchemy_engine)
     if hasattr(chat_runtime, "session_factory"):
         ensure_default_dev_hierarchy_for_session_factory(chat_runtime.session_factory)
     asset_repository = (

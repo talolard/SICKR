@@ -15,6 +15,14 @@ export type ThreadDetailItem = {
   search_count: number;
 };
 
+export type ThreadListItem = {
+  thread_id: string;
+  room_id: string;
+  title: string | null;
+  status: string;
+  last_activity_at: string | null;
+};
+
 export type AssetListItem = {
   asset_id: string;
   run_id: string | null;
@@ -91,6 +99,25 @@ async function readJson<T>(input: string, init?: RequestInit): Promise<T> {
 function buildRoomThreadPath(roomId: string, threadId: string, suffix?: string): string {
   const basePath = `/api/thread-data/rooms/${roomId}/threads/${threadId}`;
   return suffix ? `${basePath}/${suffix}` : basePath;
+}
+
+function buildRoomThreadsPath(roomId: string): string {
+  return `/api/thread-data/rooms/${roomId}/threads`;
+}
+
+export async function listRoomThreads(roomId: string): Promise<ThreadListItem[]> {
+  return await readJson<ThreadListItem[]>(buildRoomThreadsPath(roomId));
+}
+
+export async function createRoomThread(
+  roomId: string,
+  title?: string | null,
+): Promise<ThreadListItem> {
+  return await readJson<ThreadListItem>(buildRoomThreadsPath(roomId), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(title ? { title } : {}),
+  });
 }
 
 export async function getRoomThreadDetail(

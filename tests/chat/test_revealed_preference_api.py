@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -36,6 +37,7 @@ from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_PROJECT_ID,
     DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
     ensure_default_dev_hierarchy_for_session_factory,
 )
 from ikea_agent.persistence.room_3d_repository import Room3DRepository
@@ -111,6 +113,18 @@ def _payload(*, thread_id: str, run_id: str, text: str) -> dict[str, object]:
             }
         ],
     }
+
+
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def _build_capturing_search_agent(captured_prompts: list[str]) -> Agent[SearchAgentDeps, str]:
@@ -454,6 +468,9 @@ def test_shared_context_read_tools_return_room_wide_artifacts(tmp_path: Path) ->
     search_repository = SearchRepository(runtime.session_factory)
     attachment_store = AttachmentStore(tmp_path / "attachments", asset_repository=asset_repository)
 
+    for thread_id in ("thread-source", "thread-followup", "thread-floor-plan", "thread-reader"):
+        _seed_thread(runtime.session_factory, thread_id=thread_id)
+
     _seed_shared_room_context(context_repository)
     artifacts = _seed_shared_read_artifacts(
         attachment_store=attachment_store,
@@ -528,6 +545,7 @@ def test_ag_ui_route_does_not_extract_facts_from_messages(
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
+    _seed_thread(runtime.session_factory, thread_id="thread-pref")
     repository = ContextFactRepository(runtime.session_factory)
     captured_prompts: list[str] = []
 
@@ -580,6 +598,7 @@ def test_ag_ui_route_hydrates_room_and_project_facts_into_later_agent_runs(
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
+    _seed_thread(runtime.session_factory, thread_id="thread-pref")
     repository = ContextFactRepository(runtime.session_factory)
     captured_prompts: list[str] = []
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -13,7 +14,11 @@ from ikea_agent.persistence.models import (
     SearchRunRecord,
     ensure_persistence_schema,
 )
-from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.persistence.search_repository import SearchRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
@@ -34,8 +39,22 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
+
+
 def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-search")
     repository = SearchRepository(session_factory)
 
     search_id = repository.record_search_run(
@@ -125,6 +144,8 @@ def test_record_search_run_persists_filters_warning_and_ranked_results(tmp_path:
 
 def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-search-order")
+    _seed_thread(session_factory, thread_id="thread-search-order-followup")
     repository = SearchRepository(session_factory)
 
     first_id = repository.record_search_run(
@@ -156,6 +177,7 @@ def test_list_search_runs_returns_newest_first(tmp_path: Path) -> None:
 
 def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-search-order")
     repository = SearchRepository(session_factory)
 
     bundle_id = repository.record_bundle_proposal(
@@ -226,6 +248,8 @@ def test_record_bundle_proposal_persists_and_lists_typed_payloads(tmp_path: Path
 
 def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-search-order")
+    _seed_thread(session_factory, thread_id="thread-search-order-followup")
     repository = SearchRepository(session_factory)
 
     first = BundleProposalToolResult(
@@ -287,13 +311,13 @@ def test_record_bundle_proposal_persists_and_lists_newest_first(tmp_path: Path) 
 
     repository.record_bundle_proposal(
         room_id=DEFAULT_DEV_ROOM_ID,
-        thread_id="thread-search",
+        thread_id="thread-search-order",
         run_id=None,
         proposal=first,
     )
     repository.record_bundle_proposal(
         room_id=DEFAULT_DEV_ROOM_ID,
-        thread_id="thread-search-followup",
+        thread_id="thread-search-order-followup",
         run_id=None,
         proposal=second,
     )

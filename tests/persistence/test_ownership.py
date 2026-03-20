@@ -20,9 +20,10 @@ from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_PROJECT_ID,
     DEFAULT_DEV_ROOM_ID,
     DEFAULT_DEV_USER_ID,
+    create_thread_record,
     ensure_default_dev_hierarchy,
     ensure_default_dev_hierarchy_for_session_factory,
-    ensure_thread_record,
+    require_thread_record,
 )
 
 
@@ -75,12 +76,18 @@ def test_ensure_default_dev_hierarchy_seeds_expected_rows(tmp_path: Path) -> Non
     assert repeated_hierarchy == hierarchy
 
 
-def test_ensure_thread_record_creates_thread_in_default_room(tmp_path: Path) -> None:
+def test_create_thread_record_creates_thread_in_default_room(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     now = datetime.now(UTC)
 
     with session_factory() as session:
-        resolved_room_id = ensure_thread_record(session, thread_id="thread-owned", now=now)
+        ensure_default_dev_hierarchy(session, now=now)
+        resolved_room_id = create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id="thread-owned",
+            now=now,
+        )
         session.commit()
 
     assert resolved_room_id == DEFAULT_DEV_ROOM_ID
@@ -95,7 +102,7 @@ def test_ensure_thread_record_creates_thread_in_default_room(tmp_path: Path) -> 
     assert thread_row.status == "active"
 
 
-def test_ensure_thread_record_rejects_unknown_room_id(tmp_path: Path) -> None:
+def test_create_thread_record_rejects_unknown_room_id(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     now = datetime.now(UTC)
 
@@ -103,12 +110,29 @@ def test_ensure_thread_record_rejects_unknown_room_id(tmp_path: Path) -> None:
         session_factory() as session,
         pytest.raises(ValueError, match="Unknown room_id `room-missing`"),
     ):
-        ensure_thread_record(
+        create_thread_record(
             session,
+            room_id="room-missing",
             thread_id="thread-invalid-room",
             now=now,
-            room_id="room-missing",
         )
+
+
+def test_require_thread_record_rejects_unknown_thread_id(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    now = datetime.now(UTC)
+
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        with pytest.raises(
+            ValueError,
+            match=r"Unknown thread_id `thread-missing` for room `room-dev-default`\.",
+        ):
+            require_thread_record(
+                session,
+                room_id=DEFAULT_DEV_ROOM_ID,
+                thread_id="thread-missing",
+            )
 
 
 def test_room_titles_are_unique_within_one_project(tmp_path: Path) -> None:

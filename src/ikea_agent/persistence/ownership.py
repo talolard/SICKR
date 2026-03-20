@@ -1,4 +1,4 @@
-"""Helpers for the default dev ownership hierarchy and thread bootstrap."""
+"""Helpers for the default dev hierarchy and explicit thread ownership."""
 
 from __future__ import annotations
 
@@ -92,44 +92,38 @@ def ensure_default_dev_hierarchy_for_session_factory(
 def require_room_record(session: Session, *, room_id: str) -> None:
     """Fail when one room id does not exist."""
 
+    if room_id == DEFAULT_DEV_ROOM_ID and session.get(RoomRecord, room_id) is None:
+        ensure_default_dev_hierarchy(session, now=datetime.now(UTC))
+
     if session.get(RoomRecord, room_id) is None:
         raise ValueError(f"Unknown room_id `{room_id}`.")
 
 
-def ensure_thread_record(
+def create_thread_record(
     session: Session,
     *,
+    room_id: str,
     thread_id: str,
     now: datetime,
-    room_id: str | None = None,
     title: str | None = None,
 ) -> str:
-    """Ensure one thread row exists and belongs to a valid room."""
+    """Create one thread row in the requested room and fail on collisions."""
 
     existing_room_id = session.execute(
         select(ThreadRecord.room_id).where(ThreadRecord.thread_id == thread_id)
     ).scalar_one_or_none()
     if existing_room_id is not None:
-        if room_id is not None and str(existing_room_id) != room_id:
-            raise ValueError(
-                f"Thread `{thread_id}` belongs to room `{existing_room_id}`, not `{room_id}`."
-            )
-        return str(existing_room_id)
+        resolved_existing_room_id = str(existing_room_id)
+        raise ValueError(
+            f"Thread `{thread_id}` already exists in room `{resolved_existing_room_id}`."
+        )
 
-    resolved_room_id = room_id or ensure_default_dev_hierarchy(session, now=now).room_id
-    if resolved_room_id == DEFAULT_DEV_ROOM_ID:
-        ensure_default_dev_hierarchy(session, now=now)
-    session.flush()
-    room_exists = session.execute(
-        select(RoomRecord.room_id).where(RoomRecord.room_id == resolved_room_id)
-    ).scalar_one_or_none()
-    if room_exists is None:
-        raise ValueError(f"Unknown room_id `{resolved_room_id}` for thread `{thread_id}`.")
+    require_room_record(session, room_id=room_id)
 
     session.add(
         ThreadRecord(
             thread_id=thread_id,
-            room_id=resolved_room_id,
+            room_id=room_id,
             title=title,
             status="active",
             created_at=now,
@@ -137,60 +131,27 @@ def ensure_thread_record(
             last_activity_at=now,
         )
     )
-    return resolved_room_id
+    return room_id
 
 
-def resolve_room_thread_context(
+def require_thread_record(
     session: Session,
     *,
     room_id: str,
     thread_id: str,
-    now: datetime,
-    title: str | None = None,
-) -> tuple[str, str]:
-    """Resolve one explicit room/thread pair and create the thread only within that room."""
+) -> str:
+    """Validate that one thread row exists and belongs to the requested room."""
 
-    if room_id == DEFAULT_DEV_ROOM_ID:
-        ensure_default_dev_hierarchy(session, now=now)
     require_room_record(session, room_id=room_id)
     existing_room_id = session.execute(
         select(ThreadRecord.room_id).where(ThreadRecord.thread_id == thread_id)
     ).scalar_one_or_none()
     if existing_room_id is None:
-        ensure_thread_record(
-            session,
-            thread_id=thread_id,
-            room_id=room_id,
-            now=now,
-            title=title,
-        )
-        return room_id, thread_id
+        raise ValueError(f"Unknown thread_id `{thread_id}` for room `{room_id}`.")
 
     resolved_room_id = str(existing_room_id)
     if resolved_room_id != room_id:
         raise ValueError(
             f"Thread `{thread_id}` belongs to room `{resolved_room_id}`, not `{room_id}`."
         )
-    return resolved_room_id, thread_id
-
-
-def resolve_room_thread_context_for_session_factory(
-    session_factory: sessionmaker[Session],
-    *,
-    room_id: str,
-    thread_id: str,
-    now: datetime,
-    title: str | None = None,
-) -> tuple[str, str]:
-    """Resolve one explicit room/thread pair through the shared session factory."""
-
-    with session_factory() as session:
-        resolved = resolve_room_thread_context(
-            session,
-            room_id=room_id,
-            thread_id=thread_id,
-            now=now,
-            title=title,
-        )
-        session.commit()
-        return resolved
+    return resolved_room_id

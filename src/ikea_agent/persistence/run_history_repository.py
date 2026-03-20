@@ -11,7 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, ThreadMessageSegmentRecord
-from ikea_agent.persistence.ownership import resolve_room_thread_context
+from ikea_agent.persistence.ownership import require_thread_record
 
 
 def _utcnow() -> datetime:
@@ -38,12 +38,7 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
-            resolve_room_thread_context(
-                session,
-                room_id=room_id,
-                thread_id=thread_id,
-                now=now,
-            )
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
 
             existing_run_id = session.execute(

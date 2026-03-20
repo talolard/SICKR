@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -7,7 +8,11 @@ from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
-from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.tools.floorplanner.models import BaselineFloorPlanScene, scene_to_summary
 
 
@@ -15,6 +20,19 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     engine = create_sqlite_engine(tmp_path / "floor_plan_repository_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def _scene(name: str) -> BaselineFloorPlanScene:
@@ -59,6 +77,8 @@ def _scene(name: str) -> BaselineFloorPlanScene:
 
 def test_floor_plan_repository_persists_revision_history_across_instances(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor")
+    _seed_thread(session_factory, thread_id="thread-floor-followup")
     first_repository = FloorPlanRepository(session_factory)
 
     first = _scene("first")
@@ -96,6 +116,7 @@ def test_floor_plan_repository_persists_revision_history_across_instances(tmp_pa
 
 def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-confirm")
     repository = FloorPlanRepository(session_factory)
     scene = _scene("confirmed")
 
@@ -123,6 +144,8 @@ def test_floor_plan_repository_confirms_latest_revision(tmp_path: Path) -> None:
 
 def test_floor_plan_repository_lists_room_revisions_newest_first(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-first")
+    _seed_thread(session_factory, thread_id="thread-floor-second")
     repository = FloorPlanRepository(session_factory)
     first = _scene("first")
     second = _scene("second")

@@ -2,18 +2,12 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 import { CopilotKitProviders, useThreadSession } from "./CopilotKitProviders";
 
-const {
-  usePathnameMock,
-  randomUuidMock,
-  copilotKitMountMock,
-  copilotKitUnmountMock,
-} = vi.hoisted(() => ({
+const { usePathnameMock, copilotKitMountMock, copilotKitUnmountMock } = vi.hoisted(() => ({
   usePathnameMock: vi.fn<() => string>(() => "/agents/search"),
-  randomUuidMock: vi.fn<() => string>(() => "12345678-1234-1234-1234-123456789abc"),
   copilotKitMountMock: vi.fn(),
   copilotKitUnmountMock: vi.fn(),
 }));
@@ -60,6 +54,13 @@ vi.mock("@copilotkit/react-core", () => ({
   },
 }));
 
+function jsonResponse(body: unknown, status: number = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 function ThreadSessionConsumer(): ReactElement {
   const { agentKey, roomId, sessionId, threadId, threadIds, warning, createThread, selectThread } =
     useThreadSession();
@@ -88,17 +89,35 @@ function ThreadSessionConsumer(): ReactElement {
 }
 
 describe("CopilotKitProviders", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/agents/search");
     usePathnameMock.mockReturnValue("/agents/search");
-    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(randomUuidMock);
     copilotKitMountMock.mockReset();
     copilotKitUnmountMock.mockReset();
   });
 
   it("bootstraps the active thread from the URL and exposes it through the session context", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/thread-data/rooms/room-url/threads");
+      expect(init).toBeUndefined();
+      return jsonResponse([
+        {
+          thread_id: "url-thread",
+          room_id: "room-url",
+          title: null,
+          status: "active",
+          last_activity_at: "2026-03-20T09:00:00Z",
+        },
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
     window.history.replaceState({}, "", "/agents/search?room=room-url&thread=url-thread");
     window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "stored-thread");
 
@@ -116,22 +135,40 @@ describe("CopilotKitProviders", () => {
     expect(screen.getByTestId("room-id")).toHaveTextContent("room-url");
     expect(screen.getByTestId("session-id")).not.toHaveTextContent("none");
     expect(screen.getByTestId("thread-ids")).toHaveTextContent("url-thread");
+    expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
+      "url-thread",
+    );
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-agent", "agent_search");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-enable-inspector", "false");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-show-dev-console", "false");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-thread-id", "url-thread");
   });
 
-  it("creates a new thread, updates storage, and rewrites the thread URL param", async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "existing-thread");
-    window.localStorage.setItem(
-      "copilotkit_ui_thread_ids_agent_search",
-      JSON.stringify(["existing-thread"]),
-    );
-    window.sessionStorage.setItem(
-      "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
-      JSON.stringify(["existing-thread"]),
+  it("creates a backend thread when the requested URL thread is missing", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (String(input) === "/api/thread-data/rooms/room-dev-default/threads" && method === "GET") {
+        return jsonResponse([]);
+      }
+      if (String(input) === "/api/thread-data/rooms/room-dev-default/threads" && method === "POST") {
+        return jsonResponse(
+          {
+            thread_id: "thread-created",
+            room_id: "room-dev-default",
+            title: null,
+            status: "active",
+            last_activity_at: "2026-03-20T09:05:00Z",
+          },
+          201,
+        );
+      }
+      throw new Error(`Unexpected request: ${method} ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState(
+      {},
+      "",
+      "/agents/search?room=room-dev-default&thread=missing-thread",
     );
 
     render(
@@ -140,47 +177,112 @@ describe("CopilotKitProviders", () => {
       </CopilotKitProviders>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Create thread" }));
-
     await waitFor(() => {
-      expect(screen.getByTestId("thread-id")).toHaveTextContent("agent_search-12345678");
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("thread-created");
     });
 
     expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
-      "agent_search-12345678",
+      "thread-created",
     );
-    expect(window.sessionStorage.getItem("copilotkit_ui_resumable_thread_ids_tmp_agent_search")).toContain(
-      "agent_search-12345678",
+    expect(screen.getByTestId("warning")).toHaveTextContent(
+      "Thread missing-thread is not available for room room-dev-default. Created a new thread instead.",
     );
     expect(window.location.search).toContain("room=room-dev-default");
-    expect(window.location.search).toContain("thread=agent_search-12345678");
+    expect(window.location.search).toContain("thread=thread-created");
     expect(copilotKitUnmountMock).toHaveBeenCalledWith({
       agent: "agent_search",
       threadId: expect.any(String),
     });
     expect(copilotKitMountMock).toHaveBeenLastCalledWith({
       agent: "agent_search",
-      threadId: "agent_search-12345678",
+      threadId: "thread-created",
     });
   });
 
-  it("shows a warning and keeps the current thread when selecting an unavailable backend thread", async () => {
+  it("creates a new backend thread on explicit user request", async () => {
     const user = userEvent.setup();
-    window.localStorage.setItem(
-      "copilotkit_ui_thread_ids_agent_search",
-      JSON.stringify(["current-thread", "archived-thread"]),
-    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (String(input) === "/api/thread-data/rooms/room-dev-default/threads" && method === "GET") {
+        return jsonResponse([
+          {
+            thread_id: "current-thread",
+            room_id: "room-dev-default",
+            title: null,
+            status: "active",
+            last_activity_at: "2026-03-20T09:00:00Z",
+          },
+        ]);
+      }
+      if (String(input) === "/api/thread-data/rooms/room-dev-default/threads" && method === "POST") {
+        return jsonResponse(
+          {
+            thread_id: "thread-created",
+            room_id: "room-dev-default",
+            title: null,
+            status: "active",
+            last_activity_at: "2026-03-20T09:10:00Z",
+          },
+          201,
+        );
+      }
+      throw new Error(`Unexpected request: ${method} ${String(input)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
     window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "current-thread");
-    window.sessionStorage.setItem(
-      "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
-      JSON.stringify(["current-thread"]),
-    );
 
     render(
       <CopilotKitProviders>
         <ThreadSessionConsumer />
       </CopilotKitProviders>,
     );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("current-thread");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Create thread" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("thread-created");
+    });
+
+    expect(screen.getByTestId("thread-ids")).toHaveTextContent(
+      "thread-created,current-thread",
+    );
+    expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
+      "thread-created",
+    );
+    expect(window.location.search).toContain("thread=thread-created");
+  });
+
+  it("shows a warning and keeps the current thread when selecting an unavailable backend thread", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/thread-data/rooms/room-dev-default/threads");
+      expect(init).toBeUndefined();
+      return jsonResponse([
+        {
+          thread_id: "current-thread",
+          room_id: "room-dev-default",
+          title: null,
+          status: "active",
+          last_activity_at: "2026-03-20T09:00:00Z",
+        },
+      ]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "current-thread");
+
+    render(
+      <CopilotKitProviders>
+        <ThreadSessionConsumer />
+      </CopilotKitProviders>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("current-thread");
+    });
 
     await user.click(screen.getByRole("button", { name: "Select archived thread" }));
 

@@ -17,6 +17,7 @@ from ikea_agent.chat_app.thread_api_models import (
     AssetListItem,
     KnownFactItem,
     ThreadDetailItem,
+    ThreadListItem,
     ThreadTranscriptResponse,
 )
 from ikea_agent.chat_app.transcript_codec import serialize_thread_transcript
@@ -32,6 +33,7 @@ from ikea_agent.persistence.models import (
     SearchRunRecord,
     ThreadRecord,
 )
+from ikea_agent.persistence.ownership import create_thread_record, require_room_record
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
@@ -70,6 +72,57 @@ class ThreadQueryRepository:
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
+
+    def list_threads(self, *, room_id: str) -> list[ThreadListItem]:
+        """Return explicit room threads ordered newest-first."""
+
+        with self._session_factory() as session:
+            require_room_record(session, room_id=room_id)
+            rows = session.execute(
+                select(
+                    ThreadRecord.thread_id,
+                    ThreadRecord.title,
+                    ThreadRecord.status,
+                    cast(ThreadRecord.last_activity_at, String),
+                )
+                .where(ThreadRecord.room_id == room_id)
+                .order_by(ThreadRecord.last_activity_at.desc(), ThreadRecord.updated_at.desc())
+            ).all()
+        return [
+            ThreadListItem(
+                thread_id=str(row.thread_id),
+                room_id=room_id,
+                title=str(row.title) if row.title is not None else None,
+                status=str(row.status),
+                last_activity_at=(
+                    str(row.last_activity_at) if row.last_activity_at is not None else None
+                ),
+            )
+            for row in rows
+        ]
+
+    def create_thread(self, *, room_id: str, title: str | None) -> ThreadListItem:
+        """Create one explicit thread row for a room and return the picker item."""
+
+        now = datetime.now(UTC)
+        normalized_title = title.strip() or None if title is not None else None
+        thread_id = f"thread-{uuid4().hex[:24]}"
+        with self._session_factory() as session:
+            create_thread_record(
+                session,
+                room_id=room_id,
+                thread_id=thread_id,
+                now=now,
+                title=normalized_title,
+            )
+            session.commit()
+        return ThreadListItem(
+            thread_id=thread_id,
+            room_id=room_id,
+            title=normalized_title,
+            status="active",
+            last_activity_at=now.isoformat(),
+        )
 
     def get_thread(self, *, room_id: str, thread_id: str) -> ThreadDetailItem | None:
         """Return one thread detail with aggregate child counts."""

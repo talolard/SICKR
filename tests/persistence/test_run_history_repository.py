@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
     ModelRequest,
@@ -16,10 +18,13 @@ from tests.shared.sqlite_db import create_sqlite_engine
 from ikea_agent.persistence.models import (
     AgentRunRecord,
     ThreadMessageSegmentRecord,
-    ThreadRecord,
     ensure_persistence_schema,
 )
-from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
     extract_last_user_prompt,
@@ -30,6 +35,19 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     engine = create_sqlite_engine(tmp_path / "run_history_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def _message_batch(user_text: str, assistant_text: str) -> bytes:
@@ -54,6 +72,7 @@ def test_extract_last_user_prompt_returns_latest_user_text() -> None:
 
 def test_record_run_start_and_complete_persists_run_lifecycle(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-a")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
@@ -79,6 +98,7 @@ def test_record_run_start_and_complete_persists_run_lifecycle(tmp_path: Path) ->
 
 def test_record_run_complete_persists_canonical_message_segment(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
@@ -110,6 +130,7 @@ def test_record_run_complete_persists_canonical_message_segment(tmp_path: Path) 
 
 def test_load_message_history_returns_ordered_thread_history(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
@@ -154,6 +175,7 @@ def test_load_message_history_returns_ordered_thread_history(tmp_path: Path) -> 
 
 def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-b")
     repository = RunHistoryRepository(session_factory)
     repository.record_run_start(
         room_id=DEFAULT_DEV_ROOM_ID,
@@ -180,6 +202,7 @@ def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
 
 def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-c")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
@@ -223,26 +246,19 @@ def test_record_run_complete_missing_run_is_noop(tmp_path: Path) -> None:
     assert run_ids == []
 
 
-def test_record_run_start_creates_thread_row(tmp_path: Path) -> None:
+def test_record_run_start_rejects_missing_thread_row(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
-    repository.record_run_start(
-        room_id=DEFAULT_DEV_ROOM_ID,
-        thread_id="thread-z",
-        run_id="run-z-1",
-        agent_name="search",
-        parent_run_id=None,
-        user_prompt_text="first user prompt",
-    )
-
-    with session_factory() as session:
-        thread_row = session.execute(
-            select(ThreadRecord.thread_id, ThreadRecord.room_id, ThreadRecord.status).where(
-                ThreadRecord.thread_id == "thread-z"
-            )
-        ).one()
-
-    assert thread_row.thread_id == "thread-z"
-    assert thread_row.room_id == DEFAULT_DEV_ROOM_ID
-    assert thread_row.status == "active"
+    with pytest.raises(
+        ValueError,
+        match=r"Unknown thread_id `thread-z` for room `room-dev-default`\.",
+    ):
+        repository.record_run_start(
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id="thread-z",
+            run_id="run-z-1",
+            agent_name="search",
+            parent_run_id=None,
+            user_prompt_text="first user prompt",
+        )

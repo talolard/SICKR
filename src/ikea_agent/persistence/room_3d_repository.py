@@ -17,7 +17,7 @@ from ikea_agent.persistence.models import (
     Room3DAssetRecord,
     Room3DSnapshotRecord,
 )
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import require_thread_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +72,7 @@ class Room3DRepository:
         room_3d_asset_id = f"room3d-asset-{uuid4().hex[:16]}"
 
         with self._session_factory() as session:
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             if not self._asset_exists_in_room(
                 session=session,
                 room_id=room_id,
@@ -165,7 +165,7 @@ class Room3DRepository:
         room_3d_snapshot_id = f"room3d-snapshot-{uuid4().hex[:16]}"
 
         with self._session_factory() as session:
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             if not self._asset_exists_in_room(
                 session=session,
                 room_id=room_id,
@@ -255,10 +255,6 @@ class Room3DRepository:
         if row is None:
             return None
         return _snapshot_from_row(row)
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

@@ -35,8 +35,6 @@ type ThreadSnapshot = {
 
 const ACTIVE_THREAD_KEY = "copilotkit_ui_active_thread";
 const THREAD_PREFIX = "copilotkit_ui_thread_";
-const THREAD_IDS_KEY = "copilotkit_ui_thread_ids";
-const RESUMABLE_THREAD_IDS_KEY = "copilotkit_ui_resumable_thread_ids_tmp";
 const ROOM_3D_SNAPSHOT_PREFIX = "copilotkit_ui_room3d_snapshots_";
 const DEFAULT_AGENT_KEY = "agent_floor_plan_intake";
 
@@ -87,76 +85,6 @@ export function saveThreadSnapshot(
     return;
   }
   window.localStorage.setItem(threadKey(agentKey, snapshot.threadId), JSON.stringify(snapshot));
-}
-
-export function loadThreadIds(agentKey: string = DEFAULT_AGENT_KEY): string[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-  const raw = window.localStorage.getItem(scopedKey(THREAD_IDS_KEY, agentKey));
-  if (!raw) {
-    return [];
-  }
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-  return parsed.filter((value): value is string => typeof value === "string");
-}
-
-export function saveThreadIds(threadIds: string[]): void {
-  saveThreadIdsForAgent(threadIds, DEFAULT_AGENT_KEY);
-}
-
-export function saveThreadIdsForAgent(
-  threadIds: string[],
-  agentKey: string = DEFAULT_AGENT_KEY,
-): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(scopedKey(THREAD_IDS_KEY, agentKey), JSON.stringify(threadIds));
-}
-
-export function upsertThreadId(
-  threadId: string,
-  agentKey: string = DEFAULT_AGENT_KEY,
-): string[] {
-  const current = loadThreadIds(agentKey);
-  if (current.includes(threadId)) {
-    return current;
-  }
-  const next = [threadId, ...current];
-  saveThreadIdsForAgent(next, agentKey);
-  return next;
-}
-
-export function loadResumableThreadIds(agentKey: string = DEFAULT_AGENT_KEY): string[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-  const raw = window.sessionStorage.getItem(scopedKey(RESUMABLE_THREAD_IDS_KEY, agentKey));
-  if (!raw) {
-    return [];
-  }
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-  return parsed.filter((value): value is string => typeof value === "string");
-}
-
-export function saveResumableThreadIds(
-  threadIds: string[],
-  agentKey: string = DEFAULT_AGENT_KEY,
-): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.sessionStorage.setItem(
-    scopedKey(RESUMABLE_THREAD_IDS_KEY, agentKey),
-    JSON.stringify(threadIds),
-  );
 }
 
 function room3dSnapshotKey(agentKey: string, threadId: string): string {

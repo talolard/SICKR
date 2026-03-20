@@ -18,7 +18,7 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     AssetRecord,
 )
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import require_thread_record
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
@@ -72,8 +72,7 @@ class AnalysisRepository:
                 asset_ids=resolved_input_asset_ids,
             ):
                 return None
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             analysis_id = f"analysis-{uuid4().hex[:24]}"
@@ -190,10 +189,6 @@ class AnalysisRepository:
             .where(AssetRecord.room_id == room_id)
         ).scalars()
         return len(set(existing_asset_ids)) == len(set(asset_ids))
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

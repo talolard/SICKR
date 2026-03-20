@@ -16,7 +16,7 @@ from ikea_agent.persistence.models import (
     SearchResultRecord,
     SearchRunRecord,
 )
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import require_thread_record
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
@@ -49,8 +49,7 @@ class SearchRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             search_id = f"search-{uuid4().hex[:24]}"
@@ -118,13 +117,7 @@ class SearchRepository:
 
         created_at = datetime.fromisoformat(proposal.created_at)
         with self._session_factory() as session:
-            self._ensure_thread(
-                session=session,
-                room_id=room_id,
-                thread_id=thread_id,
-                now=created_at,
-            )
-            session.flush()
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
             session.merge(
@@ -188,10 +181,6 @@ class SearchRepository:
             )
             for item in rows
         ]
-
-    @staticmethod
-    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, room_id=room_id, thread_id=thread_id, now=now)
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

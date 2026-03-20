@@ -42,6 +42,7 @@ from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_PROJECT_ID,
     DEFAULT_DEV_ROOM_ID,
     DEFAULT_DEV_USER_ID,
+    create_thread_record,
     ensure_default_dev_hierarchy,
 )
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
@@ -135,6 +136,19 @@ def _runtime_with_persistence(tmp_path: Path) -> _PersistenceRuntimeStub:
     ensure_persistence_schema(engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     return _PersistenceRuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
+
+
+def _seed_thread(runtime: _PersistenceRuntimeStub, *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
 
 
 def test_create_app_without_mount_has_no_custom_routes() -> None:
@@ -248,6 +262,7 @@ def test_agent_ag_ui_route_uses_db_backed_message_history(
     tmp_path: Path,
 ) -> None:
     runtime = _runtime_with_persistence(tmp_path)
+    _seed_thread(runtime, thread_id="thread-1")
     observed_histories: list[list[ModelMessage]] = []
     observed_request_messages: list[list[dict[str, object]]] = []
 
@@ -384,6 +399,34 @@ def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> Non
     )
 
 
+def test_agent_ag_ui_route_rejects_unknown_threads(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "roomId": DEFAULT_DEV_ROOM_ID,
+            "threadId": "thread-missing",
+            "runId": "run-1",
+            "state": {"room_id": DEFAULT_DEV_ROOM_ID, "session_id": "session-test"},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Unknown thread_id `thread-missing` for room `room-dev-default`."
+    )
+
+
 def test_room_thread_messages_route_returns_canonical_transcript_and_404s_on_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -474,6 +517,35 @@ def test_room_thread_messages_route_returns_canonical_transcript_and_404s_on_mis
     }
     assert mismatch_response.status_code == 404
     assert mismatch_response.json()["detail"] == "Thread not found."
+
+
+def test_room_threads_routes_list_and_create_explicit_threads(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    _seed_thread(runtime, thread_id="thread-existing")
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    list_response = client.get(f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads")
+    create_response = client.post(
+        f"/api/rooms/{DEFAULT_DEV_ROOM_ID}/threads",
+        json={"title": "Follow-up thread"},
+    )
+
+    assert list_response.status_code == 200
+    listed_threads = list_response.json()
+    assert [item["thread_id"] for item in listed_threads] == ["thread-existing"]
+
+    assert create_response.status_code == 201
+    created_thread = create_response.json()
+    assert created_thread["thread_id"].startswith("thread-")
+    assert created_thread["title"] == "Follow-up thread"
+    assert created_thread["status"] == "active"
 
 
 def test_create_app_seeds_default_dev_hierarchy_for_persistence_runtime(tmp_path: Path) -> None:

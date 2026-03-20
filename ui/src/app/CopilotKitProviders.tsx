@@ -12,14 +12,10 @@ import type { ReactElement, ReactNode } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { usePathname } from "next/navigation";
 
+import { createRoomThread, listRoomThreads } from "@/lib/api/threadDataClient";
 import {
   loadActiveThreadId,
-  loadResumableThreadIds,
-  loadThreadIds,
   saveActiveThreadId,
-  saveResumableThreadIds,
-  saveThreadIdsForAgent,
-  upsertThreadId,
 } from "@/lib/threadStore";
 import { getOrCreateSessionId } from "@/lib/sessionStore";
 
@@ -43,9 +39,12 @@ type ThreadSessionContextValue = {
 type ThreadBootstrapState = {
   roomId: string;
   sessionId: string;
+  preferredThreadId: string | null;
+};
+
+type ThreadState = {
   threadId: string | null;
   threadIds: string[];
-  resumableThreadIds: string[];
 };
 
 const ThreadSessionContext = createContext<ThreadSessionContextValue | null>(null);
@@ -60,10 +59,6 @@ function resolveAgentContext(pathname: string): { agentKey: string; agentName: s
   return { agentKey: "agent_floor_plan_intake", agentName: null };
 }
 
-function randomThreadId(agentKey: string): string {
-  return `${agentKey.replace(/[^a-z0-9_]/gi, "").slice(0, 20)}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
 function setUrlContext(threadId: string, roomId: string): void {
   const url = new URL(window.location.href);
   url.searchParams.set("room", roomId);
@@ -71,37 +66,27 @@ function setUrlContext(threadId: string, roomId: string): void {
   window.history.replaceState({}, "", url.toString());
 }
 
+function orderThreadIds(selectedThreadId: string, threadIds: string[]): string[] {
+  return [selectedThreadId, ...threadIds.filter((threadId) => threadId !== selectedThreadId)];
+}
+
 function readThreadBootstrapState(agentKey: string): ThreadBootstrapState {
   if (typeof window === "undefined") {
     return {
       roomId: DEFAULT_ROOM_ID,
       sessionId: "",
-      threadId: null,
-      threadIds: [],
-      resumableThreadIds: [],
+      preferredThreadId: null,
     };
   }
 
   const url = new URL(window.location.href);
   const roomId = url.searchParams.get("room") ?? DEFAULT_ROOM_ID;
-  const threadFromUrl = url.searchParams.get("thread");
-  const threadFromStorage = loadActiveThreadId(agentKey);
-  const threadId = threadFromUrl ?? threadFromStorage ?? randomThreadId(agentKey);
-  const storedThreadIds = loadThreadIds(agentKey);
-  const threadIds = storedThreadIds.includes(threadId)
-    ? storedThreadIds
-    : [threadId, ...storedThreadIds];
-  const storedResumableThreadIds = loadResumableThreadIds(agentKey);
-  const resumableThreadIds = storedResumableThreadIds.includes(threadId)
-    ? storedResumableThreadIds
-    : [threadId, ...storedResumableThreadIds];
+  const preferredThreadId = url.searchParams.get("thread") ?? loadActiveThreadId(agentKey);
 
   return {
     roomId,
     sessionId: getOrCreateSessionId(window.sessionStorage),
-    threadId,
-    threadIds,
-    resumableThreadIds,
+    preferredThreadId,
   };
 }
 
@@ -115,55 +100,91 @@ function AgentSessionProvider({
   agentName,
   children,
 }: AgentSessionProviderProps): ReactElement {
-  const [bootstrapState, setBootstrapState] = useState<ThreadBootstrapState>(() =>
+  const [bootstrapState] = useState<ThreadBootstrapState>(() =>
     readThreadBootstrapState(agentKey),
   );
-  const { roomId, sessionId, threadId, threadIds, resumableThreadIds } = bootstrapState;
+  const [threadState, setThreadState] = useState<ThreadState>({
+    threadId: null,
+    threadIds: [],
+  });
   const [warning, setWarning] = useState<string | null>(null);
+  const { roomId, sessionId, preferredThreadId } = bootstrapState;
+  const { threadId, threadIds } = threadState;
 
-  const activateThread = useCallback((nextThreadId: string, nextRoomId?: string): void => {
-    const resolvedRoomId = nextRoomId ?? roomId;
+  const activateThread = useCallback((nextThreadId: string, nextThreadIds?: string[]): void => {
     saveActiveThreadId(nextThreadId, agentKey);
-    const updatedThreadIds = upsertThreadId(nextThreadId, agentKey);
-    setBootstrapState((current) => ({
-      ...current,
-      roomId: resolvedRoomId,
+    setThreadState((current) => ({
       threadId: nextThreadId,
-      threadIds: updatedThreadIds,
+      threadIds: orderThreadIds(nextThreadId, nextThreadIds ?? current.threadIds),
     }));
-    setUrlContext(nextThreadId, resolvedRoomId);
+    setUrlContext(nextThreadId, roomId);
   }, [agentKey, roomId]);
 
-  const markResumable = useCallback((nextThreadId: string): void => {
-    setBootstrapState((current) => {
-      if (current.resumableThreadIds.includes(nextThreadId)) {
-        return current;
-      }
-      const next = [nextThreadId, ...current.resumableThreadIds];
-      saveResumableThreadIds(next, agentKey);
-      return {
-        ...current,
-        resumableThreadIds: next,
-      };
-    });
-  }, [agentKey]);
-
   useEffect(() => {
-    if (!threadId) {
-      return;
+    let active = true;
+
+    async function bootstrapThreads(): Promise<void> {
+      try {
+        const roomThreads = await listRoomThreads(roomId);
+        if (!active) {
+          return;
+        }
+        const availableThreadIds = roomThreads.map((thread) => thread.thread_id);
+
+        if (preferredThreadId && availableThreadIds.includes(preferredThreadId)) {
+          activateThread(preferredThreadId, availableThreadIds);
+          setWarning(null);
+          return;
+        }
+
+        if (availableThreadIds.length > 0) {
+          const fallbackThreadId = availableThreadIds[0] ?? null;
+          if (!fallbackThreadId) {
+            return;
+          }
+          activateThread(fallbackThreadId, availableThreadIds);
+          setWarning(
+            preferredThreadId
+              ? `Thread ${preferredThreadId} is not available for room ${roomId}. Switched to ${fallbackThreadId}.`
+              : null,
+          );
+          return;
+        }
+
+        const createdThread = await createRoomThread(roomId);
+        if (!active) {
+          return;
+        }
+        activateThread(createdThread.thread_id, [createdThread.thread_id]);
+        setWarning(
+          preferredThreadId
+            ? `Thread ${preferredThreadId} is not available for room ${roomId}. Created a new thread instead.`
+            : null,
+        );
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setWarning(error instanceof Error ? error.message : "Failed to load room threads.");
+      }
     }
-    saveActiveThreadId(threadId, agentKey);
-    saveThreadIdsForAgent(threadIds, agentKey);
-    saveResumableThreadIds(resumableThreadIds, agentKey);
-    setUrlContext(threadId, roomId);
-  }, [agentKey, resumableThreadIds, roomId, threadId, threadIds]);
+
+    void bootstrapThreads();
+    return () => {
+      active = false;
+    };
+  }, [activateThread, preferredThreadId, roomId]);
 
   const createThread = useCallback((): void => {
-    const nextThreadId = randomThreadId(agentKey);
-    activateThread(nextThreadId);
-    markResumable(nextThreadId);
-    setWarning(null);
-  }, [activateThread, agentKey, markResumable]);
+    void createRoomThread(roomId)
+      .then((createdThread) => {
+        activateThread(createdThread.thread_id);
+        setWarning(null);
+      })
+      .catch((error: unknown) => {
+        setWarning(error instanceof Error ? error.message : "Failed to create thread.");
+      });
+  }, [activateThread, roomId]);
 
   const selectThread = useCallback(
     (requestedThreadId: string): void => {
@@ -171,7 +192,7 @@ function AgentSessionProvider({
         setWarning(null);
         return;
       }
-      if (resumableThreadIds.includes(requestedThreadId)) {
+      if (threadIds.includes(requestedThreadId)) {
         activateThread(requestedThreadId);
         setWarning(null);
         return;
@@ -180,8 +201,12 @@ function AgentSessionProvider({
         `Thread ${requestedThreadId} is not available for room ${roomId}. Select an existing thread or create a new one.`,
       );
     },
-    [activateThread, roomId, resumableThreadIds, threadId],
+    [activateThread, roomId, threadId, threadIds],
   );
+
+  const clearWarning = useCallback((): void => {
+    setWarning(null);
+  }, []);
 
   const contextValue = useMemo<ThreadSessionContextValue>(
     () => ({
@@ -194,9 +219,20 @@ function AgentSessionProvider({
       warning,
       selectThread,
       createThread,
-      clearWarning: () => setWarning(null),
+      clearWarning,
     }),
-    [agentKey, agentName, createThread, roomId, selectThread, sessionId, threadId, threadIds, warning],
+    [
+      agentKey,
+      agentName,
+      clearWarning,
+      createThread,
+      roomId,
+      selectThread,
+      sessionId,
+      threadId,
+      threadIds,
+      warning,
+    ],
   );
   const copilotBoundaryKey = threadId
     ? `${agentKey}:${roomId}:${threadId}`

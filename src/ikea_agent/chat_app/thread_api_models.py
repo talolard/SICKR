@@ -26,6 +26,16 @@ class ThreadDetailItem(BaseModel):
     search_count: int
 
 
+class ThreadListItem(BaseModel):
+    """Lightweight thread metadata for room-scoped thread pickers."""
+
+    thread_id: str
+    room_id: str
+    title: str | None
+    status: str
+    last_activity_at: str | None
+
+
 class AssetListItem(BaseModel):
     """One stored asset entry for thread inspection UIs."""
 
@@ -62,6 +72,12 @@ class AnalysisFeedbackCreateRequest(BaseModel):
     query_text: str | None = None
     note: str | None = None
     run_id: str | None = None
+
+
+class ThreadCreateRequest(BaseModel):
+    """Request payload to create one explicit thread row for a room."""
+
+    title: str | None = None
 
 
 class AnalysisFeedbackItem(BaseModel):

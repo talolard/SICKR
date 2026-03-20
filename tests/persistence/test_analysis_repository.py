@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -15,7 +16,11 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     ensure_persistence_schema,
 )
-from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
@@ -25,8 +30,22 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
+
+
 def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
@@ -127,6 +146,7 @@ def test_record_analysis_returns_none_for_missing_input_asset(tmp_path: Path) ->
 
 def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
@@ -181,6 +201,7 @@ def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path)
 
 def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
@@ -221,6 +242,8 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
 
 def test_record_analysis_accepts_new_thread_for_same_room_assets(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis-source")
+    _seed_thread(session_factory, thread_id="thread-analysis-followup")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
@@ -262,6 +285,8 @@ def test_record_analysis_accepts_new_thread_for_same_room_assets(tmp_path: Path)
 
 def test_list_room_analyses_returns_room_wide_history(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis-source")
+    _seed_thread(session_factory, thread_id="thread-analysis-followup")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
