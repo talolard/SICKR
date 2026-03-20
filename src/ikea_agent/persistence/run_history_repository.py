@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import resolve_room_thread_context
 
 
 def _utcnow() -> datetime:
@@ -25,6 +25,7 @@ class RunHistoryRepository:
     def record_run_start(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str,
         agent_name: str | None,
@@ -35,7 +36,12 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
-            ensure_thread_record(session, thread_id=thread_id, now=now)
+            resolve_room_thread_context(
+                session,
+                room_id=room_id,
+                thread_id=thread_id,
+                now=now,
+            )
             session.flush()
 
             existing_run_id = session.execute(

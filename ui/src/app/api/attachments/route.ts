@@ -7,6 +7,7 @@ export const POST = async (request: NextRequest): Promise<Response> => {
   const body = await request.arrayBuffer();
   const contentType = request.headers.get("content-type") ?? "application/octet-stream";
   const fileName = request.headers.get("x-filename");
+  const roomId = request.headers.get("x-room-id");
   const threadId = request.headers.get("x-thread-id");
   const runId = request.headers.get("x-run-id");
   const useMockAgent = process.env.NEXT_PUBLIC_USE_MOCK_AGENT === "1";
@@ -30,6 +31,7 @@ export const POST = async (request: NextRequest): Promise<Response> => {
     headers: {
       "content-type": contentType,
       ...(fileName ? { "x-filename": fileName } : {}),
+      ...(roomId ? { "x-room-id": roomId } : {}),
       ...(threadId ? { "x-thread-id": threadId } : {}),
       ...(runId ? { "x-run-id": runId } : {}),
     },

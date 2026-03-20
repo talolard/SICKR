@@ -28,6 +28,7 @@ from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.chat_app.main import create_app
 from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
 from ikea_agent.shared.sqlalchemy_db import create_session_factory
 from ikea_agent.tools.preferences import PreferenceNoteInput, note_to_memory_input
@@ -59,9 +60,13 @@ def _runtime(tmp_path: Path) -> _PersistenceRuntime:
 
 def _payload(*, thread_id: str, run_id: str, text: str) -> dict[str, object]:
     return {
+        "roomId": DEFAULT_DEV_ROOM_ID,
         "threadId": thread_id,
         "runId": run_id,
-        "state": {},
+        "state": {
+            "room_id": DEFAULT_DEV_ROOM_ID,
+            "session_id": "session-test",
+        },
         "tools": [],
         "context": [],
         "forwardedProps": {},

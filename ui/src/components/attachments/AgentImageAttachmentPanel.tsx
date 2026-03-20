@@ -7,6 +7,7 @@ import { AttachmentComposer } from "@/components/attachments/AttachmentComposer"
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 
 type AgentImageAttachmentPanelProps = {
+  roomId: string;
   threadId: string | null;
   onReadyAttachmentsChange: (attachments: AttachmentRef[]) => void;
   helperText?: string;
@@ -20,6 +21,7 @@ function attachmentErrorMessage(status: number, body: string): string {
 }
 
 export function AgentImageAttachmentPanel({
+  roomId,
   threadId,
   onReadyAttachmentsChange,
   helperText = "Uploaded images are added to image-analysis tool context for this thread.",
@@ -46,6 +48,7 @@ export function AgentImageAttachmentPanel({
         headers: {
           "content-type": file.type || "application/octet-stream",
           "x-filename": file.name,
+          "x-room-id": roomId,
           ...(threadId ? { "x-thread-id": threadId } : {}),
         },
         body: file,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -25,6 +25,7 @@ class StoredAttachment:
 class AttachmentStore:
     """Simple local attachment store keyed by generated attachment IDs."""
 
+    _room_id_var: ContextVar[str | None]
     _thread_id_var: ContextVar[str]
     _run_id_var: ContextVar[str | None]
 
@@ -39,18 +40,33 @@ class AttachmentStore:
         self._root_dir = root_dir
         self._asset_repository = asset_repository
         self._root_dir.mkdir(parents=True, exist_ok=True)
-        self._thread_id_var = ContextVar("attachment_store_thread_id", default="anonymous-thread")
+        self._room_id_var = ContextVar("attachment_store_room_id", default=None)
+        self._thread_id_var = ContextVar("attachment_store_thread_id", default="")
         self._run_id_var = ContextVar("attachment_store_run_id", default=None)
 
+    @property
+    def requires_persistence_context(self) -> bool:
+        """Return whether uploads must carry explicit durable room/thread identity."""
+
+        return self._asset_repository is not None
+
     @contextmanager
-    def bind_context(self, *, thread_id: str, run_id: str | None) -> Iterator[None]:
+    def bind_context(
+        self,
+        *,
+        room_id: str,
+        thread_id: str,
+        run_id: str | None,
+    ) -> Generator[None]:
         """Bind thread/run context for async request-local artifact persistence."""
 
+        room_token = self._room_id_var.set(room_id)
         thread_token = self._thread_id_var.set(thread_id)
         run_token = self._run_id_var.set(run_id)
         try:
             yield
         finally:
+            self._room_id_var.reset(room_token)
             self._thread_id_var.reset(thread_token)
             self._run_id_var.reset(run_token)
 
@@ -60,6 +76,7 @@ class AttachmentStore:
         content: bytes,
         mime_type: str,
         filename: str | None,
+        room_id: str | None = None,
         thread_id: str | None = None,
         run_id: str | None = None,
         created_by_tool: str | None = None,
@@ -71,6 +88,7 @@ class AttachmentStore:
             content=content,
             mime_type=mime_type,
             filename=filename,
+            room_id=room_id,
             thread_id=thread_id,
             run_id=run_id,
             created_by_tool=created_by_tool,
@@ -83,6 +101,7 @@ class AttachmentStore:
         content: bytes,
         mime_type: str,
         filename: str | None,
+        room_id: str | None = None,
         thread_id: str | None = None,
         run_id: str | None = None,
         created_by_tool: str | None = None,
@@ -106,11 +125,15 @@ class AttachmentStore:
             height=None,
             file_name=file_name,
         )
+        resolved_room_id = room_id or self._room_id_var.get()
         resolved_thread_id = thread_id or self._thread_id_var.get()
         resolved_run_id = run_id if run_id is not None else self._run_id_var.get()
         if self._asset_repository is not None:
+            if resolved_room_id is None or resolved_thread_id.strip() == "":
+                raise ValueError("Attachment persistence requires explicit room_id and thread_id.")
             self._asset_repository.record_asset(
                 asset_id=attachment_id,
+                room_id=resolved_room_id,
                 thread_id=resolved_thread_id,
                 run_id=resolved_run_id,
                 created_by_tool=created_by_tool,

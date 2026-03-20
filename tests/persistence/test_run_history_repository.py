@@ -36,6 +36,7 @@ def test_record_run_start_and_complete_persists_run_lifecycle(tmp_path: Path) ->
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-a",
         run_id="run-a",
         agent_name="search",
@@ -59,6 +60,7 @@ def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-b",
         run_id="run-b",
         agent_name="search",
@@ -85,6 +87,7 @@ def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_pat
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-c",
         run_id="run-c-1",
         agent_name="search",
@@ -92,6 +95,7 @@ def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_pat
         user_prompt_text="first",
     )
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-c",
         run_id="run-c-2",
         agent_name="search",
@@ -128,6 +132,7 @@ def test_record_run_start_creates_thread_row(tmp_path: Path) -> None:
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-z",
         run_id="run-z-1",
         agent_name="search",

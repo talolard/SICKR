@@ -43,7 +43,27 @@ def telemetry_context(state: CommonAgentState) -> dict[str, str | None]:
     return {
         "session_id": state.session_id,
         "branch_from_session_id": state.branch_from_session_id,
+        "room_id": state.room_id,
+        "thread_id": state.thread_id,
     }
+
+
+def require_thread_id(state: CommonAgentState) -> str:
+    """Return the active thread id or fail when durable thread context is missing."""
+
+    thread_id = state.thread_id
+    if thread_id is None:
+        raise ValueError("Agent state requires an explicit thread_id for durable writes.")
+    return thread_id
+
+
+def require_room_id(state: CommonAgentState) -> str:
+    """Return the active room id or fail when durable room context is missing."""
+
+    room_id = state.room_id
+    if room_id is None:
+        raise ValueError("Agent state requires an explicit room_id for durable writes.")
+    return room_id
 
 
 def floor_plan_repository(runtime: ChatRuntime) -> FloorPlanRepository | None:
@@ -139,9 +159,7 @@ def build_remember_preference_tool(
         ctx: RunContext[_DepsWithState],
         note: PreferenceNoteInput,
     ) -> PreferenceNoteResult:
-        thread_id = ctx.deps.state.thread_id
-        if thread_id is None:
-            raise ValueError("Thread preference memory requires a thread_id in agent state.")
+        thread_id = require_thread_id(ctx.deps.state)
         repository = get_repository(ctx.deps.runtime)
         if repository is None:
             raise ValueError("Thread preference memory is unavailable for this runtime.")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -21,6 +22,7 @@ from ikea_agent.config import get_settings
 from ikea_agent.persistence.models import (
     ProjectRecord,
     RoomRecord,
+    ThreadRecord,
     UserRecord,
     ensure_persistence_schema,
 )
@@ -28,6 +30,7 @@ from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_PROJECT_ID,
     DEFAULT_DEV_ROOM_ID,
     DEFAULT_DEV_USER_ID,
+    ensure_default_dev_hierarchy,
 )
 
 
@@ -65,9 +68,13 @@ def _chat_request_payload(user_text: str) -> dict[str, object]:
 
 def _ag_ui_request_payload(user_text: str) -> dict[str, object]:
     return {
+        "roomId": DEFAULT_DEV_ROOM_ID,
         "threadId": "thread-1",
         "runId": "run-1",
-        "state": {},
+        "state": {
+            "room_id": DEFAULT_DEV_ROOM_ID,
+            "session_id": "session-test",
+        },
         "tools": [],
         "context": [],
         "forwardedProps": {},
@@ -190,6 +197,84 @@ def test_agent_ag_ui_route_uses_deterministic_env_model(monkeypatch: pytest.Monk
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "Deterministic smoke response from the local test model." in response.text
+
+
+def test_agent_ag_ui_route_requires_explicit_room_context() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "threadId": "thread-1",
+            "runId": "run-1",
+            "state": {},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "AG-UI requests require explicit `roomId`."
+
+
+def test_agent_ag_ui_route_rejects_thread_room_mismatches(tmp_path: Path) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    now = datetime.now(UTC)
+    with runtime.session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        session.add(
+            RoomRecord(
+                room_id="room-other",
+                project_id=DEFAULT_DEV_PROJECT_ID,
+                title="Other room",
+                room_type="office",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            ThreadRecord(
+                thread_id="thread-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                title="Existing thread",
+                status="active",
+                created_at=now,
+                updated_at=now,
+                last_activity_at=now,
+            )
+        )
+        session.commit()
+
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", runtime),
+            mount_web_ui=False,
+            mount_ag_ui=True,
+        )
+    )
+
+    response = client.post(
+        "/ag-ui/agents/search",
+        json={
+            "roomId": "room-other",
+            "threadId": "thread-1",
+            "runId": "run-1",
+            "state": {"room_id": "room-other", "session_id": "session-test"},
+            "messages": [{"id": "message-1", "role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert (
+        response.json()["detail"]
+        == "Thread `thread-1` belongs to room `room-dev-default`, not `room-other`."
+    )
 
 
 def test_create_app_seeds_default_dev_hierarchy_for_persistence_runtime(tmp_path: Path) -> None:
@@ -333,6 +418,24 @@ def test_attachment_upload_and_fetch_round_trip() -> None:
     assert download_response.status_code == 200
     assert download_response.content == b"fake-image-bytes"
     assert download_response.headers["content-type"].startswith("image/png")
+
+
+def test_attachment_upload_requires_room_and_thread_context_when_persistence_is_enabled(
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime_with_persistence(tmp_path)
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    upload_response = client.post(
+        "/attachments",
+        content=b"fake-image-bytes",
+        headers={"content-type": "image/png", "x-filename": "room.png"},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["detail"] == (
+        "Attachment uploads require explicit x-room-id and x-thread-id headers."
+    )
 
 
 def test_attachment_upload_rejects_unsupported_type() -> None:

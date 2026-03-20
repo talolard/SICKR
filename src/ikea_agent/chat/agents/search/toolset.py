@@ -17,6 +17,7 @@ from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
     build_remember_preference_tool,
     build_room_3d_snapshot_context_payload,
+    require_thread_id,
     room_3d_repository,
     search_repository,
     telemetry_context,
@@ -111,7 +112,7 @@ async def _run_search_graph_with_services(
     if search_repo is not None:
         for query_input, query_output in zip(normalized_queries, output.queries, strict=True):
             search_repo.record_search_run(
-                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                thread_id=require_thread_id(ctx.deps.state),
                 run_id=ctx.deps.state.run_id,
                 query_text=query_input.semantic_query,
                 filters=query_input.filters,
@@ -352,7 +353,7 @@ def _propose_bundle_with_services(
     repository = services.get_search_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_bundle_proposal(
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=require_thread_id(ctx.deps.state),
             run_id=ctx.deps.state.run_id,
             proposal=result,
         )

@@ -9,6 +9,7 @@ from tests.shared.sqlite_db import create_sqlite_engine
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import AssetRecord, ensure_persistence_schema
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
@@ -24,7 +25,11 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="thread-asset", run_id="run-missing"):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-asset",
+        run_id="run-missing",
+    ):
         stored = store.save_image_bytes(
             content=b"png-bytes",
             mime_type="image/png",
@@ -64,11 +69,16 @@ def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> Non
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="thread-context", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-context",
+        run_id=None,
+    ):
         stored = store.save_image_bytes(
             content=b"svg-bytes",
             mime_type="image/svg+xml",
             filename="plan.svg",
+            room_id=DEFAULT_DEV_ROOM_ID,
             thread_id="thread-explicit",
             kind="generated_preview",
         )
@@ -90,7 +100,11 @@ def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="anonymous-thread", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-repeat",
+        run_id=None,
+    ):
         first = store.save_image_bytes(
             content=b"png-1",
             mime_type="image/png",
@@ -106,7 +120,7 @@ def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
 
     with session_factory() as session:
         thread_count = session.execute(
-            select(AssetRecord.thread_id).where(AssetRecord.thread_id == "anonymous-thread")
+            select(AssetRecord.thread_id).where(AssetRecord.thread_id == "thread-repeat")
         ).all()
 
     assert first.ref.attachment_id != second.ref.attachment_id

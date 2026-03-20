@@ -44,6 +44,7 @@ class CommonAgentState(BaseModel):
 
     session_id: str | None = None
     branch_from_session_id: str | None = None
+    room_id: str | None = None
     thread_id: str | None = None
     run_id: str | None = None
     attachments: list[AttachmentRef] = Field(default_factory=list)

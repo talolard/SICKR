@@ -61,11 +61,14 @@ vi.mock("@copilotkit/react-core", () => ({
 }));
 
 function ThreadSessionConsumer(): ReactElement {
-  const { agentKey, threadId, threadIds, warning, createThread, selectThread } = useThreadSession();
+  const { agentKey, roomId, sessionId, threadId, threadIds, warning, createThread, selectThread } =
+    useThreadSession();
 
   return (
     <div>
       <p data-testid="agent-key">{agentKey}</p>
+      <p data-testid="room-id">{roomId}</p>
+      <p data-testid="session-id">{sessionId}</p>
       <p data-testid="thread-id">{threadId ?? "none"}</p>
       <p data-testid="thread-ids">{threadIds.join(",")}</p>
       <p data-testid="warning">{warning ?? "none"}</p>
@@ -96,7 +99,7 @@ describe("CopilotKitProviders", () => {
   });
 
   it("bootstraps the active thread from the URL and exposes it through the session context", async () => {
-    window.history.replaceState({}, "", "/agents/search?thread=url-thread");
+    window.history.replaceState({}, "", "/agents/search?room=room-url&thread=url-thread");
     window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "stored-thread");
 
     render(
@@ -110,6 +113,8 @@ describe("CopilotKitProviders", () => {
     });
 
     expect(screen.getByTestId("agent-key")).toHaveTextContent("agent_search");
+    expect(screen.getByTestId("room-id")).toHaveTextContent("room-url");
+    expect(screen.getByTestId("session-id")).not.toHaveTextContent("none");
     expect(screen.getByTestId("thread-ids")).toHaveTextContent("url-thread");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-agent", "agent_search");
     expect(screen.getByTestId("copilotkit-root")).toHaveAttribute("data-enable-inspector", "false");
@@ -119,6 +124,15 @@ describe("CopilotKitProviders", () => {
 
   it("creates a new thread, updates storage, and rewrites the thread URL param", async () => {
     const user = userEvent.setup();
+    window.localStorage.setItem("copilotkit_ui_active_thread_agent_search", "existing-thread");
+    window.localStorage.setItem(
+      "copilotkit_ui_thread_ids_agent_search",
+      JSON.stringify(["existing-thread"]),
+    );
+    window.sessionStorage.setItem(
+      "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
+      JSON.stringify(["existing-thread"]),
+    );
 
     render(
       <CopilotKitProviders>
@@ -138,6 +152,7 @@ describe("CopilotKitProviders", () => {
     expect(window.sessionStorage.getItem("copilotkit_ui_resumable_thread_ids_tmp_agent_search")).toContain(
       "agent_search-12345678",
     );
+    expect(window.location.search).toContain("room=room-dev-default");
     expect(window.location.search).toContain("thread=agent_search-12345678");
     expect(copilotKitUnmountMock).toHaveBeenCalledWith({
       agent: "agent_search",
@@ -149,7 +164,7 @@ describe("CopilotKitProviders", () => {
     });
   });
 
-  it("falls back to a new resumable thread when selecting an unavailable backend thread", async () => {
+  it("shows a warning and keeps the current thread when selecting an unavailable backend thread", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "copilotkit_ui_thread_ids_agent_search",
@@ -160,7 +175,6 @@ describe("CopilotKitProviders", () => {
       "copilotkit_ui_resumable_thread_ids_tmp_agent_search",
       JSON.stringify(["current-thread"]),
     );
-    randomUuidMock.mockReturnValueOnce("abcdef12-1234-1234-1234-123456789abc");
 
     render(
       <CopilotKitProviders>
@@ -171,12 +185,14 @@ describe("CopilotKitProviders", () => {
     await user.click(screen.getByRole("button", { name: "Select archived thread" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("thread-id")).toHaveTextContent("agent_search-abcdef12");
+      expect(screen.getByTestId("thread-id")).toHaveTextContent("current-thread");
     });
 
-    expect(screen.getByTestId("warning")).toHaveTextContent("archived-thread is not available");
+    expect(screen.getByTestId("warning")).toHaveTextContent(
+      "Thread archived-thread is not available for room room-dev-default.",
+    );
     expect(window.localStorage.getItem("copilotkit_ui_active_thread_agent_search")).toBe(
-      "agent_search-abcdef12",
+      "current-thread",
     );
   });
 });

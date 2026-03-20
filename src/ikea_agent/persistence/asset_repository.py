@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, AssetRecord
-from ikea_agent.persistence.ownership import ensure_thread_record
+from ikea_agent.persistence.ownership import resolve_room_thread_context
 
 
 class AssetRepository:
@@ -21,6 +21,7 @@ class AssetRepository:
         self,
         *,
         asset_id: str,
+        room_id: str,
         thread_id: str,
         run_id: str | None,
         created_by_tool: str | None,
@@ -37,7 +38,7 @@ class AssetRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            self._ensure_thread(session=session, room_id=room_id, thread_id=thread_id, now=now)
             session.flush()
             persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
 
@@ -84,8 +85,13 @@ class AssetRepository:
             session.commit()
 
     @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        ensure_thread_record(session, thread_id=thread_id, now=now)
+    def _ensure_thread(*, session: Session, room_id: str, thread_id: str, now: datetime) -> None:
+        resolve_room_thread_context(
+            session,
+            room_id=room_id,
+            thread_id=thread_id,
+            now=now,
+        )
 
     @staticmethod
     def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:

@@ -272,11 +272,14 @@ export function useSearchBundleState(
 export function useCopilotAgentStateSync(params: {
   agent: CopilotAgentStateBridge;
   currentAgent: string;
+  roomId: string;
+  sessionId: string;
   threadId: string | null;
   imageAttachments: AttachmentRef[];
   bundleProposals: BundleProposal[];
 }): void {
-  const { agent, currentAgent, threadId, imageAttachments, bundleProposals } = params;
+  const { agent, currentAgent, roomId, sessionId, threadId, imageAttachments, bundleProposals } =
+    params;
 
   useEffect(() => {
     if (!threadId) {
@@ -289,7 +292,8 @@ export function useCopilotAgentStateSync(params: {
         ? (agent.state as Record<string, unknown>)
         : {};
     if (
-      previousState.session_id === threadId &&
+      previousState.session_id === sessionId &&
+      previousState.room_id === roomId &&
       previousState.thread_id === threadId &&
       stableJson(previousState.attachments ?? []) === stableJson(attachmentsForAgent) &&
       stableJson(previousState.bundle_proposals ?? []) === stableJson(bundleProposalsForAgent)
@@ -298,12 +302,13 @@ export function useCopilotAgentStateSync(params: {
     }
     agent.setState({
       ...previousState,
-      session_id: threadId,
+      session_id: sessionId,
+      room_id: roomId,
       thread_id: threadId,
       attachments: attachmentsForAgent,
       bundle_proposals: bundleProposalsForAgent,
     });
-  }, [agent, bundleProposals, currentAgent, imageAttachments, threadId]);
+  }, [agent, bundleProposals, currentAgent, imageAttachments, roomId, sessionId, threadId]);
 }
 
 export function useThreadSnapshotSync(params: {

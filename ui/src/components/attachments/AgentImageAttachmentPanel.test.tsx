@@ -25,6 +25,7 @@ describe("AgentImageAttachmentPanel", () => {
     render(
       <AgentImageAttachmentPanel
         onReadyAttachmentsChange={onReadyAttachmentsChange}
+        roomId="room-dev-default"
         threadId="agent-image-analysis-thread"
       />,
     );
@@ -35,6 +36,12 @@ describe("AgentImageAttachmentPanel", () => {
 
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.objectContaining({
+        "x-room-id": "room-dev-default",
+        "x-thread-id": "agent-image-analysis-thread",
+      }),
     });
     await waitFor(() => {
       expect(onReadyAttachmentsChange).toHaveBeenLastCalledWith([

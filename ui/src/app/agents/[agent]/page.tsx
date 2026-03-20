@@ -56,8 +56,18 @@ export default function AgentChatPage(): ReactElement {
   const params = useParams<{ agent: string }>();
   const router = useRouter();
   const currentAgent = params.agent;
-  const { agentKey, agentName, threadId, threadIds, warning, selectThread, createThread, clearWarning } =
-    useThreadSession();
+  const {
+    agentKey,
+    agentName,
+    roomId,
+    sessionId,
+    threadId,
+    threadIds,
+    warning,
+    selectThread,
+    createThread,
+    clearWarning,
+  } = useThreadSession();
   const { agent } = useAgent({ agentId: agentKey });
   const { messages, setMessages } = useCopilotMessagesContext();
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
@@ -83,6 +93,8 @@ export default function AgentChatPage(): ReactElement {
   useCopilotAgentStateSync({
     agent,
     currentAgent,
+    roomId,
+    sessionId,
     threadId,
     imageAttachments,
     bundleProposals,
@@ -154,6 +166,7 @@ export default function AgentChatPage(): ReactElement {
       attachmentPanel={
         <AgentImageAttachmentPanel
           onReadyAttachmentsChange={setImageAttachments}
+          roomId={roomId}
           threadId={threadId}
           {...(floorPlanAgent
             ? {

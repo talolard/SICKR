@@ -15,6 +15,7 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.ownership import DEFAULT_DEV_ROOM_ID
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
@@ -29,7 +30,11 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         source = store.save_image_bytes(
             content=b"source-image",
             mime_type="image/png",
@@ -121,7 +126,11 @@ def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path)
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         first = store.save_image_bytes(
             content=b"first-image",
             mime_type="image/png",
@@ -170,7 +179,11 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         source = store.save_image_bytes(
             content=b"source-image",
             mime_type="image/png",

@@ -29,6 +29,21 @@ def _build_attachment_store(
     return AttachmentStore(root_dir=root_dir, asset_repository=asset_repository)
 
 
+def _resolve_attachment_context(
+    request: Request,
+    *,
+    attachment_store: AttachmentStore,
+) -> tuple[str | None, str | None]:
+    room_id = request.headers.get("x-room-id") or None
+    thread_id = request.headers.get("x-thread-id") or None
+    if attachment_store.requires_persistence_context and (room_id is None or thread_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Attachment uploads require explicit x-room-id and x-thread-id headers.",
+        )
+    return room_id, thread_id
+
+
 def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
     @app.post("/attachments")
     async def upload_attachment(request: Request) -> dict[str, object]:
@@ -50,14 +65,23 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
                 detail="Attachment exceeds 10MB upload limit.",
             )
 
-        stored = attachment_store.save_image_bytes(
-            content=body,
-            mime_type=mime_type,
-            filename=request.headers.get("x-filename"),
-            thread_id=request.headers.get("x-thread-id") or None,
-            run_id=request.headers.get("x-run-id") or None,
-            kind="user_upload",
+        room_id, thread_id = _resolve_attachment_context(
+            request,
+            attachment_store=attachment_store,
         )
+
+        try:
+            stored = attachment_store.save_image_bytes(
+                content=body,
+                mime_type=mime_type,
+                filename=request.headers.get("x-filename"),
+                room_id=room_id,
+                thread_id=thread_id,
+                run_id=request.headers.get("x-run-id") or None,
+                kind="user_upload",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return asdict(stored.ref)
 
     @app.get("/attachments/{attachment_id}")

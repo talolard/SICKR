@@ -227,6 +227,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-1",
       threadIds: ["thread-1"],
       warning: null,
@@ -266,6 +268,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-1",
       threadIds: ["thread-1"],
       warning: null,
@@ -285,13 +289,14 @@ describe("AgentChatPage", () => {
       expect(setMessagesMock).toHaveBeenCalledWith([{ id: "snapshot-message" }]);
     });
     await waitFor(() => {
-      expect(setAgentStateMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          existing: true,
-          session_id: "thread-1",
-          thread_id: "thread-1",
-          attachments: [],
-          bundle_proposals: [],
+        expect(setAgentStateMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            existing: true,
+            session_id: "session-browser",
+            room_id: "room-dev-default",
+            thread_id: "thread-1",
+            attachments: [],
+            bundle_proposals: [],
         }),
       );
     });
@@ -303,6 +308,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_floor_plan_intake",
       agentName: "floor_plan_intake",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-floor-plan",
       threadIds: ["thread-floor-plan"],
       warning: null,
@@ -319,11 +326,13 @@ describe("AgentChatPage", () => {
     expect(screen.queryByTestId("search-bundle-panel")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(setAgentStateMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thread_id: "thread-floor-plan",
-          attachments: [
-            expect.objectContaining({
+        expect(setAgentStateMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            session_id: "session-browser",
+            room_id: "room-dev-default",
+            thread_id: "thread-floor-plan",
+            attachments: [
+              expect.objectContaining({
               attachment_id: "att-1",
               uri: "floor-plan/preview.png",
             }),
@@ -368,6 +377,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: null,
       threadIds: [],
       warning: null,
@@ -392,6 +403,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_image_analysis",
       agentName: "image_analysis",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-image",
       threadIds: ["thread-image"],
       warning: null,
@@ -414,6 +427,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-warning",
       threadIds: ["thread-warning"],
       warning: "archived-thread is not available",
@@ -433,6 +448,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_not_real",
       agentName: "not_real",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-unknown",
       threadIds: ["thread-unknown"],
       warning: null,
