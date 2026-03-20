@@ -1,3 +1,5 @@
+name = "pr_reviewer"
+description = "PR Reviewer. Use this role for an independent review pass on a ready branch or PR, with concrete findings about correctness, regressions, validation, and merge risk."
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """

@@ -1,41 +1,13 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
 [features]
 multi_agent = true
 
 [agents]
 max_depth = 2
 
-[agents.default]
-description = "Session Coordinator. Use this top-level role for the initial session: classify the request, keep the user-facing thread coherent, and delegate to narrower roles when that improves clarity or safety."
-config_file = "agents/default/config.default.toml"
-
-[agents.spec_planner]
-description = "Spec Planner. Use this role when the user has an idea or wants to do something and it needs planning."
-config_file = "agents/spec_planner/config.spec_planner.toml"
-
-[agents.epic_writer]
-description = "Epic Writer. Use this role to convert approved requirements and plan notes into Beads goals, epics, tasks, dependencies, and merge-readiness structure."
-config_file = "agents/epic_writer/config.epic_writer.toml"
-
-[agents.epic_worker]
-description = "Epic Worker. Use this role to own one epic in one worktree or assigned branch until the work is implemented, validated, PR-ready, and documented."
-config_file = "agents/epic_worker/config.epic_worker.toml"
-
-[agents.worker]
-description = "Focused Worker. Use this role for small, tightly scoped implementation tasks that do not need Beads or epic-level process overhead."
-config_file = "agents/worker/config.worker.toml"
-
-[agents.repo_explorer]
-description = "Repo Explorer. Use this role for read-only codebase navigation, ownership discovery, and answering where a change should live before anyone edits code."
-config_file = "agents/repo_explorer/config.repo_explorer.toml"
-
-[agents.docs_researcher]
-description = "Docs Researcher. Use this role for read-only library, framework, API, or product documentation research grounded in primary sources."
-config_file = "agents/docs_researcher/config.docs_researcher.toml"
-
-[agents.pr_reviewer]
-description = "PR Reviewer. Use this role for an independent review pass on a ready branch or PR, with concrete findings about correctness, regressions, validation, and merge risk."
-config_file = "agents/pr_reviewer/config.pr_reviewer.toml"
-
-[agents.merge_coordinator]
-description = "Merge Coordinator. Use this role only for serialized merge handling: process merge-request beads, verify readiness, land one PR at a time, and clean up merged worktrees."
-config_file = "agents/merge_coordinator/config.merge_coordinator.toml"
+[mcp_servers.logfire]
+command = "uvx"
+args = ["logfire-mcp@latest"]
+enabled = true
+startup_timeout_sec = 20

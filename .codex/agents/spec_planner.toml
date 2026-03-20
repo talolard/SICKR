@@ -1,3 +1,5 @@
+name = "spec_planner"
+description = "Spec Planner. Use this role when the user has an idea or wants to do something and it needs planning."
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
@@ -5,4 +7,3 @@ Before acting, read `AGENTS.md`, `.codex/agents/spec_planner/prompt.spec_planner
 Treat the prompt and support files as the role-specific planning contract.
 Stay in spec/planning mode unless explicitly told to hand off or implement.
 """
-/

@@ -1,3 +1,5 @@
+name = "epic_writer"
+description = "Epic Writer. Use this role to convert approved requirements and plan notes into Beads goals, epics, tasks, dependencies, and merge-readiness structure."
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """

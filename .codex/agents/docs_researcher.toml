@@ -1,3 +1,5 @@
+name = "docs_researcher"
+description = "Docs Researcher. Use this role for read-only library, framework, API, or product documentation research grounded in primary sources."
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 developer_instructions = """

@@ -1,3 +1,5 @@
+name = "merge_coordinator"
+description = "Merge Coordinator. Use this role only for serialized merge handling: process merge-request beads, verify readiness, land one PR at a time, and clean up merged worktrees."
 model_reasoning_effort = "high"
 sandbox_mode = "danger-full-access"
 developer_instructions = """
