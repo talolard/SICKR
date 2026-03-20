@@ -1,30 +1,40 @@
-"""SQLAlchemy engine/session helpers for runtime persistence and migrations.
-
-These helpers centralize DB URL normalization so runtime code and Alembic use
-the same connection conventions. We keep the surface small so future Postgres
-migration only changes this module and configuration.
-"""
+"""SQLAlchemy engine/session helpers for runtime persistence and migrations."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 
-def build_duckdb_sqlalchemy_url(db_path: str) -> str:
-    """Return a SQLAlchemy URL for DuckDB using an absolute filesystem path."""
+def build_postgres_sqlalchemy_url(
+    *,
+    host: str,
+    port: int,
+    database: str,
+    username: str,
+    password: str,
+) -> str:
+    """Return a SQLAlchemy URL for the local Postgres dependency stack."""
 
-    resolved = Path(db_path).expanduser().resolve()
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    return f"duckdb:///{resolved}"
+    return f"postgresql+psycopg://{username}:{password}@{host}:{port}/{database}"
 
 
-def create_duckdb_engine(db_path: str) -> Engine:
-    """Create SQLAlchemy engine for the configured DuckDB file path."""
+def resolve_database_url(*, database_url: str | None) -> str:
+    """Resolve the runtime SQLAlchemy URL from current settings."""
 
-    return create_engine(build_duckdb_sqlalchemy_url(db_path), future=True)
+    if database_url:
+        return database_url
+    msg = "DATABASE_URL must be configured."
+    raise ValueError(msg)
+
+
+def create_database_engine(database_url: str) -> Engine:
+    """Create a SQLAlchemy engine for one configured database URL."""
+
+    kwargs: dict[str, object] = {"future": True}
+    if database_url.startswith("postgresql+psycopg://"):
+        kwargs["pool_pre_ping"] = True
+    return create_engine(database_url, **kwargs)
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:

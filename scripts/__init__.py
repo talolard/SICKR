@@ -1,1 +1,1 @@
-"""Developer-facing helper scripts kept under source control."""
+"""Top-level operational and bootstrap tooling."""

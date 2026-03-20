@@ -3,15 +3,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 from ikea_agent.shared.types import RevealedPreferenceMemoryInput
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
-    engine = create_duckdb_engine(str(tmp_path / "revealed_preference_repository_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "revealed_preference_repository_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

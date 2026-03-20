@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from pgvector.sqlalchemy import HALFVEC
 from sqlalchemy import (
-    ARRAY,
     BIGINT,
     BOOLEAN,
     DOUBLE,
-    FLOAT,
+    JSON,
+    TEXT,
     TIMESTAMP,
     VARCHAR,
     Column,
@@ -16,9 +17,17 @@ from sqlalchemy import (
     Table,
 )
 
-APP_SCHEMA = "app"
+from ikea_agent.shared.db_contract import (
+    CATALOG_SCHEMA,
+    PRODUCT_EMBEDDING_DIMENSIONS,
+    PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,
+    PRODUCT_EMBEDDING_VECTOR_OPCLASS,
+    PRODUCT_IMAGE_CANONICAL_KEY_LOOKUP_INDEX_NAME,
+    PRODUCT_IMAGE_PRODUCT_ID_LOOKUP_INDEX_NAME,
+)
 
-retrieval_metadata = MetaData(schema=APP_SCHEMA)
+retrieval_metadata = MetaData(schema=CATALOG_SCHEMA)
+_embedding_vector_type = HALFVEC(PRODUCT_EMBEDDING_DIMENSIONS).with_variant(JSON(), "sqlite")
 
 products_canonical = Table(
     "products_canonical",
@@ -53,9 +62,53 @@ product_embeddings = Table(
     Column("canonical_product_key", VARCHAR, primary_key=True),
     Column("embedding_model", VARCHAR, primary_key=True),
     Column("run_id", VARCHAR),
-    Column("embedding_vector", ARRAY(FLOAT)),
+    Column("embedding_vector", _embedding_vector_type),
     Column("embedded_text", VARCHAR),
     Column("embedded_at", TIMESTAMP(timezone=False)),
+)
+Index(
+    PRODUCT_EMBEDDING_VECTOR_INDEX_NAME,
+    product_embeddings.c.embedding_vector,
+    postgresql_using="hnsw",
+    postgresql_ops={"embedding_vector": PRODUCT_EMBEDDING_VECTOR_OPCLASS},
+).ddl_if(dialect="postgresql")
+
+product_images = Table(
+    "product_images",
+    retrieval_metadata,
+    Column("image_asset_key", VARCHAR, primary_key=True),
+    Column("canonical_product_key", VARCHAR, nullable=False),
+    Column("product_id", VARCHAR, nullable=False),
+    Column("image_rank", BIGINT),
+    Column("is_og_image", BOOLEAN, nullable=False),
+    Column("image_role", VARCHAR),
+    Column("storage_backend_kind", VARCHAR, nullable=False),
+    Column("storage_locator", TEXT, nullable=False),
+    Column("public_url", TEXT),
+    Column("local_path", TEXT),
+    Column("canonical_image_url", TEXT),
+    Column("provenance", VARCHAR),
+    Column("crawl_run_id", VARCHAR),
+    Column("source_page_url", TEXT),
+    Column("sha256", VARCHAR),
+    Column("content_type", VARCHAR),
+    Column("width_px", BIGINT),
+    Column("height_px", BIGINT),
+    Column("refreshed_at", TIMESTAMP(timezone=True)),
+)
+Index(
+    PRODUCT_IMAGE_PRODUCT_ID_LOOKUP_INDEX_NAME,
+    product_images.c.product_id,
+    product_images.c.is_og_image,
+    product_images.c.image_rank,
+    product_images.c.image_asset_key,
+)
+Index(
+    PRODUCT_IMAGE_CANONICAL_KEY_LOOKUP_INDEX_NAME,
+    product_images.c.canonical_product_key,
+    product_images.c.is_og_image,
+    product_images.c.image_rank,
+    product_images.c.image_asset_key,
 )
 
 product_embedding_neighbors = Table(

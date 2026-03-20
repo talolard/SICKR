@@ -11,6 +11,7 @@ def _clear_model_setting_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "GEMINI_GENERATION_MODEL",
         "ALLOW_MODEL_REQUESTS",
         "APP_ALLOW_MODEL_REQUESTS",
+        "DATABASE_URL",
     )
     for key in keys:
         monkeypatch.delenv(key, raising=False)
@@ -22,6 +23,7 @@ def test_app_settings_runtime_defaults_match_mark_17() -> None:
 
     assert settings.gemini_generation_model == "gemini-3.1-flash-lite-preview"
     assert settings.allow_model_requests is True
+    assert settings.database_url == "postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent"
 
 
 @pytest.mark.usefixtures("_clear_model_setting_env")

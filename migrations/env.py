@@ -10,8 +10,7 @@ from sqlalchemy import engine_from_config, pool
 
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.models import Base
-from ikea_agent.shared import alembic_duckdb  # noqa: F401
-from ikea_agent.shared.sqlalchemy_db import build_duckdb_sqlalchemy_url
+from ikea_agent.shared.sqlalchemy_db import resolve_database_url
 
 config = context.config
 
@@ -28,7 +27,8 @@ def _resolve_database_url() -> str:
     configured_url = config.get_main_option("sqlalchemy.url")
     if configured_url:
         return configured_url
-    return build_duckdb_sqlalchemy_url(get_settings().duckdb_path)
+    settings = get_settings()
+    return resolve_database_url(database_url=settings.database_url)
 
 
 def run_migrations_offline() -> None:

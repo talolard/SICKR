@@ -43,6 +43,7 @@ ProposeBundleFunc = Callable[
 class _CatalogStub:
     price_eur: float | None
     product_url: str | None = None
+    image_urls_by_key: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def read_product_by_key(self, *, product_key: str) -> RetrievalResult | None:
         return RetrievalResult(
@@ -64,20 +65,27 @@ class _CatalogStub:
             rank_explanation="score",
         )
 
+    def read_image_urls_by_product_keys(
+        self,
+        *,
+        canonical_product_keys: list[str],
+        serving_strategy: str,
+        base_url: str | None,
+    ) -> dict[str, tuple[str, ...]]:
+        _ = (serving_strategy, base_url)
+        return {key: self.image_urls_by_key.get(key, ()) for key in canonical_product_keys}
+
 
 @dataclass(frozen=True, slots=True)
-class _ProductImageCatalogStub:
-    image_urls: tuple[str, ...] = ()
-
-    def image_urls_for_canonical_key(self, *, canonical_product_key: str) -> tuple[str, ...]:
-        _ = canonical_product_key
-        return self.image_urls
+class _SettingsStub:
+    image_serving_strategy: str = "backend_proxy"
+    image_service_base_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class _RuntimeStub:
+    settings: _SettingsStub
     catalog_repository: _CatalogStub
-    product_image_catalog: _ProductImageCatalogStub
 
 
 @dataclass(slots=True)
@@ -145,8 +153,12 @@ def _run_context(
         runtime=cast(
             "ChatRuntime",
             _RuntimeStub(
-                catalog_repository=_CatalogStub(price_eur=price_eur, product_url=product_url),
-                product_image_catalog=_ProductImageCatalogStub(image_urls=image_urls),
+                settings=_SettingsStub(),
+                catalog_repository=_CatalogStub(
+                    price_eur=price_eur,
+                    product_url=product_url,
+                    image_urls_by_key={"chair-1": image_urls, "chair-2": image_urls},
+                ),
             ),
         ),
         attachment_store=cast("AttachmentStore", object()),

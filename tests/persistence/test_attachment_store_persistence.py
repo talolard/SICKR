@@ -4,15 +4,15 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import AssetRecord, ensure_persistence_schema
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
-    engine = create_duckdb_engine(str(tmp_path / "attachment_store_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "attachment_store_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
@@ -81,7 +81,7 @@ def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> Non
     assert thread_id == "thread-explicit"
 
 
-def test_save_image_bytes_repeated_writes_same_thread_are_duckdb_fk_safe(
+def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
     tmp_path: Path,
 ) -> None:
     session_factory = _session_factory(tmp_path)

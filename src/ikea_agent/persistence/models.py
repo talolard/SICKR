@@ -1,8 +1,4 @@
-"""SQLAlchemy models for durable conversation and artifact persistence.
-
-The first migration stream keeps JSON payloads in text columns for maximum
-dialect portability while the project is DuckDB-first and Postgres-ready.
-"""
+"""SQLAlchemy models for durable conversation and artifact persistence."""
 
 from __future__ import annotations
 
@@ -22,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import text
 
-APP_SCHEMA = "app"
+from ikea_agent.shared.db_contract import APP_SCHEMA
 
 
 class Base(DeclarativeBase):
@@ -477,8 +473,11 @@ def ensure_persistence_schema(engine: Engine) -> None:
     """Create persistence schema and tables when missing."""
 
     with engine.begin() as connection:
-        connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
+        if engine.dialect.name == "postgresql":
+            connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
     Base.metadata.create_all(engine, checkfirst=True)
+    if engine.dialect.name != "postgresql":
+        return
     _ensure_optional_columns(engine)
 
 

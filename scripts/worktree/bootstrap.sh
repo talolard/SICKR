@@ -3,26 +3,31 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Bootstrap a worktree with isolated runtime state and environment variables.
+Bootstrap a worktree with Dockerized dependencies and environment variables.
 
 Usage:
-  scripts/worktree/bootstrap.sh --slot <0-99> [--canonical-root <path>] [--force-db-refresh] [--skip-ui-install]
+  scripts/worktree/bootstrap.sh --slot <0-99> [--canonical-root <path>] [--skip-ui-install]
 EOF
-}
-
-copy_with_clone_fallback() {
-  local src="$1"
-  local dst="$2"
-  if cp -c "${src}" "${dst}" 2>/dev/null; then
-    return 0
-  fi
-  cp "${src}" "${dst}"
 }
 
 SLOT=""
 CANONICAL_ROOT=""
-FORCE_DB_REFRESH=0
 SKIP_UI_INSTALL=0
+
+resolve_canonical_root() {
+  local repo_root="$1"
+  local primary_root=""
+  primary_root="$(
+    git -C "${repo_root}" worktree list --porcelain 2>/dev/null \
+      | sed -n 's/^worktree //p' \
+      | head -n 1
+  )"
+  if [[ -n "${primary_root}" ]]; then
+    printf '%s\n' "${primary_root}"
+    return 0
+  fi
+  printf '%s\n' "${repo_root}"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,10 +38,6 @@ while [[ $# -gt 0 ]]; do
     --canonical-root)
       CANONICAL_ROOT="$2"
       shift 2
-      ;;
-    --force-db-refresh)
-      FORCE_DB_REFRESH=1
-      shift 1
       ;;
     --skip-ui-install)
       SKIP_UI_INSTALL=1
@@ -64,19 +65,20 @@ if ! [[ "${SLOT}" =~ ^[0-9]+$ ]] || (( SLOT < 0 || SLOT > 99 )); then
   exit 1
 fi
 
-if [[ -z "${CANONICAL_ROOT}" ]]; then
-  CANONICAL_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+WORKTREE_ROOT="$(git -C "${SCRIPT_DIR}/../.." rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "${WORKTREE_ROOT}" ]]; then
+  printf 'Unable to determine worktree root from %s.\n' "${SCRIPT_DIR}" >&2
+  exit 1
 fi
 
-WORKTREE_ROOT="$(git rev-parse --show-toplevel)"
-if [[ -z "${WORKTREE_ROOT}" ]]; then
-  printf 'Unable to determine worktree root.\n' >&2
-  exit 1
+if [[ -z "${CANONICAL_ROOT}" ]]; then
+  CANONICAL_ROOT="$(resolve_canonical_root "${WORKTREE_ROOT}")"
 fi
 
 cd "${WORKTREE_ROOT}"
 
-mkdir -p .tmp_untracked/runtime .tmp_untracked/artifacts .tmp_untracked/comments
+mkdir -p .tmp_untracked/runtime .tmp_untracked/artifacts .tmp_untracked/comments .tmp_untracked/traces
 
 if [[ ! -f ".env" ]]; then
   if [[ -f "${CANONICAL_ROOT}/.env" ]]; then
@@ -89,42 +91,31 @@ if [[ ! -f ".env" ]]; then
   fi
 fi
 
-CANONICAL_DUCKDB="${CANONICAL_ROOT}/data/ikea.duckdb"
-CANONICAL_MILVUS="${CANONICAL_ROOT}/data/milvus_lite.db"
-LOCAL_DUCKDB="${WORKTREE_ROOT}/.tmp_untracked/runtime/ikea.duckdb"
-LOCAL_MILVUS="${WORKTREE_ROOT}/.tmp_untracked/runtime/milvus_lite.db"
-
-if [[ ! -f "${CANONICAL_DUCKDB}" ]]; then
-  printf 'Canonical DuckDB not found: %s\n' "${CANONICAL_DUCKDB}" >&2
-  exit 1
-fi
-
-if [[ ! -f "${CANONICAL_MILVUS}" ]]; then
-  printf 'Canonical Milvus Lite DB not found: %s\n' "${CANONICAL_MILVUS}" >&2
-  exit 1
-fi
-
-if (( FORCE_DB_REFRESH == 1 )) || [[ ! -f "${LOCAL_DUCKDB}" ]]; then
-  copy_with_clone_fallback "${CANONICAL_DUCKDB}" "${LOCAL_DUCKDB}"
-fi
-
-if (( FORCE_DB_REFRESH == 1 )) || [[ ! -f "${LOCAL_MILVUS}" ]]; then
-  copy_with_clone_fallback "${CANONICAL_MILVUS}" "${LOCAL_MILVUS}"
-fi
+bash "${WORKTREE_ROOT}/scripts/worktree/deps.sh" up \
+  --slot "${SLOT}" \
+  --canonical-root "${CANONICAL_ROOT}" \
+  --worktree-root "${WORKTREE_ROOT}"
 
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
+POSTGRES_PORT=$((15432 + SLOT))
 WORKTREE_ENV="${WORKTREE_ROOT}/.tmp_untracked/worktree.env"
 
 cat > "${WORKTREE_ENV}" <<EOF
 export AGENT_SLOT=${SLOT}
+export CANONICAL_ROOT=${CANONICAL_ROOT}
 export BACKEND_PORT=${BACKEND_PORT}
 export PORT=${BACKEND_PORT}
 export UI_PORT=${UI_PORT}
-export DUCKDB_PATH=${LOCAL_DUCKDB}
-export MILVUS_LITE_URI=${LOCAL_MILVUS}
+export POSTGRES_HOST=127.0.0.1
+export POSTGRES_PORT=${POSTGRES_PORT}
+export POSTGRES_DB=ikea_agent
+export POSTGRES_USER=ikea
+export POSTGRES_PASSWORD=ikea
+export DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:${POSTGRES_PORT}/ikea_agent
 export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
 export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
+export TRACE_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/traces
 export PY_AG_UI_URL=http://127.0.0.1:${BACKEND_PORT}/ag-ui/
 EOF
 
@@ -139,5 +130,6 @@ Bootstrapped worktree: ${WORKTREE_ROOT}
 Environment file: ${WORKTREE_ENV}
 Backend port: ${BACKEND_PORT}
 UI port: ${UI_PORT}
+Postgres port: ${POSTGRES_PORT}
 UI deps installed: $([[ "${SKIP_UI_INSTALL}" == "0" ]] && printf 'yes' || printf 'no (skipped)')
 EOF

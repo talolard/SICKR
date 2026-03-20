@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import (
     AgentRunRecord,
@@ -21,7 +22,6 @@ from ikea_agent.persistence.models import (
     ensure_persistence_schema,
 )
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
-from ikea_agent.shared.sqlalchemy_db import create_duckdb_engine
 
 
 @dataclass
@@ -31,7 +31,7 @@ class _RuntimeStub:
 
 
 def _runtime(tmp_path: Path) -> _RuntimeStub:
-    engine = create_duckdb_engine(str(tmp_path / "thread_api_test.duckdb"))
+    engine = create_sqlite_engine(tmp_path / "thread_api_test.sqlite")
     ensure_persistence_schema(engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     return _RuntimeStub(sqlalchemy_engine=engine, session_factory=session_factory)
