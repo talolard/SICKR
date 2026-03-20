@@ -196,6 +196,9 @@ def _build_stub_deps(root_dir: Path, *, fixture: SearchEvalFixture | None) -> Se
         ),
         attachment_store=AttachmentStore(root_dir),
         state=SearchAgentState(
+            project_id="eval-project",
+            room_id="eval-room",
+            room_title="Eval room",
             thread_id="eval-thread",
             run_id="eval-run",
         ),
