@@ -12,13 +12,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
-    AgentRunRecord,
     ProjectFactRecord,
     RoomFactRecord,
     RoomRecord,
     ThreadRecord,
 )
 from ikea_agent.persistence.ownership import require_room_record
+from ikea_agent.persistence.repository_helpers import resolve_existing_run_id
 from ikea_agent.shared.types import (
     KnownFactKind,
     KnownFactMemory,
@@ -160,7 +160,7 @@ class ContextFactRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            persisted_run_id = _resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             if scope == "room":
                 return self._upsert_room_facts_with_session(
                     session=session,
@@ -420,11 +420,3 @@ def _list_project_facts(session: Session, *, project_id: str) -> list[KnownFactM
         )
         for row in rows
     ]
-
-
-def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-    if run_id is None:
-        return None
-    return session.execute(
-        select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-    ).scalar_one_or_none()

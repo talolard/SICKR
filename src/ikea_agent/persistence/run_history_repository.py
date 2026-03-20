@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, ThreadMessageSegmentRecord
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    lock_thread_row,
+    touch_thread_activity,
+)
 
 
 def _utcnow() -> datetime:
@@ -41,10 +45,8 @@ class RunHistoryRepository:
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
 
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            existing_run = session.get(AgentRunRecord, run_id)
+            if existing_run is None:
                 run = AgentRunRecord(
                     run_id=run_id,
                     thread_id=thread_id,
@@ -58,21 +60,16 @@ class RunHistoryRepository:
                 )
                 session.add(run)
             else:
-                session.execute(
-                    update(AgentRunRecord)
-                    .where(AgentRunRecord.run_id == run_id)
-                    .values(
-                        thread_id=thread_id,
-                        parent_run_id=parent_run_id,
-                        agent_name=agent_name,
-                        status="started",
-                        user_prompt_text=user_prompt_text,
-                        error_message=None,
-                        started_at=now,
-                        ended_at=None,
-                    )
-                )
+                existing_run.thread_id = thread_id
+                existing_run.parent_run_id = parent_run_id
+                existing_run.agent_name = agent_name
+                existing_run.status = "started"
+                existing_run.user_prompt_text = user_prompt_text
+                existing_run.error_message = None
+                existing_run.started_at = now
+                existing_run.ended_at = None
 
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
     def record_run_complete(
@@ -89,6 +86,7 @@ class RunHistoryRepository:
             if run is None:
                 session.commit()
                 return
+            lock_thread_row(session, thread_id=run.thread_id)
             self._upsert_thread_message_segment(
                 session,
                 run_id=run_id,
@@ -101,6 +99,7 @@ class RunHistoryRepository:
                 .where(AgentRunRecord.run_id == run_id)
                 .values(status="completed", ended_at=now, error_message=None)
             )
+            touch_thread_activity(session, thread_id=run.thread_id, now=now)
             session.commit()
 
     def record_run_failed(self, *, run_id: str, error_message: str) -> None:
@@ -108,10 +107,8 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            run = session.get(AgentRunRecord, run_id)
+            if run is None:
                 session.commit()
                 return
             session.execute(
@@ -119,6 +116,7 @@ class RunHistoryRepository:
                 .where(AgentRunRecord.run_id == run_id)
                 .values(status="failed", ended_at=now, error_message=error_message)
             )
+            touch_thread_activity(session, thread_id=run.thread_id, now=now)
             session.commit()
 
     def load_message_history(self, *, thread_id: str) -> list[ModelMessage]:

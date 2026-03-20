@@ -13,8 +13,13 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
-from ikea_agent.persistence.models import AgentRunRecord, AssetRecord, FloorPlanRevisionRecord
+from ikea_agent.persistence.models import AssetRecord, FloorPlanRevisionRecord
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    lock_room_row,
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 from ikea_agent.tools.floorplanner.models import FloorPlanScene
 
 _FLOOR_PLAN_SCENE_ADAPTER = TypeAdapter(FloorPlanScene)
@@ -61,6 +66,7 @@ class FloorPlanRepository:
         with self._session_factory() as session:
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
+            lock_room_row(session, room_id=room_id)
             next_revision = self._next_revision(session=session, room_id=room_id)
             revision_id = f"fprev-{room_id[:20]}-{next_revision:06d}"
             persisted_svg_asset_id = self._resolve_existing_asset_id(
@@ -86,6 +92,7 @@ class FloorPlanRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
         snapshot = self.get_revision(room_id=room_id, revision=next_revision)
@@ -164,8 +171,8 @@ class FloorPlanRepository:
             return None
 
         now = datetime.now(UTC)
-        persisted_run_id = self._resolve_existing_run_id(run_id=run_id)
         with self._session_factory() as session:
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.execute(
                 update(FloorPlanRevisionRecord)
                 .where(
@@ -177,6 +184,7 @@ class FloorPlanRepository:
                     confirmation_note=confirmation_note,
                 )
             )
+            touch_thread_activity(session, thread_id=target.thread_id, now=now)
             session.commit()
 
         return self.get_revision(room_id=room_id, revision=target.revision)
@@ -189,14 +197,6 @@ class FloorPlanRepository:
             )
         ).scalar_one_or_none()
         return int(current_max or 0) + 1
-
-    def _resolve_existing_run_id(self, *, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        with self._session_factory() as session:
-            return session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
 
     @staticmethod
     def _resolve_existing_asset_id(

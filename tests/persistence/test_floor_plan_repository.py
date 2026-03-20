@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.floor_plan_repository import FloorPlanRepository
-from ikea_agent.persistence.models import ensure_persistence_schema
+from ikea_agent.persistence.models import FloorPlanRevisionRecord, ensure_persistence_schema
 from ikea_agent.persistence.ownership import (
     DEFAULT_DEV_ROOM_ID,
     create_thread_record,
@@ -172,3 +175,53 @@ def test_floor_plan_repository_lists_room_revisions_newest_first(tmp_path: Path)
     assert [item.revision for item in revisions] == [2, 1]
     assert revisions[0].thread_id == "thread-floor-second"
     assert revisions[1].thread_id == "thread-floor-first"
+
+
+def test_floor_plan_repository_enforces_room_scoped_unique_revision_numbers(
+    tmp_path: Path,
+) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-floor-first")
+    _seed_thread(session_factory, thread_id="thread-floor-second")
+    scene = _scene("duplicate")
+    summary_json = json.dumps(scene_to_summary(scene), sort_keys=True)
+    scene_json = scene.model_dump_json()
+    now = datetime.now(UTC)
+
+    with session_factory() as session:
+        session.add(
+            FloorPlanRevisionRecord(
+                floor_plan_revision_id="fprev-room-1",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                thread_id="thread-floor-first",
+                revision=1,
+                scene_level=scene.scene_level,
+                scene_json=scene_json,
+                summary_json=summary_json,
+                svg_asset_id=None,
+                png_asset_id=None,
+                confirmed_at=None,
+                confirmed_by_run_id=None,
+                confirmation_note=None,
+                created_at=now,
+            )
+        )
+        session.add(
+            FloorPlanRevisionRecord(
+                floor_plan_revision_id="fprev-room-2",
+                room_id=DEFAULT_DEV_ROOM_ID,
+                thread_id="thread-floor-second",
+                revision=1,
+                scene_level=scene.scene_level,
+                scene_json=scene_json,
+                summary_json=summary_json,
+                svg_asset_id=None,
+                png_asset_id=None,
+                confirmed_at=None,
+                confirmed_by_run_id=None,
+                confirmation_note=None,
+                created_at=now,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()

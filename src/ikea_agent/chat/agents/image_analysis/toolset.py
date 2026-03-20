@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from logging import getLogger
 
+from pydantic import BaseModel
 from pydantic_ai import RunContext
 from pydantic_ai.tools import Tool
 from pydantic_ai.toolsets import FunctionToolset
@@ -14,7 +15,7 @@ from ikea_agent.chat.agents.image_analysis.deps import ImageAnalysisAgentDeps
 from ikea_agent.chat.agents.shared import (
     SHARED_CONTEXT_TOOL_NAMES,
     analysis_repository,
-    build_shared_context_tools,
+    build_first_class_agent_toolset,
     require_room_id,
     require_thread_id,
     telemetry_context,
@@ -41,6 +42,7 @@ from ikea_agent.tools.image_analysis import (
     get_room_detail_details_from_photo as run_room_detail_details_from_photo,
 )
 from ikea_agent.tools.image_analysis import segment_image_with_prompt as run_image_segmentation
+from ikea_agent.tools.image_analysis.models import DetectedObject
 
 logger = getLogger(__name__)
 
@@ -100,6 +102,44 @@ def list_uploaded_images(ctx: RunContext[ImageAnalysisAgentDeps]) -> list[dict[s
     return [asdict(attachment) for attachment in ctx.deps.state.attachments]
 
 
+async def _run_persisted_analysis_tool[RequestModelT: BaseModel, ResultModelT: BaseModel](
+    ctx: RunContext[ImageAnalysisAgentDeps],
+    *,
+    tool_name: str,
+    request: RequestModelT,
+    runner: Callable[..., Awaitable[ResultModelT]],
+    services: ImageAnalysisToolsetServices,
+    input_asset_id: str,
+    detections_for_result: Callable[[ResultModelT], list[DetectedObject]],
+    input_asset_ids: list[str] | None = None,
+    apply_analysis_id: Callable[[ResultModelT, str], ResultModelT] | None = None,
+) -> ResultModelT:
+    """Run one tool and persist the typed result through the shared analysis flow."""
+
+    result = await runner(
+        request=request,
+        attachment_store=ctx.deps.attachment_store,
+    )
+    repository = services.get_analysis_repository(ctx.deps.runtime)
+    if repository is None:
+        return result
+
+    analysis_id = repository.record_analysis(
+        tool_name=tool_name,
+        room_id=require_room_id(ctx.deps.state),
+        thread_id=require_thread_id(ctx.deps.state),
+        run_id=ctx.deps.state.run_id,
+        input_asset_id=input_asset_id,
+        input_asset_ids=input_asset_ids,
+        request_json=request.model_dump(mode="json"),
+        result_json=result.model_dump(mode="json"),
+        detections=detections_for_result(result),
+    )
+    if analysis_id is None or apply_analysis_id is None:
+        return result
+    return apply_analysis_id(result, analysis_id)
+
+
 async def _detect_objects_in_image_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: ObjectDetectionRequest,
@@ -107,23 +147,15 @@ async def _detect_objects_in_image_with_services(
     services: ImageAnalysisToolsetServices,
 ) -> ObjectDetectionToolResult:
     logger.info("detect_objects_in_image_start", extra=telemetry_context(ctx.deps.state))
-    result = await services.detect_objects_in_image(
+    return await _run_persisted_analysis_tool(
+        ctx,
+        tool_name="detect_objects_in_image",
         request=request,
-        attachment_store=ctx.deps.attachment_store,
+        runner=services.detect_objects_in_image,
+        services=services,
+        input_asset_id=request.image.attachment_id,
+        detections_for_result=lambda result: result.detections,
     )
-    repository = services.get_analysis_repository(ctx.deps.runtime)
-    if repository is not None:
-        repository.record_analysis(
-            tool_name="detect_objects_in_image",
-            room_id=require_room_id(ctx.deps.state),
-            thread_id=require_thread_id(ctx.deps.state),
-            run_id=ctx.deps.state.run_id,
-            input_asset_id=request.image.attachment_id,
-            request_json=request.model_dump(mode="json"),
-            result_json=result.model_dump(mode="json"),
-            detections=result.detections,
-        )
-    return result
 
 
 async def detect_objects_in_image(
@@ -146,23 +178,15 @@ async def _estimate_depth_map_with_services(
     services: ImageAnalysisToolsetServices,
 ) -> DepthEstimationToolResult:
     logger.info("estimate_depth_map_start", extra=telemetry_context(ctx.deps.state))
-    result = await services.estimate_depth_map(
+    return await _run_persisted_analysis_tool(
+        ctx,
+        tool_name="estimate_depth_map",
         request=request,
-        attachment_store=ctx.deps.attachment_store,
+        runner=services.estimate_depth_map,
+        services=services,
+        input_asset_id=request.image.attachment_id,
+        detections_for_result=lambda _result: [],
     )
-    repository = services.get_analysis_repository(ctx.deps.runtime)
-    if repository is not None:
-        repository.record_analysis(
-            tool_name="estimate_depth_map",
-            room_id=require_room_id(ctx.deps.state),
-            thread_id=require_thread_id(ctx.deps.state),
-            run_id=ctx.deps.state.run_id,
-            input_asset_id=request.image.attachment_id,
-            request_json=request.model_dump(mode="json"),
-            result_json=result.model_dump(mode="json"),
-            detections=[],
-        )
-    return result
 
 
 async def estimate_depth_map(
@@ -185,25 +209,18 @@ async def _segment_image_with_prompt_with_services(
     services: ImageAnalysisToolsetServices,
 ) -> SegmentationToolResult:
     logger.info("segment_image_with_prompt_start", extra=telemetry_context(ctx.deps.state))
-    result = await services.segment_image_with_prompt(
+    return await _run_persisted_analysis_tool(
+        ctx,
+        tool_name="segment_image_with_prompt",
         request=request,
-        attachment_store=ctx.deps.attachment_store,
+        runner=services.segment_image_with_prompt,
+        services=services,
+        input_asset_id=request.image.attachment_id,
+        detections_for_result=lambda _result: [],
+        apply_analysis_id=lambda result, analysis_id: result.model_copy(
+            update={"analysis_id": analysis_id}
+        ),
     )
-    repository = services.get_analysis_repository(ctx.deps.runtime)
-    if repository is not None:
-        analysis_id = repository.record_analysis(
-            tool_name="segment_image_with_prompt",
-            room_id=require_room_id(ctx.deps.state),
-            thread_id=require_thread_id(ctx.deps.state),
-            run_id=ctx.deps.state.run_id,
-            input_asset_id=request.image.attachment_id,
-            request_json=request.model_dump(mode="json"),
-            result_json=result.model_dump(mode="json"),
-            detections=[],
-        )
-        if analysis_id is not None:
-            result = result.model_copy(update={"analysis_id": analysis_id})
-    return result
 
 
 async def segment_image_with_prompt(
@@ -234,24 +251,17 @@ async def _analyze_room_photo_with_services(
             image=AttachmentRefPayload.from_ref(ctx.deps.state.attachments[0])
         )
 
-    result = await services.analyze_room_photo(
+    return await _run_persisted_analysis_tool(
+        ctx,
+        tool_name="analyze_room_photo",
         request=resolved_request,
-        attachment_store=ctx.deps.attachment_store,
+        runner=services.analyze_room_photo,
+        services=services,
+        input_asset_id=resolved_request.image.attachment_id,
+        detections_for_result=lambda result: (
+            result.object_detection.detections if result.object_detection else []
+        ),
     )
-    repository = services.get_analysis_repository(ctx.deps.runtime)
-    if repository is not None:
-        detections = result.object_detection.detections if result.object_detection else []
-        repository.record_analysis(
-            tool_name="analyze_room_photo",
-            room_id=require_room_id(ctx.deps.state),
-            thread_id=require_thread_id(ctx.deps.state),
-            run_id=ctx.deps.state.run_id,
-            input_asset_id=resolved_request.image.attachment_id,
-            request_json=resolved_request.model_dump(mode="json"),
-            result_json=result.model_dump(mode="json"),
-            detections=detections,
-        )
-    return result
 
 
 async def analyze_room_photo(
@@ -288,23 +298,16 @@ async def _get_room_detail_details_from_photo_with_services(
             ]
         )
 
-    result = await services.get_room_detail_details_from_photo(
+    result = await _run_persisted_analysis_tool(
+        ctx,
+        tool_name="get_room_detail_details_from_photo",
         request=resolved_request,
-        attachment_store=ctx.deps.attachment_store,
+        runner=services.get_room_detail_details_from_photo,
+        services=services,
+        input_asset_id=resolved_request.images[0].attachment_id,
+        detections_for_result=lambda _result: [],
+        input_asset_ids=[image.attachment_id for image in resolved_request.images],
     )
-    repository = services.get_analysis_repository(ctx.deps.runtime)
-    if repository is not None:
-        repository.record_analysis(
-            tool_name="get_room_detail_details_from_photo",
-            room_id=require_room_id(ctx.deps.state),
-            thread_id=require_thread_id(ctx.deps.state),
-            run_id=ctx.deps.state.run_id,
-            input_asset_id=resolved_request.images[0].attachment_id,
-            input_asset_ids=[image.attachment_id for image in resolved_request.images],
-            request_json=resolved_request.model_dump(mode="json"),
-            result_json=result.model_dump(mode="json"),
-            detections=[],
-        )
     logger.info(
         "get_room_detail_details_from_photo_complete",
         extra={
@@ -387,9 +390,8 @@ def build_image_analysis_toolset(
             services=resolved_services,
         )
 
-    return FunctionToolset(
-        tools=[
-            *build_shared_context_tools(),
+    return build_first_class_agent_toolset(
+        local_tools=[
             Tool(list_uploaded_images, name="list_uploaded_images"),
             Tool(detect_objects_in_image_tool, name="detect_objects_in_image"),
             Tool(estimate_depth_map_tool, name="estimate_depth_map"),

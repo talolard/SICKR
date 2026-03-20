@@ -128,6 +128,50 @@ def test_record_run_complete_persists_canonical_message_segment(tmp_path: Path) 
     assert stored_segment.sequence_no == 1
 
 
+def test_record_run_complete_updates_existing_segment_without_new_sequence(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-history",
+        run_id="run-history-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="design room",
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello", "hi there"),
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello again", "updated answer"),
+    )
+
+    with session_factory() as session:
+        stored_segment = session.execute(
+            select(
+                ThreadMessageSegmentRecord.thread_id,
+                ThreadMessageSegmentRecord.run_id,
+                ThreadMessageSegmentRecord.sequence_no,
+            ).where(ThreadMessageSegmentRecord.run_id == "run-history-1")
+        ).one()
+
+    history = repository.load_message_history(thread_id="thread-history")
+
+    assert stored_segment.thread_id == "thread-history"
+    assert stored_segment.run_id == "run-history-1"
+    assert stored_segment.sequence_no == 1
+    first_request_part = history[0].parts[0]
+    second_response_part = history[1].parts[0]
+    assert isinstance(first_request_part, UserPromptPart)
+    assert isinstance(second_response_part, TextPart)
+    assert first_request_part.content == "hello again"
+    assert second_response_part.content == "updated answer"
+
+
 def test_load_message_history_returns_ordered_thread_history(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     _seed_thread(session_factory, thread_id="thread-history")

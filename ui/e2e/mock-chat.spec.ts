@@ -242,11 +242,28 @@ test("keeps active-thread search pages compact and hides pass-state validations"
   page,
 }) => {
   await page.addInitScript(seedSearchBundleStateScript());
-  await page.goto(`/agents/search?thread=${SEEDED_SEARCH_THREAD_ID}`);
+  await page.route("**/api/thread-data/rooms/room-dev-default/threads", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          thread_id: SEEDED_SEARCH_THREAD_ID,
+          room_id: "room-dev-default",
+          title: "Seeded search thread",
+          status: "active",
+          last_activity_at: SEEDED_BUNDLE_PROPOSAL.created_at,
+        },
+      ]),
+    });
+  });
+  await page.goto(`/agents/search?room=room-dev-default&thread=${SEEDED_SEARCH_THREAD_ID}`);
 
   await expect(page.getByRole("heading", { name: "Search" })).toBeVisible();
   await expect(page.getByText("Desk setup")).toBeVisible();
-  await expect(page.getByText("Find products that fit your style, budget, and room needs.")).toHaveCount(0);
+  await expect(
+    page.getByText("Find products that fit your style, budget, and room needs."),
+  ).toHaveCount(0);
 
   const threadDataDisclosure = page.locator("details", {
     has: page.getByText("Thread data"),

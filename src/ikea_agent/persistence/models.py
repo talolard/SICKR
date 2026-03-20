@@ -91,8 +91,7 @@ class ThreadRecord(Base):
 
     __tablename__ = "threads"
     __table_args__ = (
-        Index("ix_threads_room_id", "room_id"),
-        Index("ix_threads_last_activity_at", "last_activity_at"),
+        Index("ix_threads_room_activity", "room_id", "last_activity_at", "updated_at"),
         {"schema": APP_SCHEMA},
     )
 
@@ -210,7 +209,11 @@ class FloorPlanRevisionRecord(Base):
 
     __tablename__ = "floor_plan_revisions"
     __table_args__ = (
-        Index("ix_floor_plan_revisions_room_id", "room_id"),
+        UniqueConstraint(
+            "room_id",
+            "revision",
+            name="uq_floor_plan_revisions_room_revision",
+        ),
         Index("ix_floor_plan_revisions_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )

@@ -12,13 +12,16 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
-    AgentRunRecord,
     AnalysisDetectionRecord,
     AnalysisInputAssetRecord,
     AnalysisRunRecord,
     AssetRecord,
 )
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
@@ -74,7 +77,7 @@ class AnalysisRepository:
                 return None
             require_thread_record(session, room_id=room_id, thread_id=thread_id)
 
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             analysis_id = f"analysis-{uuid4().hex[:24]}"
             session.add(
                 AnalysisRunRecord(
@@ -118,6 +121,7 @@ class AnalysisRepository:
                         bbox_y2_norm=ny2,
                     )
                 )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
             return analysis_id
 
@@ -189,14 +193,6 @@ class AnalysisRepository:
             .where(AssetRecord.room_id == room_id)
         ).scalars()
         return len(set(existing_asset_ids)) == len(set(asset_ids))
-
-    @staticmethod
-    def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        return session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
 
 
 def _analysis_snapshot_from_row(

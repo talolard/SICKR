@@ -15,7 +15,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
 from ikea_agent.chat.agents.shared import (
     SHARED_CONTEXT_TOOL_NAMES,
-    build_shared_context_tools,
+    build_first_class_agent_toolset,
     floor_plan_repository,
     require_room_id,
     require_thread_id,
@@ -377,9 +377,8 @@ def build_floor_plan_intake_toolset(
             services=resolved_services,
         )
 
-    return FunctionToolset(
-        tools=[
-            *build_shared_context_tools(),
+    return build_first_class_agent_toolset(
+        local_tools=[
             Tool(render_floor_plan_tool, name="render_floor_plan"),
             Tool(load_floor_plan_scene_yaml_tool, name="load_floor_plan_scene_yaml"),
             Tool(export_floor_plan_scene_yaml_tool, name="export_floor_plan_scene_yaml"),

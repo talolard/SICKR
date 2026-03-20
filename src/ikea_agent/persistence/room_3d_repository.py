@@ -12,12 +12,15 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import (
-    AgentRunRecord,
     AssetRecord,
     Room3DAssetRecord,
     Room3DSnapshotRecord,
 )
 from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +82,7 @@ class Room3DRepository:
                 asset_id=source_asset_id,
             ):
                 raise ValueError(f"Unknown source asset `{source_asset_id}` for room `{room_id}`.")
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.add(
                 Room3DAssetRecord(
                     room_3d_asset_id=room_3d_asset_id,
@@ -92,6 +95,7 @@ class Room3DRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
         stored = self.get_room_3d_asset(room_3d_asset_id=room_3d_asset_id)
@@ -182,7 +186,7 @@ class Room3DRepository:
                 raise ValueError(
                     f"Unknown room_3d_asset_id `{room_3d_asset_id}` for room `{room_id}`."
                 )
-            persisted_run_id = self._resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.add(
                 Room3DSnapshotRecord(
                     room_3d_snapshot_id=room_3d_snapshot_id,
@@ -197,6 +201,7 @@ class Room3DRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
         stored = self.get_room_3d_snapshot(room_3d_snapshot_id=room_3d_snapshot_id)
@@ -255,14 +260,6 @@ class Room3DRepository:
         if row is None:
             return None
         return _snapshot_from_row(row)
-
-    @staticmethod
-    def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        return session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-        ).scalar_one_or_none()
 
     @staticmethod
     def _asset_exists_in_room(*, session: Session, room_id: str, asset_id: str) -> bool:

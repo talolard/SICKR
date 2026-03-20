@@ -16,8 +16,8 @@ from pydantic_ai.toolsets import FunctionToolset
 from ikea_agent.chat.agents.search.deps import SearchAgentDeps
 from ikea_agent.chat.agents.shared import (
     SHARED_CONTEXT_TOOL_NAMES,
+    build_first_class_agent_toolset,
     build_room_3d_snapshot_context_payload,
-    build_shared_context_tools,
     require_room_id,
     require_thread_id,
     room_3d_repository,
@@ -502,9 +502,8 @@ def build_search_toolset(
             services=resolved_services,
         )
 
-    return FunctionToolset(
-        tools=[
-            *build_shared_context_tools(),
+    return build_first_class_agent_toolset(
+        local_tools=[
             Tool(run_search_graph_tool, name="run_search_graph"),
             Tool(propose_bundle_tool, name="propose_bundle"),
             Tool(
