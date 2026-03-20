@@ -100,11 +100,12 @@ function AgentThreadHeader({
   const selectableThreadIds =
     threadId && !threadIds.includes(threadId) ? [threadId, ...threadIds] : threadIds;
   const presentation = resolveWorkspacePresentation(currentAgent);
+  const hasTrackedThread = Boolean(threadId);
 
   return (
-    <header className="rounded-[34px] bg-[color:var(--surface-container-low)] px-6 py-6 shadow-[var(--panel-shadow)]">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0 space-y-4">
+    <header className="rounded-[30px] bg-[color:var(--surface-container-low)] px-5 py-4 shadow-[var(--panel-shadow)]">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[color:var(--surface-container-lowest)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
               {presentation.capabilityLabel}
@@ -114,21 +115,23 @@ function AgentThreadHeader({
             </span>
           </div>
           <div>
-            <h1 className="editorial-display text-[2.35rem] leading-none text-primary md:text-[3rem]">
+            <h1 className="editorial-display text-[2rem] leading-none text-primary md:text-[2.35rem]">
               {presentation.title}
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
-              {presentation.description}
-            </p>
+            {!hasTrackedThread ? (
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+                {presentation.description}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-[240px] flex-col gap-2">
+          <label className="flex min-w-[240px] flex-col gap-1.5">
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
               Tracked thread
             </span>
             <select
-              className="rounded-full bg-[color:var(--surface-container-lowest)] px-4 py-3 text-sm font-semibold text-primary shadow-[var(--panel-shadow)] outline-none"
+              className="rounded-full bg-[color:var(--surface-container-lowest)] px-4 py-2.5 text-sm font-semibold text-primary shadow-[var(--panel-shadow)] outline-none"
               data-testid="agent-thread-select"
               disabled={!threadId}
               onChange={(event) => {
@@ -144,7 +147,7 @@ function AgentThreadHeader({
             </select>
           </label>
           <button
-            className="rounded-full bg-[color:var(--primary)] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_35px_rgba(24,36,27,0.18)]"
+            className="rounded-full bg-[color:var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_20px_35px_rgba(24,36,27,0.18)]"
             data-testid="new-thread-button"
             onClick={onCreateThread}
             type="button"
@@ -161,16 +164,23 @@ function AgentThreadHeader({
         </div>
       </div>
       {warning ? (
-        <div className="mt-5 flex items-start gap-2 rounded-[24px] bg-amber-50 px-4 py-3 text-xs text-amber-950">
+        <div className="mt-3 flex items-start gap-2 rounded-[22px] bg-amber-50 px-4 py-3 text-xs text-amber-950">
           <span>{warning}</span>
           <button className="underline" onClick={onDismissWarning} type="button">
             Dismiss
           </button>
         </div>
       ) : null}
-      <div className="mt-5">
-        {threadId ? <ThreadDataPanel key={threadId} threadId={threadId} /> : null}
-      </div>
+      {threadId ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+            Thread data
+          </summary>
+          <div className="mt-3">
+            <ThreadDataPanel key={threadId} threadId={threadId} />
+          </div>
+        </details>
+      ) : null}
     </header>
   );
 }
@@ -241,16 +251,18 @@ export function SharedAgentPageShell({
           />
           <section className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="space-y-4">
-              <div className="rounded-[30px] bg-[color:var(--surface-container-low)] px-5 py-5 shadow-[var(--panel-shadow)]">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="editorial-eyebrow">{presentation.stageEyebrow}</p>
-                    <h2 className="editorial-display mt-3 text-[1.95rem] leading-none text-primary">
-                      {presentation.stageTitle}
-                    </h2>
-                    <p className="mt-3 max-w-3xl text-sm leading-6 text-on-surface-variant">
-                      {presentation.stageDescription}
+              <div className="rounded-[24px] bg-[color:var(--surface-container-low)] px-4 py-3 shadow-[var(--panel-shadow)]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+                      {presentation.stageEyebrow}
                     </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-semibold tracking-tight text-primary">
+                        {presentation.stageTitle}
+                      </h2>
+                      <p className="text-xs text-on-surface-variant">{presentation.stageDescription}</p>
+                    </div>
                   </div>
                   <div className="rounded-full bg-[color:var(--surface-container-lowest)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary shadow-[var(--panel-shadow)]">
                     {presentation.stageStatus}

@@ -15,6 +15,9 @@ Before editing UI code, write down:
 
 - the exact routes being changed
 - the exact routes intentionally not being changed
+- the surface mode for each touched route:
+  - editorial
+  - workbench
 - the design artifacts used as references
 - the states that must look correct:
   - empty
@@ -25,6 +28,8 @@ Before editing UI code, write down:
 - the user-visible acceptance checks for each touched route
 
 For redesign work, do not use app-wide language unless all routes in the relevant family are covered.
+
+If a route is an active work surface rather than a landing or invitation surface, default it to workbench mode even when it shares the same palette and typography as editorial routes.
 
 ## Execution order
 
@@ -50,11 +55,27 @@ If multiple routes should feel like one product family, implement the shared she
   - route-specific center-surface components
 - Do not let one route silently invent a different page grammar unless that difference is a deliberate product decision.
 
+## Surface-mode rules
+
+- The repo uses one visual language with two density modes:
+  - editorial mode for home, onboarding, and empty-state invitation surfaces
+  - workbench mode for active agent routes, dense result lists, and narrow consultation rails
+- Workbench mode should keep brand consistency through palette, type, and tonal layering, not through repeated oversized headings or decorative spacing.
+- On active-thread workbench routes, the first screenful should contain:
+  - route identity
+  - thread or workflow controls
+  - the first primary artifact or actionable result
+- Do not stack multiple full-width framing cards before the first real work artifact.
+- Successful-state validation should be quiet by default.
+- Use high-visibility status treatment primarily for warnings, failures, and actions that need intervention.
+- If a surface lives in a narrow rail, treat it like a compact transcript artifact first and a showcase card second.
+
 ## Chat and tool-rendering rules
 
 - The consultation rail is a product surface, not a raw CopilotKit dump.
 - Primary work artifacts should move into the main workspace when they need sustained attention.
 - Bulky structured outputs inside the chat rail should default collapsed unless always-expanded behavior is clearly better.
+- Structured outputs in a narrow rail should start from a compact summary form; expand into detail instead of occupying full feature-card height by default.
 - Raw tool output must not cause horizontal overflow in the chat rail.
 - Long strings, JSON, code-ish payloads, and markdown should wrap safely inside narrow columns.
 - Assistant controls must remain visually attached to the message they belong to.
@@ -98,6 +119,8 @@ During manual review, check at least:
 - one realistic successful interaction
 - one stress case with long content
 - the touched route at the canonical desktop width used by the reference
+- for workbench routes, confirm the first primary artifact is visible in the first screenful after the thread becomes active
+- for workbench routes, confirm success-state validation does not visually outrank content or actions
 
 ## PR and merge expectations
 

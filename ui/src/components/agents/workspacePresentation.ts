@@ -73,10 +73,10 @@ export function resolveWorkspacePresentation(
         ],
         railTitle: "Project Specifications",
         stageDescription:
-          "Bundle proposals and product groupings should stay readable, curated, and easy to compare.",
-        stageEyebrow: "Curated results",
+          "Bundle proposals stay visible and easy to compare while the thread keeps moving.",
+        stageEyebrow: "Workbench",
         stageStatus: "Shortlist live",
-        stageTitle: "Bundle board",
+        stageTitle: "Results",
         title: "Search",
       };
     case "floor_plan_intake":
@@ -99,10 +99,10 @@ export function resolveWorkspacePresentation(
         ],
         railTitle: "Room Specifications",
         stageDescription:
-          "Render, review, and compare layout revisions without losing the drafting context.",
-        stageEyebrow: "Architectural workbench",
+          "Render and compare layout revisions without losing the drafting context.",
+        stageEyebrow: "Workbench",
         stageStatus: "Draft mode",
-        stageTitle: "Drafting board",
+        stageTitle: "Layout drafts",
         title: "Floor Plan Intake",
       };
     case "image_analysis":
@@ -125,10 +125,10 @@ export function resolveWorkspacePresentation(
         ],
         railTitle: "Visual Brief",
         stageDescription:
-          "Collect images, compare angles, and keep the room context visible while the agent analyzes them.",
-        stageEyebrow: "Image review",
+          "Keep the room context visible while the agent reviews and compares images.",
+        stageEyebrow: "Workbench",
         stageStatus: "Photo board ready",
-        stageTitle: "Room photo board",
+        stageTitle: "Photo review",
         title: "Image Analysis",
       };
     default:

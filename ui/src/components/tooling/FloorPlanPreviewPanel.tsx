@@ -86,22 +86,25 @@ export function FloorPlanPreviewPanel({
   if (!preview || !primaryImage) {
     return (
       <section className="editorial-panel-elevated overflow-hidden rounded-[30px] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="editorial-eyebrow">Floor plan preview</p>
-            <h2 className="editorial-display mt-3 text-[1.8rem] leading-none text-primary">
-              Drafting surface
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant">
-              Render a floor plan to see the latest layout, dimensional notes, and workbench view
-              here.
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Floor plan preview
             </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-semibold tracking-tight text-primary">
+                Drafting surface
+              </h2>
+              <p className="text-xs leading-5 text-on-surface-variant">
+                Render a floor plan to see the latest layout and dimensional notes here.
+              </p>
+            </div>
           </div>
           <div className="rounded-full bg-[color:var(--tertiary-fixed)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
             Awaiting first layout
           </div>
         </div>
-        <div className="relative mt-6 min-h-[24rem] overflow-hidden rounded-[28px] bg-[color:var(--surface-container-low)] p-6">
+        <div className="relative mt-4 min-h-[24rem] overflow-hidden rounded-[28px] bg-[color:var(--surface-container-low)] p-6">
           <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:radial-gradient(circle_at_center,rgba(32,27,16,0.45)_1px,transparent_1px)] [background-size:34px_34px]" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(130,84,41,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(24,36,27,0.08),transparent_30%)]" />
           <div className="relative flex h-full flex-col items-center justify-center text-center">
@@ -117,10 +120,10 @@ export function FloorPlanPreviewPanel({
                 <path d="M10 7.4v7.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
               </svg>
             </div>
-            <h3 className="editorial-display mt-6 text-[1.7rem] leading-none text-primary">
+            <h3 className="mt-6 text-[1.4rem] font-semibold leading-tight tracking-tight text-primary">
               Render a layout to activate the workbench
             </h3>
-            <p className="mt-4 max-w-xl text-sm leading-6 text-on-surface-variant">
+            <p className="mt-3 max-w-xl text-sm leading-6 text-on-surface-variant">
               Once a layout is rendered, the drafting surface will show the current revision in 2D
               and 3D without leaving this page.
             </p>
@@ -166,15 +169,17 @@ export function FloorPlanPreviewPanel({
 
   return (
     <section className="editorial-panel-elevated overflow-hidden rounded-[30px] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="editorial-eyebrow">Floor plan preview</p>
-          <h2 className="editorial-display mt-3 text-[1.8rem] leading-none text-primary">
-            Current layout
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-on-surface-variant">
-            Revision {preview.sceneRevision} · {preview.sceneLevel}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+            Floor plan preview
           </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold tracking-tight text-primary">Current layout</h2>
+            <p className="text-xs leading-5 text-on-surface-variant">
+              Revision {preview.sceneRevision} · {preview.sceneLevel}
+            </p>
+          </div>
         </div>
         <button
           className="rounded-full bg-[color:var(--surface-container-low)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary"
@@ -186,7 +191,7 @@ export function FloorPlanPreviewPanel({
       </div>
 
       <div
-        className="mt-5 inline-flex rounded-full bg-[color:var(--surface-container-low)] p-1 text-xs shadow-[var(--panel-shadow)]"
+        className="mt-4 inline-flex rounded-full bg-[color:var(--surface-container-low)] p-1 text-xs shadow-[var(--panel-shadow)]"
         role="tablist"
       >
         <button
@@ -218,7 +223,7 @@ export function FloorPlanPreviewPanel({
       </div>
 
       {activeTab === "2d" ? (
-        <div className="relative mt-5 flex min-h-[28rem] items-center justify-center overflow-hidden rounded-[28px] bg-[color:var(--surface-container-low)] p-4">
+        <div className="relative mt-4 flex min-h-[28rem] items-center justify-center overflow-hidden rounded-[28px] bg-[color:var(--surface-container-low)] p-4">
           <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_center,rgba(32,27,16,0.45)_1px,transparent_1px)] [background-size:34px_34px]" />
           {/* eslint-disable-next-line @next/next/no-img-element -- Floor plan previews can be local data/blob URIs. */}
           <img
@@ -228,7 +233,7 @@ export function FloorPlanPreviewPanel({
           />
         </div>
       ) : preview.scene ? (
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-3">
           {Scene3D ? (
             <Scene3D ref={scene3dRef} scene={preview.scene} />
           ) : (
@@ -304,17 +309,17 @@ export function FloorPlanPreviewPanel({
         </div>
       ) : (
         <div
-          className="mt-5 rounded-[24px] bg-amber-50 px-4 py-4 text-sm text-amber-900"
+          className="mt-4 rounded-[24px] bg-amber-50 px-4 py-4 text-sm text-amber-900"
           data-testid="floor-plan-3d-empty"
         >
           3D scene data is not available for this revision yet.
         </div>
       )}
 
-      <p className="mt-5 text-sm leading-6 text-on-surface">{preview.caption}</p>
+      <p className="mt-4 text-sm leading-6 text-on-surface">{preview.caption}</p>
 
       {preview.warnings.length > 0 ? (
-        <div className="mt-4 rounded-[24px] bg-amber-50 px-4 py-4">
+        <div className="mt-3 rounded-[24px] bg-amber-50 px-4 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-900">
             Warnings
           </p>

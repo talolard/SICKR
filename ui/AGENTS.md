@@ -10,6 +10,20 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - Treat the exported `code.html` files and screenshots as composition, spacing, and copy references.
 - When the exported HTML conflicts with `DESIGN.md`, prefer `DESIGN.md`.
 
+## Surface modes
+
+- The UI uses one brand language with two density modes:
+  - editorial mode for home, onboarding, and empty-state invitation surfaces
+  - workbench mode for active agent routes, dense result views, and narrow consultation rails
+- Workbench mode must keep the Stitch identity through palette, type, and tonal surfaces, but it should not inherit editorial-scale whitespace blindly.
+- On active-thread workbench routes, the first screenful should contain:
+  - route identity
+  - thread/workflow controls
+  - the first primary artifact or actionable result
+- Do not spend more than one major framing block before the first real work artifact.
+- Success-state validation should be quiet by default. Warnings, failures, and next-step actions are allowed to carry the strongest visual emphasis.
+- In narrow rails, structured outputs should begin as compact summaries and expand into detail on demand.
+
 ## Route matrix
 
 - The redesign is not complete until these surfaces read as one product family:
@@ -36,6 +50,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - For frontend planning and execution guidance, see [docs/frontend_delivery_guidelines.md](../docs/frontend_delivery_guidelines.md).
 - For frontend epic and task authoring, see [docs/frontend_epic_authoring.md](../docs/frontend_epic_authoring.md).
 - For PR descriptions, review loops, and validation expectations, see [docs/frontend_pr_review_guidelines.md](../docs/frontend_pr_review_guidelines.md).
+
 ## Frontend delivery workflow
 
 - Before editing, name:
@@ -78,7 +93,7 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
 - User-facing content comes first.
 - Structured outputs such as bundles, product results, floor-plan previews, and 3D room surfaces are first-class work surfaces, not incidental chat decoration.
 - Prompt text, runtime notes, and debug details are secondary by default and should not dominate the initial page layout.
-- Prefer composed editorial layouts over utility-dashboard layouts.
+- Prefer composed editorial layouts on editorial surfaces, but prefer compact scannable hierarchy on workbench surfaces.
 
 ## Layout rules
 
@@ -176,3 +191,5 @@ Local instructions for work inside `ui/`. These rules refine the repo-wide guida
   - an existing thread
   - one realistic success case
   - one long-content or raw-tool-output stress case
+  - for workbench routes, one active-thread check where the first primary artifact is visible in the first screenful
+  - for workbench routes, one check that success-state validation stays quieter than content and actions

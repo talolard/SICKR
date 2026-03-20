@@ -12,6 +12,8 @@ Use this when creating or revising frontend epics and child tasks. The goal is t
   - exact routes and surfaces being changed
 - Routes deferred:
   - exact sibling routes intentionally not being changed
+- Surface mode:
+  - whether each touched route is editorial or workbench
 - Shared contracts affected:
   - shared shells, rails, renderers, layout rules, or interaction contracts
 - Design references:
@@ -45,6 +47,21 @@ Every touched route should be considered in these states:
 - error or fallback
 
 If a route does not meaningfully support one of those states, say so explicitly instead of leaving the gap implicit.
+
+## Required workbench contract
+
+If an epic or task touches an active workbench route, it must also define:
+
+- what the user should see in the first screenful after the thread becomes active
+- whether the route spends more than one framing/header block before the first real artifact
+- which status signals should stay loud:
+  - warnings
+  - failures
+  - user actions
+- which status signals must stay quiet:
+  - success-state validation
+  - background completeness metadata
+- how narrow-rail structured outputs stay compact before expansion
 
 ## Allowed frontend task shapes
 

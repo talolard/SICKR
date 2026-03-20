@@ -94,8 +94,9 @@ describe("SearchBundlePanel", () => {
     expect(screen.getAllByText("Why it is in the bundle")).toHaveLength(2);
     expect(screen.getByText("Two matching chairs")).toBeInTheDocument();
     expect(screen.getByText("Chair One Ergonomic Desk Chair")).toBeInTheDocument();
-    expect(screen.getByText(/Pricing:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Pricing:/)).not.toBeInTheDocument();
     expect(screen.getByText(/Duplicates:/)).toBeInTheDocument();
+    expect(screen.queryByText("Included items")).not.toBeInTheDocument();
     expect(screen.getAllByText("Unit")).toHaveLength(2);
     expect(screen.getAllByText("Qty")).toHaveLength(2);
     expect(screen.getAllByText("Total")).toHaveLength(3);
