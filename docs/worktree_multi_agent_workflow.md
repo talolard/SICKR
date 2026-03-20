@@ -36,7 +36,6 @@ Per-worktree writable paths:
 - `DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:1543x/ikea_agent`
 - `ARTIFACT_ROOT_DIR=.tmp_untracked/artifacts`
 - `FEEDBACK_ROOT_DIR=.tmp_untracked/comments`
-- `TRACE_ROOT_DIR=.tmp_untracked/traces`
 
 Dependency scopes:
 

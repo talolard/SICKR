@@ -127,14 +127,6 @@ vi.mock("@/components/copilotkit/AgentChatSidebar", () => ({
   AgentChatSidebar: (): ReactElement => <div data-testid="agent-chat-sidebar" />,
 }));
 
-vi.mock("@/components/trace/SaveTraceButton", () => ({
-  SaveTraceButton: (): ReactElement => <button type="button">Save trace</button>,
-}));
-
-vi.mock("@/components/trace/SaveTraceDialog", () => ({
-  SaveTraceDialog: (): ReactElement => <div data-testid="save-trace-dialog" />,
-}));
-
 vi.mock("@/components/attachments/AgentImageAttachmentPanel", () => ({
   AgentImageAttachmentPanel: ({
     helperText,

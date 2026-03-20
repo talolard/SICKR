@@ -136,39 +136,13 @@ for msg in messages:
 
 That does **not** require Logfire. It captures the model-emitted tool args from the run transcript. The tradeoff is that this gives you the pre-tool-call payload, not necessarily the fully normalized "executed" query objects. If you care about executed normalized inputs, dependency injection at the toolset seam is still the better answer.
 
-There is also a stronger repo-local option for UI-facing evals: hook into the **existing AG-UI event trace** that the server already emits for CopilotKit.
-
-Today, the server:
-
-- streams AG-UI SSE events to the UI
-- captures that outbound SSE body in [`src/ikea_agent/chat_app/main.py`](../src/ikea_agent/chat_app/main.py#L848)
-- normalizes it into canonical JSON via [`_serialize_agui_event_trace()`](../src/ikea_agent/chat_app/main.py#L149)
-- persists it in [`RunHistoryRepository.record_run_event_trace()`](../src/ikea_agent/persistence/run_history_repository.py#L176)
-
-That canonical event trace has a stable wrapper shape:
-
-```json
-{
-  "id": "agent_search:1",
-  "agentId": "agent_search",
-  "threadId": "...",
-  "runId": "...",
-  "type": "...",
-  "timestamp": 1234567890,
-  "payload": { "...": "..." }
-}
-```
-
-See [`src/ikea_agent/chat_app/main.py`](../src/ikea_agent/chat_app/main.py#L130).
-
 For eval architecture, this suggests a clear preference order:
 
 1. **Best trace-level hook:** native PydanticAI spans via Logfire/OpenTelemetry
-2. **Best UI-faithful hook:** drive the eval through the AG-UI request path and inspect the archived `agui_event_trace_json`
-3. **Best direct-agent hook:** inject toolset services and capture normalized executed inputs inside the tool layer
-4. **Fallback direct-run hook:** inspect `ToolCallPart`s from `capture_run_messages()` / `all_messages()`
+2. **Best direct-agent hook:** inject toolset services and capture normalized executed inputs inside the tool layer
+3. **Fallback direct-run hook:** inspect `ToolCallPart`s from `capture_run_messages()` / `all_messages()`
 
-I would prefer options 1, 2, or 3 over inventing any repo-local span capture mechanism.
+I would prefer options 1 or 2 over inventing any repo-local span capture mechanism.
 
 ### 3. The newer pytest harness reintroduces the exact concurrency bug the docs warn about
 

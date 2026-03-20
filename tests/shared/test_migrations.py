@@ -88,7 +88,6 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
         assert {
             ("app", "threads"),
             ("app", "agent_runs"),
-            ("app", "message_archives"),
             ("app", "assets"),
             ("app", "floor_plan_revisions"),
             ("app", "analysis_runs"),

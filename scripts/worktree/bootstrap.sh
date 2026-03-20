@@ -115,7 +115,6 @@ export POSTGRES_PASSWORD=ikea
 export DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:${POSTGRES_PORT}/ikea_agent
 export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
 export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
-export TRACE_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/traces
 export PY_AG_UI_URL=http://127.0.0.1:${BACKEND_PORT}/ag-ui/
 EOF
 

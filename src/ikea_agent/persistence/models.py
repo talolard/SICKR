@@ -69,25 +69,6 @@ class AgentRunRecord(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class MessageArchiveRecord(Base):
-    """Raw AG-UI/PydanticAI message archive blobs for optional exact replay."""
-
-    __tablename__ = "message_archives"
-    __table_args__ = ({"schema": APP_SCHEMA},)
-
-    run_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
-        primary_key=True,
-    )
-    archive_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    agui_input_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    agui_event_trace_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pydantic_all_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pydantic_new_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
 class AssetRecord(Base):
     """File-backed artifact metadata and associations."""
 
@@ -489,12 +470,6 @@ def _ensure_optional_columns(engine: Engine) -> None:
         table_name="agent_runs",
         column_name="agent_name",
         column_sql="VARCHAR",
-    )
-    _ensure_column(
-        engine,
-        table_name="message_archives",
-        column_name="agui_event_trace_json",
-        column_sql="TEXT",
     )
 
 

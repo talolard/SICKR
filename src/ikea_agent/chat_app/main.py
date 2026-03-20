@@ -24,12 +24,9 @@ from ikea_agent.chat_app.routes import (
     _build_attachment_store,
     _register_agent_catalog_routes,
     _register_attachment_routes,
-    _register_trace_routes,
 )
 from ikea_agent.chat_app.thread_routes import _register_thread_data_routes
-from ikea_agent.chat_app.trace_reports import TraceReportWriter
 from ikea_agent.config import get_settings
-from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import ensure_persistence_schema
@@ -106,8 +103,6 @@ def create_app(
         root_dir=Path(settings.artifact_root_dir),
         asset_repository=asset_repository,
     )
-    trace_writer = TraceReportWriter(root_dir=Path(settings.trace_root_dir))
-    beads_creator = BeadsTraceIssueCreator(repo_root=Path.cwd())
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -124,13 +119,6 @@ def create_app(
         else None
     )
     _register_attachment_routes(app, attachment_store)
-    if settings.trace_capture_enabled and run_history_repository is not None:
-        _register_trace_routes(
-            app,
-            trace_writer=trace_writer,
-            beads_creator=beads_creator,
-            run_history_repository=run_history_repository,
-        )
     _register_agent_catalog_routes(app)
     if thread_query_repository is not None:
         _register_thread_data_routes(

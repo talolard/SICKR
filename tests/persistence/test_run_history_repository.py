@@ -6,14 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
-from ikea_agent.persistence.models import (
-    AgentRunRecord,
-    MessageArchiveRecord,
-    ensure_persistence_schema,
-)
+from ikea_agent.persistence.models import AgentRunRecord, ThreadRecord, ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
-    ThreadRunHistoryEntry,
     extract_last_user_prompt,
 )
 
@@ -35,7 +30,7 @@ def test_extract_last_user_prompt_returns_latest_user_text() -> None:
     assert prompt == "second"
 
 
-def test_record_run_start_and_complete_persists_archive(tmp_path: Path) -> None:
+def test_record_run_start_and_complete_persists_run_lifecycle(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
@@ -45,17 +40,8 @@ def test_record_run_start_and_complete_persists_archive(tmp_path: Path) -> None:
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="design room",
-        agui_input_messages_json='[{"role":"user","content":"design room"}]',
     )
-    repository.record_run_complete(
-        run_id="run-a",
-        pydantic_all_messages_json=b'[{"kind":"request"}]',
-        pydantic_new_messages_json=b'[{"kind":"response"}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-a",
-        agui_event_trace_json='[{"type":"RUN_FINISHED"}]',
-    )
+    repository.record_run_complete(run_id="run-a")
 
     with session_factory() as session:
         run_row = session.execute(
@@ -63,19 +49,9 @@ def test_record_run_start_and_complete_persists_archive(tmp_path: Path) -> None:
                 AgentRunRecord.run_id == "run-a"
             )
         ).one()
-        archive_row = session.execute(
-            select(
-                MessageArchiveRecord.agui_input_messages_json,
-                MessageArchiveRecord.agui_event_trace_json,
-                MessageArchiveRecord.pydantic_all_messages_json,
-            ).where(MessageArchiveRecord.run_id == "run-a")
-        ).one()
 
     assert run_row.status == "completed"
     assert run_row.agent_name == "search"
-    assert archive_row.agui_input_messages_json is not None
-    assert archive_row.agui_event_trace_json == '[{"type":"RUN_FINISHED"}]'
-    assert archive_row.pydantic_all_messages_json == '[{"kind":"request"}]'
 
 
 def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
@@ -87,7 +63,6 @@ def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
         agent_name="search",
         parent_run_id="run-root",
         user_prompt_text=None,
-        agui_input_messages_json="[]",
     )
 
     repository.record_run_failed(run_id="run-b", error_message="boom")
@@ -114,7 +89,6 @@ def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_pat
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="first",
-        agui_input_messages_json="[]",
     )
     repository.record_run_start(
         thread_id="thread-c",
@@ -122,7 +96,6 @@ def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_pat
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="second",
-        agui_input_messages_json="[]",
     )
 
     with session_factory() as session:
@@ -141,56 +114,32 @@ def test_record_run_complete_missing_run_is_noop(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
-    repository.record_run_complete(
-        run_id="missing-run",
-        pydantic_all_messages_json=b"[]",
-        pydantic_new_messages_json=b"[]",
-    )
+    repository.record_run_complete(run_id="missing-run")
 
     with session_factory() as session:
-        archives = session.execute(select(MessageArchiveRecord.run_id)).scalars().all()
+        run_ids = session.execute(select(AgentRunRecord.run_id)).scalars().all()
 
-    assert archives == []
+    assert run_ids == []
 
 
-def test_list_thread_run_history_filters_by_agent_and_returns_trace_payloads(
-    tmp_path: Path,
-) -> None:
+def test_record_run_start_creates_thread_row(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
-        thread_id="thread-h",
-        run_id="run-h-1",
+        thread_id="thread-z",
+        run_id="run-z-1",
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="first user prompt",
-        agui_input_messages_json='[{"role":"user","content":"first user prompt"}]',
-    )
-    repository.record_run_complete(
-        run_id="run-h-1",
-        pydantic_all_messages_json=b'[{"kind":"request","text":"first"}]',
-        pydantic_new_messages_json=b'[{"kind":"response","text":"ok"}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-h-1",
-        agui_event_trace_json='[{"type":"TEXT_MESSAGE_END"}]',
-    )
-    repository.record_run_start(
-        thread_id="thread-h",
-        run_id="run-h-2",
-        agent_name="image_analysis",
-        parent_run_id="run-h-1",
-        user_prompt_text="second user prompt",
-        agui_input_messages_json='[{"role":"user","content":"second user prompt"}]',
     )
 
-    history = repository.list_thread_run_history(thread_id="thread-h", agent_name="search")
+    with session_factory() as session:
+        thread_row = session.execute(
+            select(ThreadRecord.thread_id, ThreadRecord.status).where(
+                ThreadRecord.thread_id == "thread-z"
+            )
+        ).one()
 
-    assert history
-    assert all(isinstance(entry, ThreadRunHistoryEntry) for entry in history)
-    assert len(history) == 1
-    assert history[0].run_id == "run-h-1"
-    assert history[0].agent_name == "search"
-    assert history[0].pydantic_all_messages_json is not None
-    assert history[0].agui_event_trace_json == '[{"type":"TEXT_MESSAGE_END"}]'
+    assert thread_row.thread_id == "thread-z"
+    assert thread_row.status == "active"

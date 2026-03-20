@@ -52,8 +52,6 @@ const LazyFloorPlanPreviewPanel = dynamic(
   },
 );
 
-const traceCaptureEnabled = process.env.NEXT_PUBLIC_TRACE_CAPTURE_ENABLED === "1";
-
 export default function AgentChatPage(): ReactElement {
   const params = useParams<{ agent: string }>();
   const router = useRouter();
@@ -63,7 +61,6 @@ export default function AgentChatPage(): ReactElement {
   const { agent } = useAgent({ agentId: agentKey });
   const { messages, setMessages } = useCopilotMessagesContext();
   const [imageAttachments, setImageAttachments] = useState<AttachmentRef[]>([]);
-  const [isTraceDialogOpen, setIsTraceDialogOpen] = useState<boolean>(false);
   const { agents, metadata, agentListError, isLoadingAgents, metadataError } =
     useAgentMetadataState(currentAgent);
   const { knownFacts, knownFactsError, isLoadingKnownFacts } = useKnownFactsState(threadId);
@@ -167,14 +164,6 @@ export default function AgentChatPage(): ReactElement {
         />
       }
       chatPanel={<AgentChatSidebar currentAgent={currentAgent} />}
-      isTraceCaptureEnabled={traceCaptureEnabled}
-      isTraceDialogOpen={isTraceDialogOpen}
-      onOpenTraceDialog={() => {
-        setIsTraceDialogOpen(true);
-      }}
-      onCloseTraceDialog={() => {
-        setIsTraceDialogOpen(false);
-      }}
     />
   );
 }

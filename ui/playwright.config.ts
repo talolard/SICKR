@@ -9,7 +9,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED=1 pnpm dev:mock --port ${uiPort}`,
+    command: `pnpm dev:mock --port ${uiPort}`,
     port: uiPort,
     reuseExistingServer: false,
   },
