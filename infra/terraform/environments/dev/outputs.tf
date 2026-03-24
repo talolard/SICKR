@@ -50,12 +50,12 @@ output "backend_ecr_repository_uri" {
 
 output "product_image_bucket_name" {
   description = "Planned product image bucket name reserved by the foundation."
-  value       = local.product_image_bucket_name
+  value       = module.storage.product_image_bucket_id
 }
 
 output "private_artifacts_bucket_name" {
   description = "Planned private artifacts bucket name reserved by the foundation."
-  value       = local.private_artifacts_bucket_name
+  value       = module.storage.private_artifacts_bucket_id
 }
 
 output "backend_app_secret_arn" {
@@ -121,4 +121,79 @@ output "deploy_role_arn" {
 output "terraform_apply_role_arn" {
   description = "Terraform apply role ARN for human or tightly controlled automation."
   value       = aws_iam_role.terraform_apply.arn
+}
+
+output "vpc_id" {
+  description = "Deployment VPC id."
+  value       = module.network.vpc_id
+}
+
+output "selected_availability_zones" {
+  description = "Availability zones used by the deployment subnets."
+  value       = local.selected_availability_zones
+}
+
+output "product_image_bucket_arn" {
+  description = "ARN of the product-image bucket."
+  value       = module.storage.product_image_bucket_arn
+}
+
+output "private_artifacts_bucket_arn" {
+  description = "ARN of the private artifacts bucket."
+  value       = module.storage.private_artifacts_bucket_arn
+}
+
+output "app_host_instance_id" {
+  description = "EC2 instance id for the single app origin host."
+  value       = module.compute.instance_id
+}
+
+output "app_host_public_ip" {
+  description = "Elastic IP assigned to the single app origin host."
+  value       = module.compute.public_ip
+}
+
+output "database_cluster_identifier" {
+  description = "Aurora cluster identifier."
+  value       = module.database.cluster_identifier
+}
+
+output "database_endpoint" {
+  description = "Aurora writer endpoint."
+  value       = module.database.endpoint
+}
+
+output "database_port" {
+  description = "Aurora PostgreSQL listener port."
+  value       = module.database.port
+}
+
+output "database_master_secret_arn" {
+  description = "AWS-managed secret ARN for the Aurora master user."
+  value       = module.database.master_user_secret_arn
+}
+
+output "database_instance_parameter_group_name" {
+  description = "Instance parameter group enforcing idle session timeouts."
+  value       = module.database.instance_parameter_group_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution id for the public app edge."
+  value       = module.edge.cloudfront_distribution_id
+}
+
+output "cloudfront_distribution_arn" {
+  description = "CloudFront distribution ARN for the public app edge."
+  value       = module.edge.cloudfront_distribution_arn
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain name."
+  value       = module.edge.cloudfront_domain_name
+}
+
+output "viewer_certificate_arn" {
+  description = "Viewer ACM certificate ARN in us-east-1."
+  value       = module.edge.viewer_certificate_arn
 }

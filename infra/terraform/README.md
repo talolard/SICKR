@@ -1,4 +1,4 @@
-# Terraform Deployment Scaffold
+# Terraform Deployment Infrastructure
 
 This directory is the Terraform source of truth for the deployment surface
 described in `specs/deploy/`.
@@ -9,17 +9,29 @@ Current scope:
 - primary region: `eu-central-1`
 - secondary provider alias only for CloudFront ACM: `us-east-1`
 - one `dev` environment root
-- provider/tagging/state/account guardrails
+- provider, tagging, state, and account guardrails
 - hosted-zone discovery for `talperry.com`
 - GitHub OIDC provider for Actions
 - shared IAM roles for runtime, release publication, deploy, and Terraform apply
 - ECR repositories for `ui` and `backend`
 - Secrets Manager containers for runtime config, model providers, observability,
   and database access
+- one dedicated deployment VPC with public app-host subnets and private DB subnets
+- one single-host EC2 origin with an Elastic IP, SSM posture, and origin DNS
+- one Aurora PostgreSQL Serverless v2 cluster with pause-friendly parameter groups
+- one product-image bucket and one private-artifacts bucket
+- one CloudFront distribution, viewer ACM certificate, and public DNS alias
 
-This root intentionally stops at the shared foundation.
-It does not yet provision the VPC, EC2 host, Aurora cluster, S3 buckets, or
-CloudFront distribution.
+The Route53 hosted zone for `talperry.com` remains shared infrastructure that is
+discovered as a data source.
+Terraform manages only the deployment-owned records inside that zone:
+
+- `designagent.talperry.com`
+- `origin.designagent.talperry.com`
+- viewer-certificate validation records
+
+That keeps the deployment records in Terraform without taking ownership of the
+entire apex zone and its unrelated DNS state.
 
 ## Layout
 
@@ -32,16 +44,27 @@ infra/terraform/
       outputs.tf
       providers.tf
       versions.tf
+  modules/
+    compute/
+    database/
+    edge/
+    network/
+    storage/
   environments/
     dev/
       backend.tf
+      compute.tf
+      database.tf
+      edge.tf
       identity.tf
       locals.tf
       main.tf
+      network.tf
       outputs.tf
       providers.tf
       registry.tf
       secrets.tf
+      storage.tf
       terraform.tfvars.example
       variables.tf
       versions.tf
@@ -61,42 +84,89 @@ Then run:
 ```bash
 terraform -chdir=infra/terraform/bootstrap/state init
 terraform -chdir=infra/terraform/bootstrap/state apply
-terraform -chdir=infra/terraform/environments/dev init
+terraform -chdir=infra/terraform/environments/dev init -backend=false
 terraform -chdir=infra/terraform/environments/dev validate
-terraform -chdir=infra/terraform/environments/dev plan
+terraform -chdir=infra/terraform/environments/dev init
+terraform -chdir=infra/terraform/environments/dev plan -var-file=terraform.tfvars
 terraform -chdir=infra/terraform/environments/dev output -json
 ```
 
 ## Hosted Zone Strategy
 
 The existing `talperry.com` public hosted zone is not created by this stack.
-The environment root discovers it as a data source and later Terraform work
-will create the deployment records inside that existing zone.
+The environment root discovers it as a data source and creates only the
+deployment-owned records inside that existing zone.
 
 That keeps the bootstrap simple:
 
-- no one-time manual import is required just to read the hosted zone
-- later record resources still remain Terraform-managed
+- no risky full-zone import is required just to read the hosted zone
+- deployment-owned records still remain Terraform-managed
+- `allow_overwrite = true` lets the first apply adopt an existing manual record
+  for the same name if one is already present
 - account and region guardrails stay explicit from the first commit
 
-## Shared Foundation Outputs
+## Deploy Topology
 
-The environment root now exports the identifiers that release automation needs
-before the rest of the AWS stack exists:
+The `dev` environment root composes five thin modules:
+
+- `network`: VPC, subnets, route table, and security groups
+- `compute`: EC2 origin host, Elastic IP, and origin Route53 record
+- `database`: Aurora Serverless v2 and the pause-friendly parameter group
+- `storage`: product-image and private-artifact S3 buckets
+- `edge`: CloudFront, `us-east-1` ACM, validation records, and public aliases
+
+The CloudFront distribution encodes the required routing split from the deploy
+spec:
+
+- default behavior for the app origin
+- `/ag-ui/*` as the streaming-sensitive dynamic behavior
+- `/static/product-images/*` as the S3-backed image behavior
+
+The EC2 origin host stays intentionally simple:
+
+- single x86_64 instance in a public subnet
+- runtime IAM instance profile plus SSM core access
+- Elastic IP attached and published as `origin.designagent.talperry.com`
+- bootstrap user data that installs Docker, the Compose plugin, and `nginx`
+
+## Outputs
+
+The environment root exports the identifiers that release automation and manual
+operators need:
 
 - GitHub Actions OIDC provider ARN
 - ECR repository names and URIs
 - Secrets Manager secret names and ARNs
 - runtime, release-publish, deploy, and Terraform-apply role ARNs
-- reserved bucket names for product images and private artifacts
+- product-image and private-artifact bucket names and ARNs
+- app-host instance id and public IP
+- Aurora endpoint, port, and master-secret ARN
+- CloudFront distribution id, ARN, domain name, and viewer certificate ARN
 
 The release workflow should use the `release_publish_role_arn` output for the
 repository variable `AWS_RELEASE_ROLE_ARN`.
 
-## Next Steps
+The deploy workflow should use:
 
-Later tasks should add resources in this order:
+- `app_host_instance_id` as the SSM deploy target
+- `cloudfront_distribution_id` for targeted invalidation only if a later deploy
+  step truly needs it
+- the secret ARNs from Terraform outputs rather than rediscovering them in AWS
 
-1. VPC, EC2 host, and origin DNS
-2. Aurora and S3 buckets
-3. CloudFront, ACM, and public DNS
+## Validation
+
+Useful local validation for this tree is:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev init -backend=false
+terraform -chdir=infra/terraform/environments/dev validate
+terraform fmt -recursive infra/terraform
+```
+
+Useful live-account validation, once AWS credentials are refreshed, is:
+
+```bash
+terraform -chdir=infra/terraform/environments/dev init
+terraform -chdir=infra/terraform/environments/dev plan -var-file=terraform.tfvars
+terraform -chdir=infra/terraform/environments/dev output
+```

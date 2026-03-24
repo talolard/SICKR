@@ -1,6 +1,11 @@
 locals {
   public_hostname_trimmed = trimsuffix(var.public_hostname, ".")
   origin_hostname_trimmed = trimsuffix(var.origin_hostname, ".")
+  selected_availability_zones = slice(
+    data.aws_availability_zones.available.names,
+    0,
+    max(length(var.public_subnet_cidrs), length(var.database_subnet_cidrs)),
+  )
 
   name_prefix               = "${var.service_name}-${var.environment}"
   github_oidc_provider_url  = "https://token.actions.githubusercontent.com"
@@ -20,13 +25,14 @@ locals {
     database        = "tal-maria-ikea/${var.environment}/database"
   }
 
-  runtime_role_name         = "${local.name_prefix}-runtime"
-  runtime_instance_profile  = "${local.name_prefix}-runtime"
-  release_publish_role_name = "${local.name_prefix}-release-publish"
-  deploy_role_name          = "${local.name_prefix}-deploy"
-  terraform_apply_role_name = "${local.name_prefix}-terraform-apply"
-  runtime_secret_arns       = values(aws_secretsmanager_secret.runtime)[*].arn
-  ecr_repository_names      = { ui = "${var.service_name}/ui", backend = "${var.service_name}/backend" }
+  runtime_role_name               = "${local.name_prefix}-runtime"
+  runtime_instance_profile        = "${local.name_prefix}-runtime"
+  release_publish_role_name       = "${local.name_prefix}-release-publish"
+  deploy_role_name                = "${local.name_prefix}-deploy"
+  terraform_apply_role_name       = "${local.name_prefix}-terraform-apply"
+  runtime_secret_arns             = values(aws_secretsmanager_secret.runtime)[*].arn
+  ecr_repository_names            = { ui = "${var.service_name}/ui", backend = "${var.service_name}/backend" }
+  database_parameter_group_family = "aurora-postgresql${split(".", var.database_engine_version)[0]}"
 
   default_tags = merge(
     {
