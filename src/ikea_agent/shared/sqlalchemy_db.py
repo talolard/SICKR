@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
+
+DatabasePoolMode = Literal["queuepool", "nullpool"]
 
 
 def build_postgres_sqlalchemy_url(
@@ -28,12 +33,18 @@ def resolve_database_url(*, database_url: str | None) -> str:
     raise ValueError(msg)
 
 
-def create_database_engine(database_url: str) -> Engine:
+def create_database_engine(
+    database_url: str,
+    *,
+    pool_mode: DatabasePoolMode = "queuepool",
+) -> Engine:
     """Create a SQLAlchemy engine for one configured database URL."""
 
     kwargs: dict[str, object] = {"future": True}
-    if database_url.startswith("postgresql+psycopg://"):
+    if database_url.startswith("postgresql"):
         kwargs["pool_pre_ping"] = True
+        if pool_mode == "nullpool":
+            kwargs["poolclass"] = NullPool
     return create_engine(database_url, **kwargs)
 
 

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
+
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 const uploadUrl = new URL("../attachments", agUiUrl).toString();
 
@@ -44,6 +46,14 @@ export const POST = async (request: NextRequest): Promise<Response> => {
   });
 
   const text = await response.text();
+  if (!response.ok) {
+    logServerRouteEvent("error", "ui_attachment_upload_failed", {
+      route: "/api/attachments",
+      run_id: runId,
+      status_code: response.status,
+      thread_id: threadId,
+    });
+  }
   return new Response(text, {
     status: response.status,
     headers: {

@@ -12,6 +12,7 @@ def _clear_model_setting_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ALLOW_MODEL_REQUESTS",
         "APP_ALLOW_MODEL_REQUESTS",
         "DATABASE_URL",
+        "DATABASE_POOL_MODE",
         "APP_ENV",
         "LOGFIRE_ENVIRONMENT",
         "LOGFIRE_SERVICE_VERSION",
@@ -34,6 +35,7 @@ def test_app_settings_runtime_defaults_match_mark_17() -> None:
 
     assert settings.gemini_generation_model == "gemini-3.1-flash-lite-preview"
     assert settings.allow_model_requests is True
+    assert settings.database_pool_mode == "queuepool"
     assert settings.database_url == "postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent"
     assert settings.artifact_storage_backend == "local_disk"
 
@@ -54,6 +56,7 @@ def test_app_settings_accepts_deployed_runtime_contract_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.setenv("DATABASE_POOL_MODE", "nullpool")
     monkeypatch.setenv("LOGFIRE_ENVIRONMENT", "dev")
     monkeypatch.setenv("LOGFIRE_SERVICE_VERSION", "1.2.3")
     monkeypatch.setenv("IMAGE_SERVING_STRATEGY", "direct_public_url")
@@ -65,8 +68,11 @@ def test_app_settings_accepts_deployed_runtime_contract_values(
     settings = AppSettings(_env_file=None)
 
     assert settings.app_env == "dev"
+    assert settings.database_pool_mode == "nullpool"
     assert settings.logfire_environment == "dev"
     assert settings.logfire_service_version == "1.2.3"
+    assert settings.runtime_environment == "dev"
+    assert settings.release_version == "1.2.3"
     assert settings.image_serving_strategy == "direct_public_url"
     assert (
         settings.image_service_base_url == "https://designagent.talperry.com/static/product-images"

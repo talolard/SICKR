@@ -64,6 +64,7 @@ host deploy layer:
 | `LOGFIRE_ENVIRONMENT` | `dev` | explicit environment labeling for traces and logs |
 | `LOGFIRE_SERVICE_VERSION` | release version, for example `0.1.0` | ties telemetry to the published release |
 | `LOGFIRE_SEND_MODE` | `if-token-present` | deploy works without a token but exports when configured |
+| `DATABASE_POOL_MODE` | `nullpool` | deploy-friendly connection policy for Aurora pause-to-zero |
 | `ALLOW_MODEL_REQUESTS` | `1` | the deployed app should use the real model path |
 | `IMAGE_SERVING_STRATEGY` | `direct_public_url` | public launch requires bucket-backed image delivery |
 | `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base for runtime payloads and bootstrap seeding |
@@ -104,6 +105,8 @@ The UI container should receive only non-secret runtime values:
 | Variable | Required value for current deploy | Why |
 | --- | --- | --- |
 | `NODE_ENV` | `production` | production Next.js behavior |
+| `APP_ENV` | `dev` | release/environment tag for server-side UI logs |
+| `APP_RELEASE_VERSION` | release version, for example `0.1.0` | release tag for server-side UI logs |
 | `PY_AG_UI_URL` | `http://backend:8000/ag-ui/` | server-side UI routes call the backend over the internal container network |
 | `NEXT_PUBLIC_USE_MOCK_AGENT` | `0` | deployed UI must use the real backend |
 | `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED` | `0` | keep trace capture off unless explicitly enabled later |
@@ -133,6 +136,25 @@ cache:
 
 The deploy runner should consume release-manifest digests, fetch the required
 Secrets Manager values, and inject only the contract above into the containers.
+
+## Deploy-Time Entry Points
+
+The runtime contract now exposes these deploy-facing commands:
+
+- `uv run python scripts/deploy/apply_migrations.py`
+- `uv run python scripts/deploy/bootstrap_catalog.py`
+- `uv run python scripts/deploy/verify_seed_state.py`
+- `uv run python scripts/deploy/wait_for_http_ready.py --url <health-url>`
+- `uv run python scripts/deploy/prove_agui_streaming.py --url <ag-ui-agent-url>`
+
+Expected health URLs:
+
+- backend liveness: `/api/health/live`
+- backend readiness: `/api/health/ready`
+- UI liveness: `/api/health/live`
+- UI readiness: `/api/health/ready`
+
+`/api/health` remains the compatibility alias for UI readiness.
 
 ## Example Env Files
 

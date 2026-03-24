@@ -14,6 +14,7 @@ from pydantic_ai import Agent
 from pydantic_ai.ag_ui import handle_ag_ui_request
 
 from ikea_agent.chat.agents.index import AnyAgentDeps
+from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.persistence.revealed_preference_repository import (
     RevealedPreferenceRepository,
 )
@@ -221,18 +222,33 @@ def _populate_agent_state(
     )
 
 
+def _run_log_context(
+    *,
+    settings: AppSettings,
+    agent_name: str,
+    run_id: str,
+    thread_id: str,
+) -> dict[str, str]:
+    return {
+        "agent_name": agent_name,
+        "environment": settings.runtime_environment,
+        "release_version": settings.release_version,
+        "run_id": run_id,
+        "thread_id": thread_id,
+    }
+
+
 def _wrap_streaming_response(
     response: Response,
     *,
     run_history_repository: RunHistoryRepository | None,
+    settings: AppSettings,
     run_id: str,
     agent_name: str,
     thread_id: str,
 ) -> Response:
-    if (
-        run_history_repository is None
-        or not response.headers.get("content-type", "").startswith("text/event-stream")
-        or not hasattr(response, "body_iterator")
+    if not response.headers.get("content-type", "").startswith("text/event-stream") or not hasattr(
+        response, "body_iterator"
     ):
         return response
 
@@ -246,13 +262,23 @@ def _wrap_streaming_response(
                 captured_chunks.append(chunk_bytes)
                 yield chunk
         finally:
-            run_history_repository.record_run_event_trace(
-                run_id=run_id,
-                agui_event_trace_json=_serialize_agui_event_trace(
-                    raw_stream=b"".join(captured_chunks),
-                    agent_name=agent_name,
-                    thread_id=thread_id,
+            if run_history_repository is not None:
+                run_history_repository.record_run_event_trace(
                     run_id=run_id,
+                    agui_event_trace_json=_serialize_agui_event_trace(
+                        raw_stream=b"".join(captured_chunks),
+                        agent_name=agent_name,
+                        thread_id=thread_id,
+                        run_id=run_id,
+                    ),
+                )
+            logger.info(
+                "ag_ui_run_complete",
+                extra=_run_log_context(
+                    settings=settings,
+                    agent_name=agent_name,
+                    run_id=run_id,
+                    thread_id=thread_id,
                 ),
             )
 
@@ -276,6 +302,8 @@ def _register_ag_ui_routes(
     run_history_repository: RunHistoryRepository | None,
     revealed_preference_repository: RevealedPreferenceRepository | None,
 ) -> None:
+    settings = get_settings()
+
     @app.post("/ag-ui/agents/{agent_name}")
     @app.post("/ag-ui/agents/{agent_name}/")
     async def run_agent_ag_ui(request: Request, agent_name: str) -> Response:
@@ -296,6 +324,15 @@ def _register_ag_ui_routes(
             run_id=run_id,
             revealed_preference_repository=revealed_preference_repository,
         )
+        logger.info(
+            "ag_ui_run_start",
+            extra=_run_log_context(
+                settings=settings,
+                agent_name=agent_name,
+                run_id=run_id,
+                thread_id=thread_id,
+            ),
+        )
         on_complete = _build_on_complete(run_history_repository, run_id=run_id)
         try:
             with deps.attachment_store.bind_context(
@@ -311,6 +348,7 @@ def _register_ag_ui_routes(
                 return _wrap_streaming_response(
                     response,
                     run_history_repository=run_history_repository,
+                    settings=settings,
                     run_id=run_id,
                     agent_name=agent_name,
                     thread_id=thread_id,
@@ -318,4 +356,16 @@ def _register_ag_ui_routes(
         except Exception as exc:
             if run_history_repository is not None:
                 run_history_repository.record_run_failed(run_id=run_id, error_message=str(exc))
+            logger.exception(
+                "ag_ui_run_failed",
+                extra={
+                    **_run_log_context(
+                        settings=settings,
+                        agent_name=agent_name,
+                        run_id=run_id,
+                        thread_id=thread_id,
+                    ),
+                    "error_message": str(exc),
+                },
+            )
             raise

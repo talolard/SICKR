@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
+
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 
 export async function GET(
@@ -11,6 +13,13 @@ export async function GET(
   const response = await fetch(upstreamUrl, {
     method: "GET",
   });
+  if (!response.ok) {
+    logServerRouteEvent("error", "ui_attachment_read_failed", {
+      attachment_id: params.attachment_id,
+      route: "/attachments/[attachment_id]",
+      status_code: response.status,
+    });
+  }
   const body = await response.arrayBuffer();
   return new Response(body, {
     status: response.status,
@@ -21,4 +30,3 @@ export async function GET(
     },
   });
 }
-

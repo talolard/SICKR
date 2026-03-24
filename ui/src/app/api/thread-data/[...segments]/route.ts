@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { mockBackendFallbacksEnabled } from "@/lib/mockBackendFallbacks";
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
 
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 
@@ -33,6 +34,11 @@ async function proxyRequest(
       },
     });
   } catch (error) {
+    logServerRouteEvent("error", "ui_thread_data_proxy_failed", {
+      detail: error instanceof Error ? error.message : "Unknown backend thread-data failure.",
+      route: "/api/thread-data/[...segments]",
+      segments: params.segments,
+    });
     if (!mockBackendFallbacksEnabled()) {
       throw error;
     }

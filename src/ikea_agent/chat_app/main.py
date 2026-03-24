@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from logging import getLogger
 from pathlib import Path
 from typing import cast
 
@@ -29,13 +30,17 @@ from ikea_agent.chat_app.routes import (
 )
 from ikea_agent.chat_app.thread_routes import _register_thread_data_routes
 from ikea_agent.chat_app.trace_reports import TraceReportWriter
-from ikea_agent.config import get_settings
+from ikea_agent.config import AppSettings, get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
+from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
+from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
+
+logger = getLogger(__name__)
 
 
 def _build_agents(catalog: list[AgentCatalogItem]) -> dict[str, Agent[object, str]]:
@@ -82,6 +87,54 @@ def _build_web_apps(
     }
 
 
+def _initialize_runtime_schema(
+    *,
+    chat_runtime: ChatRuntime,
+    settings: AppSettings,
+) -> None:
+    """Apply local-only schema bootstrap helpers without masking deploy drift."""
+
+    if not hasattr(chat_runtime, "sqlalchemy_engine"):
+        return
+    engine = chat_runtime.sqlalchemy_engine
+    if engine.dialect.name == "sqlite":
+        ensure_persistence_schema(engine)
+        return
+    logger.info(
+        "postgres_schema_autobootstrap_disabled",
+        extra={
+            "database_dialect": engine.dialect.name,
+            "environment": settings.runtime_environment,
+            "release_version": settings.release_version,
+        },
+    )
+
+
+def _log_backend_startup(
+    *,
+    settings: AppSettings,
+    catalog: list[AgentCatalogItem],
+    mount_ag_ui: bool,
+    mount_web_ui: bool,
+) -> None:
+    """Emit the deploy-relevant startup summary once the app graph is wired."""
+
+    logger.info(
+        "backend_app_startup_configured",
+        extra={
+            "agent_count": len(catalog),
+            "database_pool_mode": settings.database_pool_mode,
+            "environment": settings.runtime_environment,
+            "feedback_capture_enabled": settings.feedback_capture_enabled,
+            "image_serving_strategy": settings.image_serving_strategy,
+            "mount_ag_ui": mount_ag_ui,
+            "mount_web_ui": mount_web_ui,
+            "release_version": settings.release_version,
+            "trace_capture_enabled": settings.trace_capture_enabled,
+        },
+    )
+
+
 def create_app(
     runtime: ChatRuntime | None = None,
     *,
@@ -91,10 +144,12 @@ def create_app(
     """Create FastAPI app and mount the pydantic-ai web chat UI."""
 
     settings = get_settings()
+    configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
     configure_logfire(settings)
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
+    _initialize_runtime_schema(chat_runtime=chat_runtime, settings=settings)
     asset_repository = (
         AssetRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -178,6 +233,13 @@ def create_app(
         for item in catalog:
             agent_mount_path = item["web_path"].rstrip("/")
             app.mount(agent_mount_path, web_apps[item["name"]])
+
+    _log_backend_startup(
+        settings=settings,
+        catalog=catalog,
+        mount_ag_ui=mount_ag_ui,
+        mount_web_ui=mount_web_ui,
+    )
 
     return app
 

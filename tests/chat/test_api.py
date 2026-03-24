@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -278,6 +279,29 @@ def test_create_app_does_not_mutate_schema_on_startup(tmp_path: Path) -> None:
 
     inspector = inspect(engine)
     assert not inspector.has_table("threads", schema="app")
+
+
+def test_create_app_skips_postgres_schema_autobootstrap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ensure_calls = {"count": 0}
+
+    def _record_ensure(_engine: object) -> None:
+        ensure_calls["count"] += 1
+
+    monkeypatch.setattr("ikea_agent.chat_app.main.ensure_persistence_schema", _record_ensure)
+    monkeypatch.setattr("ikea_agent.chat_app.main.list_agent_catalog", list)
+    runtime = SimpleNamespace(
+        sqlalchemy_engine=SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+    )
+
+    create_app(
+        runtime=cast("ChatRuntime", runtime),
+        mount_web_ui=False,
+        mount_ag_ui=False,
+    )
+
+    assert ensure_calls["count"] == 0
 
 
 def test_agent_ag_ui_route_exists() -> None:

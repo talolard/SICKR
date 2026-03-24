@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from logging import getLogger
 from pathlib import Path
 
 from alembic import command
@@ -11,7 +12,11 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 
 from ikea_agent.config import get_settings
+from ikea_agent.logging_config import configure_logging
+from ikea_agent.observability.logfire_setup import configure_logfire
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
+
+logger = getLogger(__name__)
 
 
 def _repo_root() -> Path:
@@ -32,15 +37,45 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
+    configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
+    configure_logfire(settings)
     database_url = resolve_database_url(database_url=args.database_url or settings.database_url)
     alembic_config = _alembic_config(database_url=database_url)
-    command.upgrade(alembic_config, "head")
+    logger.info(
+        "deployment_migration_start",
+        extra={
+            "environment": settings.runtime_environment,
+            "release_version": settings.release_version,
+        },
+    )
+    try:
+        command.upgrade(alembic_config, "head")
 
-    engine = create_database_engine(database_url)
-    with engine.connect() as connection:
-        revision = MigrationContext.configure(connection).get_current_revision()
+        engine = create_database_engine(
+            database_url,
+            pool_mode=settings.database_pool_mode,
+        )
+        with engine.connect() as connection:
+            revision = MigrationContext.configure(connection).get_current_revision()
+    except Exception:
+        logger.exception(
+            "deployment_migration_failed",
+            extra={
+                "environment": settings.runtime_environment,
+                "release_version": settings.release_version,
+            },
+        )
+        raise
 
-    print(json.dumps({"status": "ok", "current_revision": revision}, sort_keys=True))
+    logger.info(
+        "deployment_migration_succeeded",
+        extra={
+            "current_revision": revision,
+            "environment": settings.runtime_environment,
+            "release_version": settings.release_version,
+        },
+    )
+    print(json.dumps({"current_revision": revision, "status": "ok"}, sort_keys=True))
 
 
 if __name__ == "__main__":

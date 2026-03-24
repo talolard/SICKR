@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { listMockAgentItems, mockBackendFallbacksEnabled } from "@/lib/mockBackendFallbacks";
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
 
 type AgentItem = {
   name: string;
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest): Promise<Response> {
       headers: { "content-type": "application/json" },
     });
   } catch (error) {
+    logServerRouteEvent("error", "ui_agents_proxy_failed", {
+      detail: error instanceof Error ? error.message : "Unknown backend agents failure.",
+      route: "/api/agents",
+    });
     if (!mockBackendFallbacksEnabled()) {
       throw error;
     }

@@ -4,6 +4,7 @@ import {
   getMockAgentMetadata,
   mockBackendFallbacksEnabled,
 } from "@/lib/mockBackendFallbacks";
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
 
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 
@@ -30,6 +31,11 @@ export async function GET(
       headers: { "content-type": "application/json" },
     });
   } catch (error) {
+    logServerRouteEvent("error", "ui_agent_metadata_proxy_failed", {
+      agent,
+      detail: error instanceof Error ? error.message : "Unknown backend agent metadata failure.",
+      route: "/api/agents/[agent]/metadata",
+    });
     if (!mockBackendFallbacksEnabled()) {
       throw error;
     }
