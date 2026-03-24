@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from sqlalchemy import Engine
+from sqlalchemy import Engine, insert
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
@@ -24,6 +25,9 @@ from ikea_agent.config import get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator, BeadsTraceIssueResult
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
+from ikea_agent.shared.bootstrap import ensure_runtime_schema
+from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
+from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_session_factory
 
 
@@ -75,6 +79,37 @@ def _ag_ui_request_payload(user_text: str) -> dict[str, object]:
             }
         ],
     }
+
+
+def _ready_runtime(tmp_path: Path) -> _PersistenceRuntime:
+    engine = create_sqlite_engine(tmp_path / "readiness.sqlite3")
+    ensure_persistence_schema(engine)
+    ensure_runtime_schema(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            insert(seed_state),
+            [
+                {
+                    "system_name": POSTGRES_SEED_SYSTEM,
+                    "version": "seed-v1",
+                    "source_kind": "test",
+                    "status": "ready",
+                    "details_json": "{}",
+                    "updated_at": datetime(2026, 3, 24, tzinfo=UTC),
+                },
+                {
+                    "system_name": IMAGE_CATALOG_SEED_SYSTEM,
+                    "version": "seed-v1",
+                    "source_kind": "test",
+                    "status": "ready",
+                    "details_json": "{}",
+                    "updated_at": datetime(2026, 3, 24, tzinfo=UTC),
+                },
+            ],
+        )
+    return _PersistenceRuntime(
+        sqlalchemy_engine=engine, session_factory=create_session_factory(engine)
+    )
 
 
 def _build_stream_only_agent(stream_text: str) -> Agent[object, str]:
@@ -143,6 +178,52 @@ def test_agent_catalog_route_lists_registered_agents() -> None:
     payload = response.json()
     assert payload["agents"]
     assert any(item["name"] == "floor_plan_intake" for item in payload["agents"])
+
+
+def test_health_live_route_reports_ok() -> None:
+    client = TestClient(
+        create_app(
+            runtime=cast("ChatRuntime", object()),
+            mount_web_ui=False,
+            mount_ag_ui=False,
+        )
+    )
+
+    response = client.get("/api/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_ready_route_reports_ok_for_seeded_runtime(tmp_path: Path) -> None:
+    runtime = _ready_runtime(tmp_path)
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["checks"]["database"]["status"] == "ok"
+    assert payload["checks"]["schema"]["status"] == "ok"
+    assert payload["checks"]["seed_state"]["status"] == "ok"
+
+
+def test_health_ready_route_reports_not_ready_when_seed_state_is_missing(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "not-ready.sqlite3")
+    ensure_persistence_schema(engine)
+    ensure_runtime_schema(engine)
+    runtime = _PersistenceRuntime(
+        sqlalchemy_engine=engine, session_factory=create_session_factory(engine)
+    )
+    client = TestClient(create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False))
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["checks"]["seed_state"]["status"] == "failed"
 
 
 def test_agent_ag_ui_route_exists() -> None:

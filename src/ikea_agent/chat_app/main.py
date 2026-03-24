@@ -19,6 +19,7 @@ from ikea_agent.chat.agents.index import (
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.agui import _register_ag_ui_routes
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.health_routes import register_health_routes
 from ikea_agent.chat_app.product_image_routes import _register_product_image_routes
 from ikea_agent.chat_app.routes import (
     _build_attachment_store,
@@ -122,6 +123,10 @@ def create_app(
         ThreadQueryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
         else None
+    )
+    register_health_routes(
+        app,
+        engine=getattr(chat_runtime, "sqlalchemy_engine", None),
     )
     _register_attachment_routes(app, attachment_store)
     if settings.trace_capture_enabled and run_history_repository is not None:

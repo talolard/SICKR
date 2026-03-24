@@ -101,7 +101,7 @@ Recommended repo shape:
 
 Tagging posture:
 
-- every release gets one app-level semantic-release version
+- every release gets one app-level `release-please` version
 - both images are published under that exact immutable release version tag
 - both images should also carry the exact released commit SHA as a secondary
   immutable tag
@@ -145,9 +145,8 @@ format. The important part is that downstream deploy tooling receives one
 coherent release record for both services.
 
 `git_sha` must be the exact commit targeted by the immutable release tag.
-If semantic-release writes `CHANGELOG.md` and creates a release commit during
-the release workflow, the manifest must record that released commit SHA rather
-than the workflow's initial checkout SHA.
+For this repo, that means the merged `release-please` release-PR commit that is
+used to build and publish the release artifacts.
 
 ## Build-Time Versus Runtime Configuration
 
@@ -223,14 +222,17 @@ release ref, not from every successful `main` push.
 
 Release automation should:
 
-- resolve the release version via semantic-release, as defined in
+- resolve the release version from the merged `release-please` release-PR
+  commit, as defined in
   [40_semantic_release_and_commit_policy.md](./40_semantic_release_and_commit_policy.md)
 - build `ui` and `backend` images once
 - push both images to `ECR`
-- tag both images with the semantic-release version and the exact released
+- tag both images with the release version and the exact released
   commit SHA
 - capture the resulting digests
 - publish the release manifest
+- create the immutable Git tag and GitHub release only after artifact
+  publication succeeds
 - trigger deployment using those exact immutable references
 
 The deploy step should be separate from image build, even if both happen in the

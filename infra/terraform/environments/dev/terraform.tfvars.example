@@ -1,0 +1,6 @@
+aws_account_id = "046673074482"
+environment    = "dev"
+region         = "eu-central-1"
+hosted_zone_name = "talperry.com"
+public_hostname  = "designagent.talperry.com"
+origin_hostname  = "origin.designagent.talperry.com"

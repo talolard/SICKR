@@ -9,6 +9,7 @@ endif
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
+	deploy-migrate deploy-bootstrap deploy-verify-seed \
 	dev human dev-human dev-all dev-all-mock reset agent-start merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
@@ -86,6 +87,15 @@ backend-coverage:
 
 preflight:
 	./scripts/preflight.sh
+
+deploy-migrate:
+	$(UV_RUN) python -m scripts.deploy.apply_migrations
+
+deploy-bootstrap:
+	$(UV_RUN) python -m scripts.deploy.bootstrap_catalog
+
+deploy-verify-seed:
+	$(UV_RUN) python -m scripts.deploy.verify_seed_state
 
 chat:
 	$(UV_RUN) uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload
