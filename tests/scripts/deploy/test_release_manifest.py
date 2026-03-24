@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from scripts.deploy.read_release_version import read_release_version
+from scripts.deploy.release_manifest import read_release_manifest
 from scripts.deploy.write_release_manifest import main as write_release_manifest_main
 
 
@@ -62,6 +63,42 @@ def test_write_release_manifest_writes_expected_shape(
     assert manifest["backend_image"]["digest_ref"].endswith("@" + "sha256:" + "2" * 64)
 
 
+def test_read_release_manifest_round_trips_written_shape(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_path = tmp_path / "release-manifest.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "write_release_manifest.py",
+            "--app-version",
+            "1.4.2",
+            "--git-tag",
+            "v1.4.2",
+            "--git-sha",
+            "abc1234def5678",
+            "--ui-repository",
+            "repo/ui",
+            "--ui-digest",
+            "sha256:" + "1" * 64,
+            "--backend-repository",
+            "repo/backend",
+            "--backend-digest",
+            "sha256:" + "2" * 64,
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert write_release_manifest_main() == 0
+
+    manifest = read_release_manifest(output_path)
+    assert manifest.app_version == "1.4.2"
+    assert manifest.git_tag == "v1.4.2"
+    assert manifest.ui_image.digest_ref == f"repo/ui@{'sha256:' + '1' * 64}"
+    assert manifest.backend_image.digest_ref == f"repo/backend@{'sha256:' + '2' * 64}"
+
+
 def test_write_release_manifest_rejects_mismatched_tag(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -91,3 +128,26 @@ def test_write_release_manifest_rejects_mismatched_tag(
 
     with pytest.raises(ValueError, match="Expected git_tag"):
         write_release_manifest_main()
+
+
+def test_read_release_manifest_rejects_unknown_schema(tmp_path: Path) -> None:
+    path = tmp_path / "release-manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "app_version": "1.0.0",
+                "git_tag": "v1.0.0",
+                "git_sha": "abc1234",
+                "ui_image": {"repository": "repo/ui", "digest": "sha256:" + "1" * 64},
+                "backend_image": {
+                    "repository": "repo/backend",
+                    "digest": "sha256:" + "2" * 64,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema_version 1"):
+        read_release_manifest(path)

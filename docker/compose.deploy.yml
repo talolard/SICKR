@@ -1,0 +1,22 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE_REF}
+    restart: unless-stopped
+    env_file:
+      - backend.env
+      - backend.secrets.env
+    ports:
+      - 127.0.0.1:${BACKEND_HOST_PORT}:8000
+    volumes:
+      - ${HOST_ARTIFACT_ROOT_DIR}:/var/lib/ikea-agent/artifacts
+      - ${HOST_BOOTSTRAP_ROOT_DIR}:/var/lib/ikea-agent/bootstrap:ro
+
+  ui:
+    image: ${UI_IMAGE_REF}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    env_file:
+      - ui.env
+    ports:
+      - 127.0.0.1:${UI_HOST_PORT}:3000

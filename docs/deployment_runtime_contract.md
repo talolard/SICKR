@@ -123,16 +123,35 @@ The host deploy layer should work from these inputs:
 | `COMPOSE_PROJECT_NAME` | fixed deploy config: `ikea-agent-dev` |
 | `BACKEND_IMAGE_REF` | release manifest `backend_image.digest_ref` |
 | `UI_IMAGE_REF` | release manifest `ui_image.digest_ref` |
+| `RELEASE_VERSION` | release manifest `app_version` |
+| `RELEASE_GIT_TAG` | release manifest `git_tag` |
+| `RELEASE_GIT_SHA` | release manifest `git_sha` |
 | `BACKEND_APP_SECRET_ARN` | Terraform output |
 | `MODEL_PROVIDER_SECRET_ARN` | Terraform output |
 | `OBSERVABILITY_SECRET_ARN` | Terraform output |
 | `DATABASE_SECRET_ARN` | Terraform output |
 | `PRODUCT_IMAGE_BASE_URL` | fixed deploy config: `https://designagent.talperry.com/static/product-images` |
+| `BACKEND_HOST_PORT` | fixed deploy config: `8000` |
+| `UI_HOST_PORT` | fixed deploy config: `3000` |
+| `DEPLOY_STATE_DIR` | fixed deploy config: `/var/lib/ikea-agent/deploy` |
+| `HOST_ARTIFACT_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/artifacts` |
+| `HOST_BOOTSTRAP_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/bootstrap` |
 
 The host should mount one writable path for backend artifact materialization and
 cache:
 
 - `/var/lib/ikea-agent/artifacts`
+
+The host should also keep one deploy-state root:
+
+- `/var/lib/ikea-agent/deploy`
+
+That deploy-state root stores:
+
+- extracted release bundles under `releases/<git_tag>/`
+- the current deployed release tag
+- the previous deployed release tag
+- current and previous manifest snapshots for rollback bookkeeping
 
 The deploy runner should consume release-manifest digests, fetch the required
 Secrets Manager values, and inject only the contract above into the containers.
@@ -158,6 +177,33 @@ Expected health URLs:
 
 `/api/health` remains the compatibility alias for UI readiness.
 
+## Deploy Bundle Contract
+
+The release and deploy workflows now render one deploy bundle before invoking
+SSM. That bundle is the host-side execution unit and contains:
+
+- `release-manifest.json`
+- `host.env`
+- `backend.env`
+- `backend.secrets.env` placeholder, populated on host from Secrets Manager
+- `ui.env`
+- `docker-compose.yml`
+- `scripts/host_bundle_runner.py`
+
+The host runner is responsible for:
+
+1. reading the secret ARNs from `host.env`
+2. projecting secret JSON keys into `backend.secrets.env`
+3. pulling pinned image digests
+4. running migrations
+5. running bootstrap and seed verification
+6. starting backend, then UI
+7. waiting for backend readiness, UI readiness, and one lightweight app check
+8. updating current and previous deploy state markers
+
+Rollback uses the previous recorded deploy bundle by exact image digests and
+skips schema migration by default, because DB rollback is not assumed safe.
+
 ## Example Env Files
 
 These example files document the current expected values:
@@ -165,5 +211,6 @@ These example files document the current expected values:
 - `docker/env/backend.env.example`
 - `docker/env/ui.env.example`
 - `docker/env/host.env.example`
+- `docker/compose.deploy.yml`
 
 They are examples, not sources of secret truth.

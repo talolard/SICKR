@@ -15,6 +15,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: release-publish-${{ github.event_name }}-${{ github.event.pull_request.merge_commit_sha || inputs.git_ref || github.run_id }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: eu-central-1
   UI_ECR_REPOSITORY: ikea-agent/ui
@@ -31,6 +35,10 @@ jobs:
         startsWith(github.event.pull_request.title, 'chore(release):')
       )
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.tag }}
+      release_version: ${{ steps.version.outputs.version }}
+      manifest_artifact_name: release-manifest-${{ steps.version.outputs.tag }}
     steps:
       - name: Resolve release ref
         id: release_ref
@@ -174,3 +182,156 @@ jobs:
             --verify-tag \
             --title "${RELEASE_TAG}" \
             --generate-notes
+
+  deploy:
+    name: Deploy release to EC2 via SSM
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout deploy scripts
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download release manifest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.manifest_artifact_name }}
+          path: release-manifest
+
+      - name: Require deploy configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+          BACKEND_APP_SECRET_ARN: ${{ vars.BACKEND_APP_SECRET_ARN }}
+          MODEL_PROVIDER_SECRET_ARN: ${{ vars.MODEL_PROVIDER_SECRET_ARN }}
+          OBSERVABILITY_SECRET_ARN: ${{ vars.OBSERVABILITY_SECRET_ARN }}
+          DATABASE_SECRET_ARN: ${{ vars.DATABASE_SECRET_ARN }}
+        run: |
+          set -euo pipefail
+          for required_name in \
+            AWS_DEPLOY_ROLE_ARN \
+            DEPLOY_TARGET_TAG_KEY \
+            DEPLOY_TARGET_TAG_VALUE \
+            BACKEND_APP_SECRET_ARN \
+            MODEL_PROVIDER_SECRET_ARN \
+            OBSERVABILITY_SECRET_ARN \
+            DATABASE_SECRET_ARN
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Repository variable ${required_name} must be set before automatic deploy can run."
+              exit 1
+            fi
+          done
+
+      - name: Configure AWS deploy credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target instance
+        id: target_instance
+        env:
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+        run: |
+          set -euo pipefail
+          instance_ids="$(
+            aws ec2 describe-instances \
+              --filters \
+                "Name=tag:${DEPLOY_TARGET_TAG_KEY},Values=${DEPLOY_TARGET_TAG_VALUE}" \
+                "Name=instance-state-name,Values=running" \
+              --query 'Reservations[].Instances[].InstanceId' \
+              --output text
+          )"
+          count="$(wc -w <<<"${instance_ids}" | tr -d ' ')"
+          if [[ "${count}" -ne 1 ]]; then
+            echo "Expected exactly one running deploy target for tag ${DEPLOY_TARGET_TAG_KEY}=${DEPLOY_TARGET_TAG_VALUE}, found ${count}: ${instance_ids}"
+            exit 1
+          fi
+          echo "instance_id=${instance_ids}" >> "${GITHUB_OUTPUT}"
+
+      - name: Render release bundle
+        run: |
+          set -euo pipefail
+          python scripts/deploy/build_release_bundle.py \
+            --release-manifest release-manifest/release-manifest.json \
+            --output-dir deploy-bundle \
+            --backend-app-secret-arn "${{ vars.BACKEND_APP_SECRET_ARN }}" \
+            --model-provider-secret-arn "${{ vars.MODEL_PROVIDER_SECRET_ARN }}" \
+            --observability-secret-arn "${{ vars.OBSERVABILITY_SECRET_ARN }}" \
+            --database-secret-arn "${{ vars.DATABASE_SECRET_ARN }}"
+
+      - name: Write SSM command payload
+        run: |
+          set -euo pipefail
+          python scripts/deploy/write_ssm_command_payload.py \
+            --mode deploy \
+            --bundle-dir deploy-bundle \
+            --output ssm-parameters.json
+
+      - name: Send deploy command
+        id: send_command
+        env:
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+          RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          command_id="$(
+            aws ssm send-command \
+              --instance-ids "${INSTANCE_ID}" \
+              --document-name AWS-RunShellScript \
+              --comment "Deploy ${RELEASE_TAG}" \
+              --parameters file://ssm-parameters.json \
+              --query 'Command.CommandId' \
+              --output text
+          )"
+          echo "command_id=${command_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for deploy command
+        env:
+          COMMAND_ID: ${{ steps.send_command.outputs.command_id }}
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          while true; do
+            status="$(
+              aws ssm get-command-invocation \
+                --command-id "${COMMAND_ID}" \
+                --instance-id "${INSTANCE_ID}" \
+                --query 'Status' \
+                --output text
+            )"
+            case "${status}" in
+              Pending|InProgress|Delayed)
+                sleep 5
+                ;;
+              Success)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text
+                exit 0
+                ;;
+              *)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text || true
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardErrorContent' \
+                  --output text || true
+                echo "Deploy command failed with status ${status}."
+                exit 1
+                ;;
+            esac
+          done
