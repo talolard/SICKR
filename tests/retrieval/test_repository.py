@@ -216,6 +216,33 @@ def test_read_image_urls_by_product_keys_returns_ordered_proxy_urls(tmp_path: Pa
     }
 
 
+def test_read_image_urls_by_product_keys_can_derive_same_host_public_urls(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_4b.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            product_images.update()
+            .where(product_images.c.canonical_product_key == "1-DE")
+            .values(public_url=None, crawl_run_id="catalog-run-9")
+        )
+
+    repository = CatalogRepository(engine)
+
+    image_urls = repository.read_image_urls_by_product_keys(
+        canonical_product_keys=["1-DE"],
+        serving_strategy="direct_public_url",
+        base_url="https://designagent.talperry.com/static/product-images",
+    )
+
+    assert image_urls == {
+        "1-DE": (
+            "https://designagent.talperry.com/static/product-images/catalog-run-9/1-primary.jpg",
+            "https://designagent.talperry.com/static/product-images/catalog-run-9/1-detail.jpg",
+        )
+    }
+
+
 def test_resolve_product_image_path_returns_ranked_local_path(tmp_path: Path) -> None:
     engine = create_sqlite_engine(tmp_path / "retrieval_test_5.sqlite")
     _setup_schema(engine)

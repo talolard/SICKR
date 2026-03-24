@@ -171,6 +171,7 @@ def build_postgres_snapshot(
                 repo_root=repo_root,
                 image_catalog_root=resolved_image_catalog_root,
                 image_catalog_run_id=resolved_image_catalog_run_id,
+                product_image_base_url=settings.image_service_base_url,
                 force=True,
             )
             neighbor_count = _materialize_neighbor_rows(

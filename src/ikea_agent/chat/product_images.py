@@ -22,6 +22,17 @@ def build_ranked_image_url(*, product_id: str, ordinal: int, base_url: str | Non
     )
 
 
+def build_seeded_public_image_url(
+    *,
+    base_url: str,
+    run_id: str,
+    image_asset_key: str,
+) -> str:
+    """Return the deterministic same-host public URL used for deployed image seeding."""
+
+    return _join_base_url(base_url=base_url, path=f"/{run_id}/{image_asset_key}")
+
+
 def build_catalog_image_url(
     *,
     product_id: str,
@@ -29,11 +40,20 @@ def build_catalog_image_url(
     public_url: str | None,
     serving_strategy: Literal["backend_proxy", "direct_public_url"],
     base_url: str | None,
+    image_asset_key: str | None = None,
+    crawl_run_id: str | None = None,
 ) -> str:
     """Return the runtime image URL for one ordered image row."""
 
-    if serving_strategy == "direct_public_url" and public_url:
-        return public_url
+    if serving_strategy == "direct_public_url":
+        if public_url:
+            return public_url
+        if base_url and image_asset_key and crawl_run_id:
+            return build_seeded_public_image_url(
+                base_url=base_url,
+                run_id=crawl_run_id,
+                image_asset_key=image_asset_key,
+            )
     if ordinal == _DEFAULT_PRODUCT_IMAGE_ORDINAL:
         return build_primary_image_url(product_id=product_id, base_url=base_url)
     return build_ranked_image_url(product_id=product_id, ordinal=ordinal, base_url=base_url)

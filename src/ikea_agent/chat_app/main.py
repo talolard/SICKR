@@ -106,6 +106,10 @@ def create_app(
     attachment_store = _build_attachment_store(
         root_dir=Path(settings.artifact_root_dir),
         asset_repository=asset_repository,
+        storage_backend_kind=settings.artifact_storage_backend,
+        s3_bucket=settings.artifact_s3_bucket,
+        s3_prefix=settings.artifact_s3_prefix,
+        s3_region=settings.artifact_s3_region,
     )
     trace_writer = TraceReportWriter(root_dir=Path(settings.trace_root_dir))
     beads_creator = BeadsTraceIssueCreator(repo_root=Path.cwd())

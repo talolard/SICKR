@@ -54,7 +54,8 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
     assert row.mime_type == "image/png"
     assert row.file_name == "room.png"
     assert row.size_bytes == len(b"png-bytes")
-    assert Path(row.storage_path).exists()
+    assert row.storage_path.startswith("local://attachments/user-upload/thread-asset/")
+    assert stored.path.exists()
 
 
 def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> None:
@@ -111,3 +112,28 @@ def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
 
     assert first.ref.attachment_id != second.ref.attachment_id
     assert len(thread_count) == 2
+
+
+def test_resolve_uses_persisted_storage_locator(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(
+        tmp_path / "artifacts",
+        asset_repository=asset_repository,
+    )
+
+    with store.bind_context(thread_id="thread-locator", run_id="run-1"):
+        stored = store.save_image_bytes(
+            content=b"resolved-png",
+            mime_type="image/png",
+            filename="resolved.png",
+            kind="analysis_output",
+        )
+
+    resolved = store.resolve(stored.ref.attachment_id)
+
+    assert resolved is not None
+    assert resolved.storage_locator.startswith(
+        "local://attachments/generated/thread-locator/run-1/"
+    )
+    assert resolved.path.read_bytes() == b"resolved-png"

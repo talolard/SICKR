@@ -387,6 +387,7 @@ def test_attachment_upload_and_fetch_round_trip() -> None:
     download_response = client.get(attachment_ref["uri"])
     assert download_response.status_code == 200
     assert download_response.content == b"fake-image-bytes"
+    assert download_response.headers["cache-control"] == "private, no-store"
     assert download_response.headers["content-type"].startswith("image/png")
 
 

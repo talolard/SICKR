@@ -11,6 +11,7 @@ from ikea_agent.chat.product_images import (
     build_catalog_image_url,
     build_primary_image_url,
     build_ranked_image_url,
+    build_seeded_public_image_url,
     product_id_from_canonical_key,
 )
 from ikea_agent.chat.runtime import ChatRuntime
@@ -53,10 +54,36 @@ def test_build_catalog_image_url_can_pass_through_public_urls() -> None:
     )
 
 
+def test_build_catalog_image_url_can_derive_seeded_public_url() -> None:
+    assert (
+        build_catalog_image_url(
+            product_id="348326",
+            ordinal=1,
+            public_url=None,
+            serving_strategy="direct_public_url",
+            base_url="https://designagent.talperry.com/static/product-images",
+            image_asset_key="348326-primary.jpg",
+            crawl_run_id="catalog-run-1",
+        )
+        == "https://designagent.talperry.com/static/product-images/catalog-run-1/348326-primary.jpg"
+    )
+
+
 def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:
     assert build_primary_image_url(product_id="90458891") == "/static/product-images/90458891"
     assert build_ranked_image_url(product_id="90458891", ordinal=3) == (
         "/static/product-images/90458891/3"
+    )
+
+
+def test_build_seeded_public_image_url_uses_run_scoped_same_host_path() -> None:
+    assert (
+        build_seeded_public_image_url(
+            base_url="https://designagent.talperry.com/static/product-images",
+            run_id="catalog-run-1",
+            image_asset_key="90458891-primary.jpg",
+        )
+        == "https://designagent.talperry.com/static/product-images/catalog-run-1/90458891-primary.jpg"
     )
 
 

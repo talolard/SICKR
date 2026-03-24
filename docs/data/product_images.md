@@ -13,6 +13,12 @@ shared sidecar output root:
 - Rows may point at local shared-root files, direct public URLs, or both.
 - Backend-proxy serving only works for rows with a readable `local_path` on disk.
 - Image ranking prefers `is_og_image`, then `image_rank`, then canonical URL.
+- When `IMAGE_SERVICE_BASE_URL` is set during bootstrap, seeded `public_url`
+  values should use the same-host deployment shape:
+  - `https://designagent.talperry.com/static/product-images/<crawl-run-id>/<image-asset-key>`
+- In `direct_public_url` mode, runtime lookup prefers seeded `public_url`, then
+  can derive the same deterministic same-host URL from `crawl_run_id` and
+  `image_asset_key` when the row has not been backfilled yet.
 
 ## UI Contract
 

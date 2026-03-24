@@ -17,6 +17,10 @@ def _clear_model_setting_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LOGFIRE_SERVICE_VERSION",
         "IMAGE_SERVING_STRATEGY",
         "IMAGE_SERVICE_BASE_URL",
+        "ARTIFACT_STORAGE_BACKEND",
+        "ARTIFACT_S3_BUCKET",
+        "ARTIFACT_S3_PREFIX",
+        "ARTIFACT_S3_REGION",
         "LOGFIRE_TOKEN",
         "APP_LOGFIRE_TOKEN",
     )
@@ -31,6 +35,7 @@ def test_app_settings_runtime_defaults_match_mark_17() -> None:
     assert settings.gemini_generation_model == "gemini-3.1-flash-lite-preview"
     assert settings.allow_model_requests is True
     assert settings.database_url == "postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent"
+    assert settings.artifact_storage_backend == "local_disk"
 
 
 @pytest.mark.usefixtures("_clear_model_setting_env")
@@ -66,6 +71,23 @@ def test_app_settings_accepts_deployed_runtime_contract_values(
     assert (
         settings.image_service_base_url == "https://designagent.talperry.com/static/product-images"
     )
+
+
+@pytest.mark.usefixtures("_clear_model_setting_env")
+def test_app_settings_accepts_private_s3_artifact_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARTIFACT_STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("ARTIFACT_S3_BUCKET", "private-artifacts")
+    monkeypatch.setenv("ARTIFACT_S3_PREFIX", "dev")
+    monkeypatch.setenv("ARTIFACT_S3_REGION", "eu-central-1")
+
+    settings = AppSettings(_env_file=None)
+
+    assert settings.artifact_storage_backend == "s3"
+    assert settings.artifact_s3_bucket == "private-artifacts"
+    assert settings.artifact_s3_prefix == "dev"
+    assert settings.artifact_s3_region == "eu-central-1"
 
 
 @pytest.mark.usefixtures("_clear_model_setting_env")

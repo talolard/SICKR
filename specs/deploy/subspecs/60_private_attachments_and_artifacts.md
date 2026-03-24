@@ -46,6 +46,9 @@ Today `app.assets.storage_path` contains a local filesystem path.
 In deployed AWS environments, treat that field as a storage locator whose value
 is an S3 object key or bucket-relative path.
 We do not need to rename the column in v1.
+For the app-side contract, locator strings such as `local://...` or
+`s3://bucket/key` are acceptable durable values as long as the browser contract
+stays on stable attachment ids.
 
 ## Artifact Families
 
