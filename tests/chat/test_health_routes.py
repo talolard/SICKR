@@ -23,7 +23,7 @@ def test_readiness_payload_without_engine_reports_skipped_checks() -> None:
 
     assert status_code == 503
     assert payload["status"] == "not_ready"
-    checks = payload["checks"]
+    checks = cast("dict[str, dict[str, str]]", payload["checks"])
     assert checks["database"]["status"] == "failed"
     assert checks["schema"]["status"] == "skipped"
     assert checks["seed_state"]["status"] == "skipped"
@@ -91,6 +91,6 @@ def test_readiness_payload_handles_connection_failures() -> None:
 
     assert status_code == 503
     assert payload["status"] == "not_ready"
-    checks = payload["checks"]
+    checks = cast("dict[str, dict[str, str]]", payload["checks"])
     assert checks["database"]["status"] == "failed"
     assert "database offline" in checks["database"]["detail"]
