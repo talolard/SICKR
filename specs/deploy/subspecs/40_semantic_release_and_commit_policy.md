@@ -126,6 +126,10 @@ Practical rule:
 - the PR must be squash-merged
 - the squash commit message must match the PR title
 
+The concrete enforcement workflow is:
+
+- `.github/workflows/pr-title-main.yml`
+
 ## Release Please Files
 
 The release-preparation toolchain should use repo-root files:
@@ -134,6 +138,11 @@ The release-preparation toolchain should use repo-root files:
 - `.release-please-manifest.json`
 - `CHANGELOG.md`
 - `version.txt`
+
+The concrete automation files are:
+
+- `.github/workflows/release-please.yml`
+- `.github/workflows/release-publish.yml`
 
 The intended posture is:
 
@@ -194,6 +203,18 @@ assume that.
 
 If `release-please` needs a Tal-provided GitHub token or app credential, treat
 that as an explicit Tal-owned gate in the deployment project.
+
+The implemented workflow therefore uses this auth posture:
+
+- default to `github.token`
+- allow an override via repository secret `RELEASE_PLEASE_TOKEN`
+- if Tal wants release-please-created PRs to trigger additional checks or needs
+  stronger branch-protection compatibility, populate `RELEASE_PLEASE_TOKEN` as
+  the explicit Tal-owned gate
+
+For artifact publication, the publish workflow also requires the repository
+variable `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the AWS publish
+role by OIDC instead of baking static AWS credentials into CI.
 
 Do not silently widen bot permissions.
 

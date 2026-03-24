@@ -90,6 +90,19 @@ The deployed images should assume:
 - public product images come from the separate S3 + CloudFront path
 - private attachments and generated artifacts live outside container-local disk
 
+The concrete near-term file layout is:
+
+- `docker/backend.Dockerfile`
+- `docker/ui.Dockerfile`
+- `scripts/deploy/read_release_version.py`
+- `scripts/deploy/write_release_manifest.py`
+
+The current build posture intentionally targets `linux/amd64` for release
+publication.
+That is a dependency-compatibility decision, not a scale decision.
+It exists because the current Python runtime dependency set includes packages
+such as `usd-core` that do not publish the needed wheels for `linux/arm64`.
+
 ## Registry Contract
 
 `ECR` is the target registry for both images.
@@ -143,6 +156,11 @@ Suggested shape:
 The exact serialization format can be JSON or another simple machine-readable
 format. The important part is that downstream deploy tooling receives one
 coherent release record for both services.
+
+The implemented manifest writer lives at
+`scripts/deploy/write_release_manifest.py`.
+That script is the canonical serializer for the release manifest until a later
+deploy tool replaces it.
 
 `git_sha` must be the exact commit targeted by the immutable release tag.
 For this repo, that means the merged `release-please` release-PR commit that is
@@ -234,6 +252,19 @@ Release automation should:
 - create the immutable Git tag and GitHub release only after artifact
   publication succeeds
 - trigger deployment using those exact immutable references
+
+The concrete workflow split is:
+
+- `.github/workflows/release-please.yml` prepares and updates release PRs on
+  `release`
+- `.github/workflows/release-publish.yml` runs only after a merged
+  `chore(release): ...` PR on `release`, then builds images, pushes them,
+  writes the manifest, and only then creates the immutable tag and GitHub
+  release
+
+For release publication, the current workflow expects the repository variable
+`AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the publish role via OIDC
+before pushing to ECR.
 
 The deploy step should be separate from image build, even if both happen in the
 same workflow file.

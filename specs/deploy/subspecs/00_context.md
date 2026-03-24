@@ -92,6 +92,10 @@ Shared release posture for the near term:
 - We release from a release branch (that is tagged) it is a promotion branch from `main`
 - app-level semver is acceptable
 - release-please is the preferred semver and release-note automation mechanism
+- the implemented release automation now consists of:
+  - `.github/workflows/pr-title-main.yml`
+  - `.github/workflows/release-please.yml`
+  - `.github/workflows/release-publish.yml`
 - release-tooling and commit-policy details live in a dedicated subspec
 - full release and deploy automation is a first-class project goal, not
   post-launch polish

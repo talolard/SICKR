@@ -1,0 +1,176 @@
+name: Release Publish
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [release]
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Release commit to publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  AWS_REGION: eu-central-1
+  UI_ECR_REPOSITORY: ikea-agent/ui
+  BACKEND_ECR_REPOSITORY: ikea-agent/backend
+
+jobs:
+  publish:
+    name: Build, push, manifest, and publish
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.pull_request.merged == true &&
+        github.event.pull_request.base.ref == 'release' &&
+        startsWith(github.event.pull_request.title, 'chore(release):')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release ref
+        id: release_ref
+        env:
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          INPUT_GIT_REF: ${{ inputs.git_ref }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_GIT_REF:-}" ]]; then
+            echo "ref=${INPUT_GIT_REF}" >> "${GITHUB_OUTPUT}"
+          elif [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
+            echo "ref=${MERGE_COMMIT_SHA}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Could not determine the release ref to publish."
+            exit 1
+          fi
+
+      - name: Checkout release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.release_ref.outputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(python scripts/deploy/read_release_version.py)"
+          tag="$(python scripts/deploy/read_release_version.py --with-v-prefix)"
+          git_sha="$(git rev-parse HEAD)"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "git_sha=${git_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Reject duplicate immutable tag
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release tag ${RELEASE_TAG} already exists; refusing to overwrite an immutable tag."
+            exit 1
+          fi
+
+      - name: Require AWS publish role configuration
+        env:
+          AWS_RELEASE_ROLE_ARN: ${{ vars.AWS_RELEASE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${AWS_RELEASE_ROLE_ARN}" ]]; then
+            echo "Repository variable AWS_RELEASE_ROLE_ARN must be set before release publication can push to ECR."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_RELEASE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login_ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image
+        id: backend_image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/backend.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:${{ steps.version.outputs.tag }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:sha-${{ steps.version.outputs.git_sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.version.outputs.git_sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Build and push UI image
+        id: ui_image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/ui.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:${{ steps.version.outputs.tag }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:sha-${{ steps.version.outputs.git_sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.version.outputs.git_sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Write release manifest
+        run: |
+          set -euo pipefail
+          python scripts/deploy/write_release_manifest.py \
+            --app-version "${{ steps.version.outputs.version }}" \
+            --git-tag "${{ steps.version.outputs.tag }}" \
+            --git-sha "${{ steps.version.outputs.git_sha }}" \
+            --ui-repository "${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}" \
+            --ui-digest "${{ steps.ui_image.outputs.digest }}" \
+            --backend-repository "${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}" \
+            --backend-digest "${{ steps.backend_image.outputs.digest }}" \
+            --output release-manifest.json
+
+      - name: Upload release manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ steps.version.outputs.tag }}
+          path: release-manifest.json
+          if-no-files-found: error
+
+      - name: Create immutable Git tag
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${RELEASE_TAG}" "${{ steps.version.outputs.git_sha }}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "${RELEASE_TAG}" release-manifest.json \
+            --verify-tag \
+            --title "${RELEASE_TAG}" \
+            --generate-notes
