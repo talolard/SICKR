@@ -249,15 +249,18 @@ Release automation should:
 
 - resolve the release version from the merged `release-please` release-PR
   commit, as defined in
-  [40_semantic_release_and_commit_policy.md](./40_semantic_release_and_commit_policy.md)
+  [40_release_please_and_commit_policy.md](./40_release_please_and_commit_policy.md)
 - build `ui` and `backend` images once
 - push both images to `ECR`
 - tag both images with the release version and the exact released
   commit SHA
 - capture the resulting digests
 - publish the release manifest
-- create the immutable Git tag and GitHub release only after artifact
-  publication succeeds
+- create the immutable Git tag only after artifact publication succeeds
+- create the GitHub release only after the immutable tag exists and the release
+  manifest can be attached to it
+- generate final GitHub release notes at GitHub-release publication time, not
+  during release-PR preparation
 - trigger deployment using those exact immutable references
 
 The concrete workflow split is:
@@ -266,8 +269,17 @@ The concrete workflow split is:
   `release`
 - `.github/workflows/release-publish.yml` runs only after a merged
   `chore(release): ...` PR on `release`, then builds images, pushes them,
-  writes the manifest, and only then creates the immutable tag and GitHub
-  release
+  writes the manifest, creates the immutable tag, and only then creates the
+  GitHub release
+
+Current release-preparation behavior should stay explicit:
+
+- `release-please` is the reviewed release-preparation step, not the final
+  publication step
+- `CHANGELOG.md` and `version.txt` are updated on the release PR branch so Tal
+  can inspect them before merge
+- the final GitHub release becomes the published external release record only
+  after image publication and manifest creation succeed
 
 For release publication, the current workflow expects the repository variable
 `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the publish role via OIDC
@@ -351,20 +363,23 @@ deploys should not depend on CDN invalidation.
 This subspec intentionally defers:
 
 - the exact Dockerfile contents
-- the exact GitHub Actions workflow names and triggers for release
 - the exact deploy runner implementation on the host
 - the exact migration and bootstrap commands
 - vulnerability-scanning policy beyond basic registry support
-- semver automation details
 - exact secret-store wiring and rotation policy
+- future refinements to release-please config or release-branch protections
 
 ## Summary
 
 The near-term Dockerization and CI/CD shape is:
 
 - two deployable images: `ui` and `backend`
+- `release-please` prepares the release PR, changelog, and version file on
+  `release`
 - CI builds them once per release and pushes them to `ECR`
 - CI emits one release manifest containing both pinned image digests
+- CI creates the immutable tag and GitHub release only after artifact
+  publication succeeds
 - infra deploys those exact artifacts and injects runtime config externally
 - PR CI stays verification-only
 - rollback is redeploying the previous pinned release

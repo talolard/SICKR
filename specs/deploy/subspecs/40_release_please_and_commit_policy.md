@@ -21,9 +21,9 @@ Do not treat a merged release PR as a fully published release by itself.
 For this repository:
 
 - `main` remains the integration branch
-- `release` remains the publishing branch
+- `release` remains the promotion and publish branch
 - conventional-commit intent is enforced at the `main` boundary
-- `release-please` maintains the release PR on `release`
+- `release-please` maintains the draft release PR on `release`
 - the release PR updates `CHANGELOG.md` and `version.txt`
 - a separate publish workflow builds and pushes the container images
 - the immutable Git tag and GitHub release are created only after both
@@ -34,8 +34,8 @@ publication depend on real artifacts instead of only on changelog generation.
 
 ## Why Release Please Fits Better
 
-`release-please` is a better fit than `semantic-release` for this repo because
-it separates:
+`release-please` is a better fit than a fully implicit publish step for this
+repo because it separates:
 
 - release preparation
 - release review
@@ -52,25 +52,38 @@ The real release artifact is:
 We want a release process that is easy for one developer to reason about.
 A release PR is easier to inspect and debug than a fully implicit publish step.
 
-## Branch Workflow
+## Branch Model
+
+The deployment project currently uses stacked work that descends from
+`tal/deployproject`.
+That does not replace the application release authority.
+
+The branch roles are:
+
+- stacked deploy work branches -> implementation and review within the
+  deployment project
+- `main` -> normal integration branch for releasable application history
+- `release` -> promotion and publication branch consumed by release tooling
 
 Required branch flow:
 
-1. feature work lands in PRs targeting `main`
-2. PRs into `main` use conventional-commit-style PR titles
-3. PRs into `main` are squash-merged so the resulting commit on `main` carries
+1. deployment-project work lands on `tal/deployproject` or a descendant stacked
+   branch while the project is in flight
+2. releasable changes eventually land in PRs targeting `main`
+3. PRs into `main` use conventional-commit-style PR titles
+4. PRs into `main` are squash-merged so the resulting commit on `main` carries
    the release intent
-4. releasable work is promoted from `main` into `release`
-5. `release-please` runs on `release` and creates or updates a release PR
-6. merging that release PR updates `CHANGELOG.md` and `version.txt` on `release`
-7. publish automation runs from that merged release commit
-8. only after artifact publication succeeds do we create:
-   - the immutable `vX.Y.Z` Git tag
-   - the GitHub release
+5. releasable work is promoted from `main` into `release`
+6. promotion from `main` to `release` must preserve the semantic commits that
+   `release-please` analyzes
+7. do not merge feature branches directly into `release`
 
-Do not squash `main` into `release`.
-Promotion from `main` to `release` should preserve the semantic commits that
-`release-please` must analyze.
+Practical promotion rule:
+
+- merge or fast-forward `main` into `release`
+- do not squash `main` into `release`
+- do not hand-author release commits on `release` except for the
+  `release-please` release PR
 
 ## Commit Policy
 
@@ -110,7 +123,7 @@ Examples:
 
 ## Where Enforcement Happens
 
-We do not need to enforce semantic commit messages on every local feature branch
+We do not need to enforce semantic commit messages on every local feature-branch
 commit.
 
 The important boundary is the code that lands on `main` and later reaches
@@ -130,9 +143,9 @@ The concrete enforcement workflow is:
 
 - `.github/workflows/pr-title-main.yml`
 
-## Release Please Files
+## Release PR Behavior
 
-The release-preparation toolchain should use repo-root files:
+The release-preparation toolchain uses these repo-root files:
 
 - `release-please-config.json`
 - `.release-please-manifest.json`
@@ -144,17 +157,54 @@ The concrete automation files are:
 - `.github/workflows/release-please.yml`
 - `.github/workflows/release-publish.yml`
 
-The intended posture is:
+The current helper-config posture is:
 
-- `release-please` updates `CHANGELOG.md`
-- `release-please` updates `version.txt`
-- application release automation reads the version from the merged release
-  commit, not from an inferred Git tag that does not exist yet
+- `release-please-config.json` uses the `simple` strategy
+- `release-please-config.json` keeps the release PR in draft state by default
+- `.release-please-manifest.json` tracks the current published app version
+
+The intended release-PR behavior is:
+
+- `release-please` runs on pushes to `release`
+- `release-please` creates or updates one draft release PR on `release`
+- the release PR updates `CHANGELOG.md`
+- the release PR updates `version.txt`
+- Tal can inspect the changelog and version bump before merge
+- merging the release PR creates the release commit that publish automation
+  treats as the source of truth
+
+The publish workflow currently keys off merged release PRs titled
+`chore(release): ...`.
+That title shape is therefore part of the release-publication contract and
+should stay aligned with the release-please configuration and workflow wiring.
 
 Use the `simple` release strategy unless a stronger repo-specific reason appears
 later.
 That keeps the release state small and avoids mutating packaging metadata that
 is not otherwise part of the deployment contract.
+
+## Changelog And Release Notes
+
+For this repo, changelog generation and final release notes are related but not
+the same artifact.
+
+Required behavior:
+
+- `release-please` updates `CHANGELOG.md` on the release PR
+- `version.txt` is updated on the same release PR
+- the reviewed release PR content is the in-repo source of truth before publish
+- the GitHub release is created only after image publication and manifest
+  creation succeed
+- the GitHub release may generate GitHub-native release notes from the immutable
+  tag at final publication time
+- the published GitHub release should attach the release manifest so operators
+  can retrieve the exact image digests that were released
+
+Operational rule:
+
+- the changelog is the reviewed release-preparation record in Git
+- the GitHub release is the external publication record created after artifact
+  publication succeeds
 
 ## Publication Contract
 
@@ -173,6 +223,16 @@ This is the core invariant:
 
 - changelog preparation alone is not release publication
 - artifact publication must succeed before the release becomes official
+
+Recommended publication order:
+
+1. merge the `release-please` release PR on `release`
+2. read the app version from the merged release commit
+3. build and push both images
+4. capture the resulting digests
+5. write and publish the release manifest
+6. create the immutable Git tag for that same commit
+7. create the GitHub release from that immutable tag
 
 ## Immutability Rules
 
@@ -229,14 +289,16 @@ Useful validation for this subspec means:
   definition of a published release
 - confirm the branch rules do not contradict the stacked-branch rule from
   [guiding_principles.md](../guiding_principles.md)
+- confirm the helper config and workflow names referenced here match the
+  repository files that currently implement the release-policy surface
 
 ## Summary
 
 The near-term release policy should be:
 
 - conventional commits on `main`
-- promotion from `main` to `release`
-- `release-please` prepares the release PR on `release`
+- promotion from `main` to `release` without squashing away releasable history
+- `release-please` prepares the draft release PR on `release`
 - merging that PR updates the changelog and version file
-- separate automation builds and publishes images
+- separate automation builds and publishes images plus the release manifest
 - only then do we create the immutable tag and GitHub release

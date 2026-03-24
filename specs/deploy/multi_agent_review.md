@@ -166,14 +166,14 @@ Current recommendation:
 
 ### 2. Semver tooling status
 
-- the top-level synthesized deployment spec still treats semver tooling choice
-  as deferred
-- [subspecs/40_semantic_release_and_commit_policy.md](./subspecs/40_semantic_release_and_commit_policy.md)
-  already selects `semantic-release`
+- the top-level synthesized deployment spec previously treated semver tooling
+  choice as deferred
+- the release-policy subspec has now been rewritten around `release-please`
+  rather than `semantic-release`
 
 Current recommendation:
-- replace the semantic-release-specific plan with a release-please-based release
-  automation plan
+- use the release-please-based release automation plan defined in
+  [subspecs/40_release_please_and_commit_policy.md](./subspecs/40_release_please_and_commit_policy.md)
 - do not let release-tool choice block higher-risk runtime validation work
 
 ## Aggregated Recommendation
@@ -227,7 +227,8 @@ Important planning context from the human owner:
 - image build/publish workflow
 - deploy workflow via SSM
 - rollback-by-previous-manifest
-- release-please / PR-title enforcement if not already landed
+- consume the chosen `release-please` plus PR-title-enforcement contract and
+  finish publication/deploy automation on top of it
 
 ### Phase 6: Rehearsal And Launch
 
@@ -332,8 +333,8 @@ Answer:
   tagged with the release version, and the release manifest exists
 
 Planning impact:
-- the current semantic-release-specific subspec is now stale and should be
-  replaced by a release-please-oriented release-tooling spec
+- the canonical release-tooling subspec should stay release-please-oriented and
+  remain the source of truth for follow-on workflow implementation
 - release automation remains critical, but its implementation should favor a
   more reviewable release-PR-centered model
 - the task plan should include a conditional Tal-owned credential/bootstrap gate
