@@ -200,7 +200,7 @@ Required provider-level tags:
 - `Service = ikea-agent`
 - `Environment = dev`
 - `ManagedBy = terraform`
-- `Repository = tal_maria_ikea`
+- `Repository = talolard/SICKR`
 - `Owner = tal`
 
 Required resource-level tags where applicable:

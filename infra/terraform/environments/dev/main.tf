@@ -7,11 +7,6 @@ data "aws_route53_zone" "public" {
   private_zone = false
 }
 
-locals {
-  public_hostname_trimmed = trimsuffix(var.public_hostname, ".")
-  origin_hostname_trimmed = trimsuffix(var.origin_hostname, ".")
-}
-
 check "account_guardrail" {
   assert {
     condition     = data.aws_caller_identity.current.account_id == var.aws_account_id
@@ -21,7 +16,7 @@ check "account_guardrail" {
 
 check "region_guardrail" {
   assert {
-    condition     = data.aws_region.current.name == var.region
+    condition     = data.aws_region.current.region == var.region
     error_message = "Terraform is authenticated against the wrong primary region."
   }
 }

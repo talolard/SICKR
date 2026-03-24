@@ -6,10 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
-from scripts.docker_deps.seed_postgres import seed_postgres_database
-
 from ikea_agent.config import get_settings
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
+from scripts.docker_deps.seed_postgres import seed_postgres_database
 
 
 def _repo_root() -> Path:

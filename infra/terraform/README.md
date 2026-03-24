@@ -11,22 +11,37 @@ Current scope:
 - one `dev` environment root
 - provider/tagging/state/account guardrails
 - hosted-zone discovery for `talperry.com`
+- GitHub OIDC provider for Actions
+- shared IAM roles for runtime, release publication, deploy, and Terraform apply
+- ECR repositories for `ui` and `backend`
+- Secrets Manager containers for runtime config, model providers, observability,
+  and database access
 
-This scaffold intentionally does not provision the full deployment yet.
-Its job is to lock the root layout and the provider/state contract so later
-Terraform work lands into a stable structure instead of reinventing it.
+This root intentionally stops at the shared foundation.
+It does not yet provision the VPC, EC2 host, Aurora cluster, S3 buckets, or
+CloudFront distribution.
 
 ## Layout
 
 ```text
 infra/terraform/
   README.md
-  environments/
-    dev/
-      backend.tf
+  bootstrap/
+    state/
       main.tf
       outputs.tf
       providers.tf
+      versions.tf
+  environments/
+    dev/
+      backend.tf
+      identity.tf
+      locals.tf
+      main.tf
+      outputs.tf
+      providers.tf
+      registry.tf
+      secrets.tf
       terraform.tfvars.example
       variables.tf
       versions.tf
@@ -44,6 +59,8 @@ export AWS_REGION=eu-central-1
 Then run:
 
 ```bash
+terraform -chdir=infra/terraform/bootstrap/state init
+terraform -chdir=infra/terraform/bootstrap/state apply
 terraform -chdir=infra/terraform/environments/dev init
 terraform -chdir=infra/terraform/environments/dev validate
 terraform -chdir=infra/terraform/environments/dev plan
@@ -62,11 +79,24 @@ That keeps the bootstrap simple:
 - later record resources still remain Terraform-managed
 - account and region guardrails stay explicit from the first commit
 
+## Shared Foundation Outputs
+
+The environment root now exports the identifiers that release automation needs
+before the rest of the AWS stack exists:
+
+- GitHub Actions OIDC provider ARN
+- ECR repository names and URIs
+- Secrets Manager secret names and ARNs
+- runtime, release-publish, deploy, and Terraform-apply role ARNs
+- reserved bucket names for product images and private artifacts
+
+The release workflow should use the `release_publish_role_arn` output for the
+repository variable `AWS_RELEASE_ROLE_ARN`.
+
 ## Next Steps
 
 Later tasks should add resources in this order:
 
-1. IAM, Secrets Manager, and ECR
-2. VPC, EC2 host, and origin DNS
-3. Aurora and S3 buckets
-4. CloudFront, ACM, and public DNS
+1. VPC, EC2 host, and origin DNS
+2. Aurora and S3 buckets
+3. CloudFront, ACM, and public DNS

@@ -15,11 +15,6 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from scripts.docker_deps.seed_postgres import (
-    SeedSummary,
-    _fingerprint_paths,
-    seed_postgres_database,
-)
 from sqlalchemy import Engine, delete, func, insert, select
 
 from ikea_agent.config import get_settings
@@ -37,6 +32,11 @@ from ikea_agent.shared.db_contract import (
 from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_database_engine
 from ingest.precompute_embedding_neighbors import build_neighbor_rows
+from scripts.docker_deps.seed_postgres import (
+    SeedSummary,
+    _fingerprint_paths,
+    seed_postgres_database,
+)
 
 _POSTGRES_DB = "ikea_agent"
 _POSTGRES_USER = "ikea"

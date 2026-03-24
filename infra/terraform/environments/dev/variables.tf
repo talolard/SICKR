@@ -46,6 +46,18 @@ variable "origin_hostname" {
   default     = "origin.designagent.talperry.com"
 }
 
+variable "github_repository" {
+  description = "GitHub repository allowed to assume the release and deploy roles."
+  type        = string
+  default     = "talolard/SICKR"
+}
+
+variable "release_branch" {
+  description = "Release branch allowed to publish release artifacts."
+  type        = string
+  default     = "release"
+}
+
 variable "extra_tags" {
   description = "Additional environment tags applied on top of the shared base tags."
   type        = map(string)

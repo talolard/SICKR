@@ -94,8 +94,12 @@ The concrete near-term file layout is:
 
 - `docker/backend.Dockerfile`
 - `docker/ui.Dockerfile`
+- `docker/env/backend.env.example`
+- `docker/env/ui.env.example`
+- `docker/env/host.env.example`
 - `scripts/deploy/read_release_version.py`
 - `scripts/deploy/write_release_manifest.py`
+- `docs/deployment_runtime_contract.md`
 
 The current build posture intentionally targets `linux/amd64` for release
 publication.
@@ -184,6 +188,9 @@ Build-time inputs should not include:
 - long-lived secrets of any kind
 
 Runtime configuration belongs outside the images.
+
+The explicit deploy contract for that runtime configuration now lives in
+`docs/deployment_runtime_contract.md`.
 
 Expected runtime-only values include:
 

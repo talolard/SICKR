@@ -1,11 +1,4 @@
 locals {
-  base_tags = {
-    Service     = var.service_name
-    Environment = var.environment
-    ManagedBy   = "terraform"
-    Project     = "deployproject"
-    Repository  = "talolard/SICKR"
-  }
 }
 
 provider "aws" {
@@ -13,7 +6,7 @@ provider "aws" {
   allowed_account_ids = [var.aws_account_id]
 
   default_tags {
-    tags = merge(local.base_tags, var.extra_tags)
+    tags = local.default_tags
   }
 }
 
@@ -23,6 +16,6 @@ provider "aws" {
   allowed_account_ids = [var.aws_account_id]
 
   default_tags {
-    tags = merge(local.base_tags, var.extra_tags)
+    tags = local.default_tags
   }
 }

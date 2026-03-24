@@ -11,6 +11,9 @@ This file is the shared context layer for the focused subspecs under
 Read [guiding_principles.md](../guiding_principles.md) for the standing
 decision rules that should shape future epics, tasks, and implementation
 choices.
+Read [deployment_runtime_contract.md](../../docs/deployment_runtime_contract.md)
+for the concrete deploy-time environment contract that later infra and host
+automation should consume.
 
 Branching rule:
 - start all deployment-project implementation from `tal/deployproject` or from
