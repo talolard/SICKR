@@ -245,29 +245,57 @@ Release automation should start only after code has already passed normal CI.
 For this phase, it should run from the release branch or an equivalent tagged
 release ref, not from every successful `main` push.
 
+Target contract for this phase:
+
 Release automation should:
 
 - resolve the release version from the merged `release-please` release-PR
   commit, as defined in
-  [40_semantic_release_and_commit_policy.md](./40_semantic_release_and_commit_policy.md)
+  [40_release_please_and_commit_policy.md](./40_release_please_and_commit_policy.md)
 - build `ui` and `backend` images once
 - push both images to `ECR`
 - tag both images with the release version and the exact released
   commit SHA
 - capture the resulting digests
 - publish the release manifest
-- create the immutable Git tag and GitHub release only after artifact
-  publication succeeds
+- create the immutable Git tag only after artifact publication succeeds
+- create the GitHub release only after the immutable tag exists and the release
+  manifest can be attached to it
+- generate final GitHub release notes at GitHub-release publication time, not
+  during release-PR preparation
 - trigger deployment using those exact immutable references
 
-The concrete workflow split is:
+Current implemented workflow split:
 
 - `.github/workflows/release-please.yml` prepares and updates release PRs on
   `release`
-- `.github/workflows/release-publish.yml` runs only after a merged
-  `chore(release): ...` PR on `release`, then builds images, pushes them,
-  writes the manifest, and only then creates the immutable tag and GitHub
-  release
+- `.github/workflows/release-publish.yml` runs after either:
+  - a merged `chore(release): ...` PR on `release`
+  - a manual `workflow_dispatch` run with an explicit `git_ref`
+- that workflow currently builds images, pushes them, writes the manifest,
+  creates the immutable tag, and only then attempts the GitHub release
+
+Current unresolved safety gaps:
+
+- the publish trigger does not yet verify stronger release-please provenance
+  than the merged-PR title prefix
+- manual `workflow_dispatch` remains available and can publish any supplied ref
+- the workflow is not yet failure-safe after tag push:
+  - if `gh release create` fails after the tag is pushed, the rerun is blocked
+    by the duplicate-tag guard
+- the release branch model and promotion enforcement are still policy and
+  workflow intent; they are not yet fully enforced repo controls
+
+Current release-preparation behavior should stay explicit:
+
+- `release-please` is the reviewed release-preparation step, not the final
+  publication step
+- `CHANGELOG.md` and `version.txt` are updated on the release PR branch so Tal
+  can inspect them before merge
+- a successful completion of the publish workflow is currently the closest thing
+  to the published external release record
+- the stronger guarantee that publication is fully failure-safe after image
+  publication is not yet true in the current workflow implementation
 
 For release publication, the current workflow expects the repository variable
 `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the publish role via OIDC
@@ -351,20 +379,32 @@ deploys should not depend on CDN invalidation.
 This subspec intentionally defers:
 
 - the exact Dockerfile contents
-- the exact GitHub Actions workflow names and triggers for release
 - the exact deploy runner implementation on the host
 - the exact migration and bootstrap commands
 - vulnerability-scanning policy beyond basic registry support
-- semver automation details
 - exact secret-store wiring and rotation policy
+- future refinements to release-please config or release-branch protections
 
 ## Summary
 
-The near-term Dockerization and CI/CD shape is:
+The near-term Dockerization and CI/CD target shape is:
 
 - two deployable images: `ui` and `backend`
+- `release-please` prepares the release PR, changelog, and version file on
+  `release`
 - CI builds them once per release and pushes them to `ECR`
 - CI emits one release manifest containing both pinned image digests
+- the intended end state is that CI creates the immutable tag and GitHub
+  release only after artifact publication succeeds and in a failure-safe way
 - infra deploys those exact artifacts and injects runtime config externally
 - PR CI stays verification-only
 - rollback is redeploying the previous pinned release
+
+What is true today:
+
+- the repo already has the split between release preparation and release
+  publication workflows
+- the current publication workflow does build, push, and manifest before tag
+  creation
+- it does not yet prove strict release-please provenance
+- it does not yet make final tag-plus-GitHub-release publication failure-safe

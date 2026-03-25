@@ -40,9 +40,10 @@ Branching rule:
   since a dedicated Terraform spec will follow separately.
 - [x] Pick the `main -> release` promotion model if a `release` branch exists:
   made that the recommended branch model.
-- [x] Semver tooling is still undecided: kept app-level semver, but explicitly
-  deferred the choice of `semantic-release`, semantic-commit enforcement, or a
-  manual alternative.
+- [x] Release tooling should now be explicit: selected `release-please` for
+  release PR preparation, changelog generation, and version-file updates, while
+  keeping final publication gated on built and pushed artifacts plus a release
+  manifest.
 - [x] Ignore Helm/commit-SHA conventions for this repo: omitted that line of
   critique from the synthesis.
 - [x] Split static product images from dynamic attachments: added a public image
@@ -235,21 +236,53 @@ Recommended artifact model:
 
 Recommended deploy flow:
 
-1. promote validated code from `main` to `release`
-2. assign the next application semver
-3. CI builds and pushes `ui` and `backend` images to ECR
-4. CI triggers an SSM-based deploy on the EC2 host
-5. the host pulls the exact image versions and runs `docker compose up -d`
+1. merge feature work into `main` with conventional-commit-style PR titles and
+   squash merge so the resulting `main` history carries release intent
+2. promote validated `main` commits into `release` without squashing away the
+   commit history that release tooling must analyze
+3. `release-please` creates or updates a draft release PR on `release`
+4. merging that release PR updates `CHANGELOG.md` and `version.txt` on
+   `release`
+5. publish automation builds and pushes both `ui` and `backend` images to ECR
+6. publish automation writes the release manifest and records the exact image
+   digests
+7. only after both images exist and the manifest exists do we create the
+   immutable Git tag and GitHub release
+8. CI then triggers an SSM-based deploy on the EC2 host
+9. the host pulls the exact pinned image references and runs
+   `docker compose up -d`
 
-Semver automation is still intentionally deferred. This document does not choose
-between:
+Current implementation honesty note:
 
-- `semantic-release`
-- semantic-commit enforcement
-- manual version assignment
+- this is still the target release/publication flow, not a fully proven current
+  repository guarantee
+- the current repo already has separate release-preparation and
+  release-publication workflows
+- the current publish workflow still accepts:
+  - a merged PR into `release` whose title starts with `chore(release):`
+  - a manual `workflow_dispatch` run for an explicit ref
+- the current publish workflow writes the manifest before tag push, but it
+  still pushes the immutable tag before creating the GitHub release
+- that means a post-tag GitHub-release failure can leave the repo in a partial
+  publication state and reruns currently fail on the duplicate-tag guard
+- concrete release-please provenance checks and failure-safe final publication
+  remain unresolved implementation work
 
-The deployment recommendation only needs the release shape, not the final
-versioning tool.
+Release-note behavior should be split clearly:
+
+- `release-please` is responsible for the reviewed in-repo changelog and
+  version-file update
+- the final GitHub release is created only after artifact publication and may
+  generate GitHub-native release notes from the immutable tag at that point
+
+Auth and publication gates should also stay explicit:
+
+- if the default GitHub token is insufficient for the desired release-please
+  PR behavior, `RELEASE_PLEASE_TOKEN` is a Tal-owned gate
+- image publication requires the repository variable `AWS_RELEASE_ROLE_ARN` so
+  GitHub Actions can assume the AWS publish role by OIDC
+- a release is not considered published until both images are built, pushed,
+  tagged with the release version, and captured in the release manifest
 
 ### 7. Minimum Operational Contract
 
@@ -307,7 +340,7 @@ The following are intentionally deferred to the next layer of planning:
 - exact health endpoint contracts
 - exact migration/bootstrap implementation
 - rollback runbook details
-- semver enforcement tooling
+- future refinements to branch protection and release-please workflow policy
 
 ## Bottom Line
 
@@ -321,8 +354,8 @@ The corrected near-term picture is:
   read access
 - Aurora Serverless v2 PostgreSQL, latest supported `pgvector`-capable version,
   explicitly tuned for pause-to-zero
-- a simple `main -> release` promotion flow with app-level semver and SSM-based
-  deployment
+- a simple `main -> release` promotion flow with `release-please`,
+  manifest-backed artifact publication, and SSM-based deployment
 
 That is a more cohesive and correct deployment recommendation than the current
 doc, without pretending we have already finished the Terraform or AWS

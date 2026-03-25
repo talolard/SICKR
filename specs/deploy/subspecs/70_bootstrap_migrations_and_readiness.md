@@ -258,7 +258,7 @@ This subspec depends on and constrains other deploy specs:
 - [30_dockerization_and_cicd.md](./30_dockerization_and_cicd.md)
   - CI/CD must treat migration, bootstrap, and readiness as required deploy
     steps after image pull and before success
-- [40_semantic_release_and_commit_policy.md](./40_semantic_release_and_commit_policy.md)
+- [40_release_please_and_commit_policy.md](./40_release_please_and_commit_policy.md)
   - release versioning does not change the launch gates, but every tagged
     release must satisfy them before it is considered real
 

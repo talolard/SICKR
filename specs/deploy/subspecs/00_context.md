@@ -92,16 +92,35 @@ Shared storage posture for the near term:
 Shared release posture for the near term:
 
 - `main` remains the normal integration branch
-- We release from a release branch (that is tagged) it is a promotion branch from `main`
+- `release` is the intended promotion and publish branch fed from `main`
 - app-level semver is acceptable
-- release-please is the preferred semver and release-note automation mechanism
+- release-please is the chosen semver and release-preparation mechanism
+- release-please is intended to own draft release PRs plus `CHANGELOG.md` and
+  `version.txt` updates on `release`
 - the implemented release automation now consists of:
   - `.github/workflows/pr-title-main.yml`
   - `.github/workflows/release-please.yml`
   - `.github/workflows/release-publish.yml`
+- the release-helper config now consists of:
+- `release-please-config.json`
+- `.release-please-manifest.json`
 - release-tooling and commit-policy details live in a dedicated subspec
 - full release and deploy automation is a first-class project goal, not
   post-launch polish
+
+Important honesty note:
+
+- the repository does not yet enforce the full intended release contract
+- the current publish workflow accepts either:
+  - a merged PR into `release` whose title starts with `chore(release):`
+  - a manual `workflow_dispatch` run with an explicit ref
+- the current publish workflow writes the release manifest before tagging, but
+  it still pushes the immutable Git tag before creating the GitHub release
+- if GitHub release creation fails after tag push, reruns currently fail on the
+  duplicate-tag guard
+- stronger release-please provenance checks, failure-safe final publication, and
+  concrete `main -> release` promotion enforcement remain unresolved work rather
+  than completed guarantees
 
 ## Authoring Rule For Subspecs
 
@@ -118,7 +137,7 @@ Future deployment subspecs should:
 - `10_cloudfront_product_images.md`
 - `20_terraform_aws_setup.md`
 - `30_dockerization_and_cicd.md`
-- `40_semantic_release_and_commit_policy.md`
+- `40_release_please_and_commit_policy.md`
 - `50_edge_and_app_routing.md`
 - `60_private_attachments_and_artifacts.md`
 - `70_bootstrap_migrations_and_readiness.md`
