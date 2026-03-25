@@ -213,7 +213,7 @@ resource "aws_security_group" "backend_service" {
 
 resource "aws_security_group" "database" {
   name        = "${var.name_prefix}-database"
-  description = "Private PostgreSQL access from backend ECS tasks only."
+  description = "Private PostgreSQL access from the single app host only."
   vpc_id      = aws_vpc.main.id
 
   ingress {
