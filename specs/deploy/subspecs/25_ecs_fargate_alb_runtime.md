@@ -137,15 +137,15 @@ Optional hardening later:
 
 ## Internal Backend URL
 
-The UI task should call the backend through the ALB path split, not through
-Docker-local networking and not through Cloud Map in v1.
+The UI task needs two different upstream contracts:
 
-Required runtime value:
+- `PY_AG_UI_URL=http://<alb-dns>/ag-ui/` for AG-UI and CopilotKit agent traffic
+- `BACKEND_PROXY_BASE_URL=http://<alb-dns>:8000/` for Next server routes that
+  proxy backend-owned REST endpoints such as `/api/agents*`
 
-- `PY_AG_UI_URL=http://<alb-dns>/ag-ui/`
-
-This is one extra hop, but it avoids adding service discovery just to let the
-UI call the backend.
+That keeps the public browser contract stable while making the internal proxy
+hop explicit. The backend-only ALB listener is reachable from the UI ECS
+service security group, not from the public internet.
 
 ## One-Off Tasks
 
@@ -192,4 +192,5 @@ Useful validation for this runtime shape includes:
 - one successful Fargate migration task
 - one successful Fargate seed-verification task
 - one successful ECS service rollout for both `backend` and `ui`
-- one public-path validation on `designagent.talperry.com`
+- one public-path validation on `designagent.talperry.com`, including
+  `/api/agents` and `/api/agents/{agent}/metadata`

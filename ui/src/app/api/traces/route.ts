@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
+import { buildBackendProxyUrl } from "@/lib/backendProxy";
+
 const traceDisabledMessage =
   "Trace capture is unavailable. Enable TRACE_CAPTURE_ENABLED on the backend or hide the UI flag.";
 
 function buildUpstreamUrl(pathname: string, search: string): URL {
-  const upstream = new URL(pathname, agUiUrl);
+  const upstream = buildBackendProxyUrl(pathname, search);
   upstream.search = search;
   return upstream;
 }

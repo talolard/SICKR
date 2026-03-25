@@ -109,7 +109,8 @@ The UI ECS task definition should remain secret-free and should carry:
 | `NODE_ENV` | `production` | production Next.js behavior |
 | `APP_ENV` | `dev` | release/environment tag for server-side UI logs |
 | `APP_RELEASE_VERSION` | release version, patched by CI | release tag for server-side UI logs |
-| `PY_AG_UI_URL` | `http://<alb-dns>/ag-ui/` | server-side UI routes call the backend through the shared ALB path split |
+| `PY_AG_UI_URL` | `http://<alb-dns>/ag-ui/` | CopilotKit and AG-UI client traffic target the public AG-UI listener path |
+| `BACKEND_PROXY_BASE_URL` | `http://<alb-dns>:8000/` | Next server route proxies call backend-owned REST endpoints through a backend-only ALB listener |
 | `NEXT_PUBLIC_USE_MOCK_AGENT` | `0` | deployed UI must use the real backend |
 | `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED` | `0` | keep trace capture off unless explicitly enabled later |
 
@@ -186,4 +187,5 @@ Useful validation for this contract includes:
 - CI dry runs or real workflow validation for task-definition registration
 - one real Fargate migration task run before the first public launch
 - one real public-path validation on `designagent.talperry.com` after the ECS
-  services are live
+  services are live, including `/api/agents` and
+  `/api/agents/{agent}/metadata`

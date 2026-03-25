@@ -8,8 +8,9 @@ import {
 } from "@copilotkit/runtime";
 import { NextRequest } from "next/server";
 
+import { agUiBaseUrl, buildBackendProxyUrl } from "@/lib/backendProxy";
+
 const serviceAdapter = new ExperimentalEmptyAdapter();
-const baseAgUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui";
 const FALLBACK_AGENT_KEYS = ["agent_floor_plan_intake", "agent_search", "agent_image_analysis"] as const;
 
 type AgentCatalogItem = {
@@ -23,11 +24,8 @@ type AgentCatalogResponse = {
 };
 
 function normalizedAgUiBase(): string {
-  return baseAgUiUrl.endsWith("/") ? baseAgUiUrl.slice(0, -1) : baseAgUiUrl;
-}
-
-function backendBaseUrl(): string {
-  return new URL("../", `${normalizedAgUiBase()}/`).toString();
+  const configured = agUiBaseUrl();
+  return configured.endsWith("/") ? configured.slice(0, -1) : configured;
 }
 
 function resolveAgUiUrl(agentKey: string): string {
@@ -51,7 +49,7 @@ function resolveCatalogAgentKey(item: AgentCatalogItem): string | null {
 
 function resolveCatalogAgUiUrl(item: AgentCatalogItem): string | null {
   if (typeof item.ag_ui_path === "string" && item.ag_ui_path.startsWith("/")) {
-    return new URL(item.ag_ui_path, backendBaseUrl()).toString();
+    return new URL(item.ag_ui_path, buildBackendProxyUrl("/")).toString();
   }
   if (typeof item.name === "string" && item.name.length > 0) {
     return `${normalizedAgUiBase()}/agents/${item.name}`;
@@ -60,7 +58,7 @@ function resolveCatalogAgUiUrl(item: AgentCatalogItem): string | null {
 }
 
 async function fetchAgentCatalog(): Promise<AgentCatalogItem[]> {
-  const url = new URL("api/agents", backendBaseUrl());
+  const url = buildBackendProxyUrl("/api/agents");
   try {
     const response = await fetch(url, {
       method: "GET",

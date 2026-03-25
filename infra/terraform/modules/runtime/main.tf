@@ -70,6 +70,7 @@ locals {
   backend_container_name = "backend"
   ui_container_name      = "ui"
   alb_dns_url            = "http://${aws_lb.main.dns_name}"
+  backend_proxy_base_url = "http://${aws_lb.main.dns_name}:${var.backend_container_port}/"
   backend_environment = [
     { name = "APP_ENV", value = var.environment },
     { name = "LOG_LEVEL", value = "INFO" },
@@ -101,6 +102,7 @@ locals {
     { name = "APP_ENV", value = var.environment },
     { name = "APP_RELEASE_VERSION", value = "bootstrap" },
     { name = "PY_AG_UI_URL", value = "${local.alb_dns_url}/ag-ui/" },
+    { name = "BACKEND_PROXY_BASE_URL", value = local.backend_proxy_base_url },
     { name = "NEXT_PUBLIC_USE_MOCK_AGENT", value = "0" },
     { name = "NEXT_PUBLIC_TRACE_CAPTURE_ENABLED", value = "0" },
   ]
@@ -276,6 +278,17 @@ resource "aws_lb_listener" "http" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.ui.arn
+  }
+}
+
+resource "aws_lb_listener" "backend_proxy" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = var.backend_container_port
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
   }
 }
 

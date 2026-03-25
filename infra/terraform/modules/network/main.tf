@@ -144,6 +144,15 @@ resource "aws_security_group" "alb" {
   })
 }
 
+resource "aws_vpc_security_group_ingress_rule" "alb_backend_proxy_from_ui" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.ui_service.id
+  from_port                    = var.app_backend_origin_port
+  to_port                      = var.app_backend_origin_port
+  ip_protocol                  = "tcp"
+  description                  = "Internal backend proxy ingress from the UI ECS service"
+}
+
 resource "aws_security_group" "ui_service" {
   name        = "${var.name_prefix}-ui-service"
   description = "UI ECS service ingress from the ALB only."

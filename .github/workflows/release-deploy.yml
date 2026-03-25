@@ -14,6 +14,7 @@ permissions:
 
 env:
   AWS_REGION: eu-central-1
+  PUBLIC_APP_BASE_URL: https://designagent.talperry.com
 
 jobs:
   deploy:
@@ -115,11 +116,39 @@ jobs:
           set -euo pipefail
           python - <<'PY' backend-service.json ui-service.json
           import json
+          import subprocess
           import sys
           from pathlib import Path
 
           backend_service = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           ui_service = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          target_group_arn = backend_service["loadBalancers"][0]["targetGroupArn"]
+          target_group_payload = json.loads(
+              subprocess.check_output(
+                  [
+                      "aws",
+                      "elbv2",
+                      "describe-target-groups",
+                      "--target-group-arns",
+                      target_group_arn,
+                  ],
+                  text=True,
+              )
+          )
+          load_balancer_arn = target_group_payload["TargetGroups"][0]["LoadBalancerArns"][0]
+          load_balancer_payload = json.loads(
+              subprocess.check_output(
+                  [
+                      "aws",
+                      "elbv2",
+                      "describe-load-balancers",
+                      "--load-balancer-arns",
+                      load_balancer_arn,
+                  ],
+                  text=True,
+              )
+          )
+          alb_dns_name = load_balancer_payload["LoadBalancers"][0]["DNSName"]
 
           backend_network = {"awsvpcConfiguration": backend_service["networkConfiguration"]["awsvpcConfiguration"]}
           Path("backend-network-configuration.json").write_text(
@@ -132,6 +161,7 @@ jobs:
               f"ui_task_definition={ui_service['taskDefinition']}",
               f"backend_desired_count={backend_service.get('desiredCount', 0)}",
               f"ui_desired_count={ui_service.get('desiredCount', 0)}",
+              f"alb_dns_name={alb_dns_name}",
           ]
           Path.home().joinpath("ecs-output.txt").write_text("\n".join(output_lines) + "\n", encoding="utf-8")
           PY
@@ -175,7 +205,8 @@ jobs:
             --output ui-task-definition.rendered.json \
             --container ui \
             --image "${{ steps.release.outputs.ui_image_ref }}" \
-            --set-env "APP_RELEASE_VERSION=${{ steps.release.outputs.app_version }}"
+            --set-env "APP_RELEASE_VERSION=${{ steps.release.outputs.app_version }}" \
+            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}:8000/"
 
       - name: Register backend task definition revision
         id: backend_taskdef
@@ -330,3 +361,9 @@ jobs:
           aws ecs wait services-stable \
             --cluster "${ECS_CLUSTER_NAME}" \
             --services "${ECS_UI_SERVICE_NAME}"
+
+      - name: Verify public deploy routes
+        run: |
+          set -euo pipefail
+          python scripts/deploy/check_public_deploy_endpoints.py \
+            --base-url "${PUBLIC_APP_BASE_URL}"

@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { backendProxyLogFields, buildBackendProxyUrl } from "@/lib/backendProxy";
 import { logServerRouteEvent, runtimeMetadata } from "@/lib/serverRouteLogging";
-
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
-
-function buildUpstreamUrl(request: NextRequest, backendPath: string): string {
-  const baseUrl = new URL("../", agUiUrl);
-  const upstream = new URL(backendPath.replace(/^\//, ""), baseUrl);
-  if (request.nextUrl.search) {
-    upstream.search = request.nextUrl.search;
-  }
-  return upstream.toString();
-}
 
 function cacheControlHeaders(contentType = "application/json"): HeadersInit {
   return {
@@ -40,7 +30,7 @@ export function liveHealthResponse(): Response {
 }
 
 export async function proxyReadyHealth(request: NextRequest): Promise<Response> {
-  const upstreamUrl = buildUpstreamUrl(request, "/api/health/ready");
+  const upstreamUrl = buildBackendProxyUrl("/api/health/ready", request.nextUrl.search).toString();
   try {
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "GET",
@@ -52,6 +42,8 @@ export async function proxyReadyHealth(request: NextRequest): Promise<Response> 
       logServerRouteEvent("error", "ui_ready_health_upstream_failed", {
         route: "/api/health/ready",
         status_code: upstreamResponse.status,
+        upstream_url: upstreamUrl,
+        ...backendProxyLogFields(),
       });
     }
     return new Response(text, {
@@ -65,6 +57,8 @@ export async function proxyReadyHealth(request: NextRequest): Promise<Response> 
     logServerRouteEvent("error", "ui_ready_health_upstream_unreachable", {
       detail: message,
       route: "/api/health/ready",
+      upstream_url: upstreamUrl,
+      ...backendProxyLogFields(),
     });
     return NextResponse.json(
       {

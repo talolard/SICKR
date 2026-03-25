@@ -174,6 +174,15 @@ The deployment should add or standardize server-side logging around failures in:
 These logs should stay server-side and flow into Logfire with the same release
 version and environment tagging as backend logs.
 
+When a Next proxy route fails, the log payload must also include enough routing
+context to explain the failure without re-deriving env state from the task
+definition:
+
+- `backend_proxy_base_url`
+- `ag_ui_base_url`
+- `upstream_url`
+- stable route id such as `/api/agents`
+
 ## Frontend Logging Pattern
 
 The frontend should stay quiet by default.
@@ -227,6 +236,8 @@ The first public deployment needs at least these signals:
 - AG-UI run failures
 - one backend health/readiness signal
 - one ui health/readiness signal
+- one deploy-time public-path check that covers `/api/agents` and
+  `/api/agents/{agent}/metadata`
 
 These signals should be enough to answer:
 

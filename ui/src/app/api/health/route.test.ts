@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const originalAppEnv = process.env.APP_ENV;
 const originalReleaseVersion = process.env.APP_RELEASE_VERSION;
+const originalBackendProxyBaseUrl = process.env.BACKEND_PROXY_BASE_URL;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,6 +17,11 @@ afterEach(() => {
     delete process.env.APP_RELEASE_VERSION;
   } else {
     process.env.APP_RELEASE_VERSION = originalReleaseVersion;
+  }
+  if (originalBackendProxyBaseUrl === undefined) {
+    delete process.env.BACKEND_PROXY_BASE_URL;
+  } else {
+    process.env.BACKEND_PROXY_BASE_URL = originalBackendProxyBaseUrl;
   }
 });
 
@@ -40,6 +46,7 @@ describe("ui health routes", () => {
   });
 
   it("proxies backend readiness through /api/health", async () => {
+    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb:8000/";
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: "ok", checks: { database: { status: "ok" } } }), {
         status: 200,
@@ -52,7 +59,7 @@ describe("ui health routes", () => {
     const response = await GET(new NextRequest("http://127.0.0.1:3000/api/health?full=1"));
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/:8000\/api\/health\/ready\?full=1$/),
+      "http://internal-alb:8000/api/health/ready?full=1",
       {
         method: "GET",
         headers: { accept: "application/json" },
