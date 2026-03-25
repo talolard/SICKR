@@ -18,7 +18,7 @@ file updates.
 
 Do not treat a merged release PR as a fully published release by itself.
 
-For this repository:
+Chosen target model for this repository:
 
 - `main` remains the integration branch
 - `release` remains the promotion and publish branch
@@ -31,6 +31,20 @@ For this repository:
 
 This preserves the `main -> release` promotion model while making release
 publication depend on real artifacts instead of only on changelog generation.
+
+Current implementation honesty note:
+
+- the repo has the release-preparation and release-publication workflows
+- the repo does not yet prove the full target contract end to end
+- the current publication workflow accepts:
+  - a merged PR into `release` whose title starts with `chore(release):`
+  - a manual `workflow_dispatch` run for an explicit ref
+- the current publication workflow writes the release manifest before tag push,
+  but it still pushes the immutable Git tag before creating the GitHub release
+- that means a failure after tag push can leave the repo with a tag but no
+  GitHub release, and reruns currently fail on the duplicate-tag guard
+- stronger provenance, failure-safe final publication, and promotion-boundary
+  enforcement are still unresolved
 
 ## Why Release Please Fits Better
 
@@ -65,6 +79,13 @@ The branch roles are:
 - `main` -> normal integration branch for releasable application history
 - `release` -> promotion and publication branch consumed by release tooling
 
+Current repository-state note:
+
+- at the time this document was last reviewed for PR `#93`, no local or remote
+  `release` branch existed yet in the checkout used for review
+- treat creation of the `release` branch plus its protections as a repository
+  bootstrap gate, not as an already-proven fact
+
 Required branch flow:
 
 1. deployment-project work lands on `tal/deployproject` or a descendant stacked
@@ -84,6 +105,13 @@ Practical promotion rule:
 - do not squash `main` into `release`
 - do not hand-author release commits on `release` except for the
   `release-please` release PR
+
+Current enforcement note:
+
+- the repo currently enforces PR-title shape on PRs targeting `main`
+- the repo does not yet enforce history-preserving promotion from `main` to
+  `release`
+- that promotion rule is still policy, not a mechanically enforced boundary
 
 ## Commit Policy
 
@@ -163,7 +191,7 @@ The current helper-config posture is:
 - `release-please-config.json` keeps the release PR in draft state by default
 - `.release-please-manifest.json` tracks the current published app version
 
-The intended release-PR behavior is:
+Intended release-PR behavior once the `release` branch exists and is in use:
 
 - `release-please` runs on pushes to `release`
 - `release-please` creates or updates one draft release PR on `release`
@@ -177,6 +205,12 @@ The publish workflow currently keys off merged release PRs titled
 `chore(release): ...`.
 That title shape is therefore part of the release-publication contract and
 should stay aligned with the release-please configuration and workflow wiring.
+
+Current provenance note:
+
+- the title-prefix check is weaker than verifying that the merged PR was
+  actually produced by `release-please`
+- the current docs must not describe that as stronger provenance than it is
 
 Use the `simple` release strategy unless a stronger repo-specific reason appears
 later.
@@ -208,31 +242,56 @@ Operational rule:
 
 ## Publication Contract
 
-For this repo, a release is not considered published until all of these are
-true:
+Target publication invariant for this repo:
 
-- the `release-please` release PR has been merged
-- both `ui` and `backend` images are built from that merged release commit
-- both images are pushed to `ECR`
-- both images are tagged with the exact release version
-- the release manifest exists and records the exact digests
-- the immutable Git tag is created for that same release commit
-- the GitHub release is created from that same immutable tag
+- a release should not be considered published until all of these are true:
+  - the `release-please` release PR has been merged
+  - both `ui` and `backend` images are built from that merged release commit
+  - both images are pushed to `ECR`
+  - both images are tagged with the exact release version
+  - the release manifest exists and records the exact digests
+  - the immutable Git tag is created for that same release commit
+  - the GitHub release is created from that same immutable tag
 
-This is the core invariant:
+That is the intended invariant.
+It is not yet fully guaranteed by the current workflow implementation.
+
+What the current implementation actually enforces:
+
+- a merged PR into `release` with a `chore(release): ...` title can trigger the
+  publish workflow
+- a manual `workflow_dispatch` run can also trigger the publish workflow for an
+  explicit ref
+- the workflow resolves the version from the checked-out ref
+- the workflow builds and pushes both images before writing the release manifest
+- the workflow writes the release manifest before creating the Git tag
+- the workflow pushes the immutable Git tag before creating the GitHub release
+
+Current unresolved gap:
 
 - changelog preparation alone is not release publication
-- artifact publication must succeed before the release becomes official
+- artifact publication currently happens before tag push
+- final GitHub release creation can still fail after tag push
+- reruns then fail on the duplicate-tag guard, so final publication is not yet
+  failure-safe
 
-Recommended publication order:
+Current implemented publication order:
 
-1. merge the `release-please` release PR on `release`
-2. read the app version from the merged release commit
+1. merge a qualifying PR into `release`, or manually dispatch publication for an
+   explicit ref
+2. read the app version from the checked-out ref
 3. build and push both images
 4. capture the resulting digests
-5. write and publish the release manifest
-6. create the immutable Git tag for that same commit
-7. create the GitHub release from that immutable tag
+5. write and upload the release manifest artifact
+6. create and push the immutable Git tag for that same commit
+7. attempt to create the GitHub release from that immutable tag
+
+Desired hardening still outstanding:
+
+1. prove or enforce that the publish path comes only from the real
+   `release-please` release PR
+2. make the final tag-plus-GitHub-release publication failure-safe
+3. enforce the `main -> release` promotion rule rather than leaving it as prose
 
 ## Immutability Rules
 
@@ -291,10 +350,14 @@ Useful validation for this subspec means:
   [guiding_principles.md](../guiding_principles.md)
 - confirm the helper config and workflow names referenced here match the
   repository files that currently implement the release-policy surface
+- check the workflow trigger conditions and publication ordering before claiming
+  any release-safety guarantee
+- check whether the `release` branch actually exists before describing it as a
+  live repository surface
 
 ## Summary
 
-The near-term release policy should be:
+The near-term release policy target is:
 
 - conventional commits on `main`
 - promotion from `main` to `release` without squashing away releasable history
@@ -302,3 +365,14 @@ The near-term release policy should be:
 - merging that PR updates the changelog and version file
 - separate automation builds and publishes images plus the release manifest
 - only then do we create the immutable tag and GitHub release
+
+What is true today:
+
+- `release-please` is the chosen preparation tool and the repo contains the
+  supporting config and workflows
+- PR-title enforcement exists for PRs targeting `main`
+- publication is currently keyed off a merged `chore(release): ...` PR or a
+  manual dispatch, not stronger `release-please` provenance
+- final publication is not yet failure-safe after tag push
+- the `main -> release` promotion rule is still documented policy rather than
+  enforced repository behavior

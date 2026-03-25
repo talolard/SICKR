@@ -92,23 +92,35 @@ Shared storage posture for the near term:
 Shared release posture for the near term:
 
 - `main` remains the normal integration branch
-- `release` is the promotion and publish branch fed from `main`
+- `release` is the intended promotion and publish branch fed from `main`
 - app-level semver is acceptable
 - release-please is the chosen semver and release-preparation mechanism
-- release-please owns draft release PRs plus `CHANGELOG.md` and `version.txt`
-  updates on `release`
-- final Git tag and GitHub release publication happen only after artifact
-  publication succeeds and the release manifest exists
+- release-please is intended to own draft release PRs plus `CHANGELOG.md` and
+  `version.txt` updates on `release`
 - the implemented release automation now consists of:
   - `.github/workflows/pr-title-main.yml`
   - `.github/workflows/release-please.yml`
   - `.github/workflows/release-publish.yml`
 - the release-helper config now consists of:
-  - `release-please-config.json`
-  - `.release-please-manifest.json`
+- `release-please-config.json`
+- `.release-please-manifest.json`
 - release-tooling and commit-policy details live in a dedicated subspec
 - full release and deploy automation is a first-class project goal, not
   post-launch polish
+
+Important honesty note:
+
+- the repository does not yet enforce the full intended release contract
+- the current publish workflow accepts either:
+  - a merged PR into `release` whose title starts with `chore(release):`
+  - a manual `workflow_dispatch` run with an explicit ref
+- the current publish workflow writes the release manifest before tagging, but
+  it still pushes the immutable Git tag before creating the GitHub release
+- if GitHub release creation fails after tag push, reruns currently fail on the
+  duplicate-tag guard
+- stronger release-please provenance checks, failure-safe final publication, and
+  concrete `main -> release` promotion enforcement remain unresolved work rather
+  than completed guarantees
 
 ## Authoring Rule For Subspecs
 

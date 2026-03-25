@@ -252,6 +252,22 @@ Recommended deploy flow:
 9. the host pulls the exact pinned image references and runs
    `docker compose up -d`
 
+Current implementation honesty note:
+
+- this is still the target release/publication flow, not a fully proven current
+  repository guarantee
+- the current repo already has separate release-preparation and
+  release-publication workflows
+- the current publish workflow still accepts:
+  - a merged PR into `release` whose title starts with `chore(release):`
+  - a manual `workflow_dispatch` run for an explicit ref
+- the current publish workflow writes the manifest before tag push, but it
+  still pushes the immutable tag before creating the GitHub release
+- that means a post-tag GitHub-release failure can leave the repo in a partial
+  publication state and reruns currently fail on the duplicate-tag guard
+- concrete release-please provenance checks and failure-safe final publication
+  remain unresolved implementation work
+
 Release-note behavior should be split clearly:
 
 - `release-please` is responsible for the reviewed in-repo changelog and
