@@ -85,6 +85,11 @@ under `tests/fixtures/image_catalog/`. That keeps the workflow self-contained
 while still validating the real dump/restore contract and runtime-facing table
 shape.
 
+This snapshot path is intentionally separate from the migration stairway lane.
+The stairway tests seed a clean pgvector Postgres instance directly from fixture
+catalog inputs so migration validation cannot fail just because a published
+snapshot artifact drifted behind the current Alembic graph.
+
 Workflow:
 
 - `.github/workflows/postgres-snapshot.yml`

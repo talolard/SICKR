@@ -56,6 +56,19 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Run migration validation suite
+        run: bash scripts/ci/run_migration_validation.sh 0
+
       - name: Resolve release version
         id: version
         run: |
@@ -397,7 +410,7 @@ PY
             "containerOverrides": [
               {
                 "name": "backend",
-                "command": ["python", "scripts/deploy/apply_migrations.py"]
+                "command": ["python", "-m", "scripts.deploy.apply_migrations"]
               }
             ]
           }
@@ -444,7 +457,8 @@ PY
                 "name": "backend",
                 "command": [
                   "python",
-                  "scripts/deploy/verify_seed_state.py",
+                  "-m",
+                  "scripts.deploy.verify_seed_state",
                   "--expected-postgres-seed-version",
                   "${POSTGRES_SEED_VERSION}"
                 ]

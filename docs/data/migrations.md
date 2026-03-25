@@ -43,6 +43,37 @@ If successful, the database should contain Alembic version metadata plus the exp
 If the slot was created before the pgvector change, use `reset` once so Docker recreates the
 Postgres container from the pgvector-capable image.
 
+## Stairway Validation
+
+The repo also runs a stairway-style migration suite against Postgres.
+
+The clean-database stairway test iterates the real Alembic revision chain with:
+
+1. upgrade to one revision
+2. downgrade one step
+3. upgrade that revision again
+
+That catches downgrade hygiene problems that a simple `upgrade head` test can
+miss.
+
+There is also one populated-database round-trip test that:
+
+- upgrades and seeds the slot-local `ikea_agent` database from the repo's CI
+  fixture catalog
+- clones that seeded database into a throwaway database
+- verifies that the latest migration can downgrade and upgrade cleanly against
+  populated runtime-shaped data
+
+Local entrypoint:
+
+```bash
+bash scripts/ci/run_migration_validation.sh 0
+```
+
+This uses the same pgvector-capable Postgres image, runtime migration path, and
+fixture catalog data that the repo already uses in CI, without depending on a
+published snapshot artifact staying in sync with the current migration graph.
+
 ## Current Catalog And Seed Tables
 
 Revision `20260319_0005` adds:
