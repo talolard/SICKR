@@ -4,16 +4,14 @@ on:
   pull_request_target:
     types: [closed]
     branches: [release]
-  workflow_dispatch:
-    inputs:
-      git_ref:
-        description: "Release commit to publish"
-        required: true
-        type: string
 
 permissions:
   contents: write
   id-token: write
+
+concurrency:
+  group: release-publish-release-branch
+  cancel-in-progress: false
 
 env:
   AWS_REGION: eu-central-1
@@ -24,24 +22,22 @@ jobs:
   publish:
     name: Build, push, manifest, and publish
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.pull_request.merged == true &&
-        github.event.pull_request.base.ref == 'release' &&
-        startsWith(github.event.pull_request.title, 'chore(release):')
-      )
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'release' &&
+      startsWith(github.event.pull_request.title, 'chore(release):')
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.tag }}
+      release_version: ${{ steps.version.outputs.version }}
+      deploy_payload_artifact_name: release-deploy-ssm-command-${{ steps.version.outputs.tag }}
     steps:
       - name: Resolve release ref
         id: release_ref
         env:
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          INPUT_GIT_REF: ${{ inputs.git_ref }}
         run: |
           set -euo pipefail
-          if [[ -n "${INPUT_GIT_REF:-}" ]]; then
-            echo "ref=${INPUT_GIT_REF}" >> "${GITHUB_OUTPUT}"
-          elif [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
+          if [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
             echo "ref=${MERGE_COMMIT_SHA}" >> "${GITHUB_OUTPUT}"
           else
             echo "Could not determine the release ref to publish."
@@ -88,6 +84,41 @@ jobs:
             echo "Repository variable AWS_RELEASE_ROLE_ARN must be set before release publication can push to ECR."
             exit 1
           fi
+
+      - name: Require immutable bundle configuration
+        env:
+          BACKEND_APP_SECRET_ARN: ${{ vars.BACKEND_APP_SECRET_ARN }}
+          MODEL_PROVIDER_SECRET_ARN: ${{ vars.MODEL_PROVIDER_SECRET_ARN }}
+          OBSERVABILITY_SECRET_ARN: ${{ vars.OBSERVABILITY_SECRET_ARN }}
+          DATABASE_SECRET_ARN: ${{ vars.DATABASE_SECRET_ARN }}
+          IKEA_IMAGE_CATALOG_RUN_ID: ${{ vars.IKEA_IMAGE_CATALOG_RUN_ID }}
+        run: |
+          set -euo pipefail
+          for required_name in \
+            BACKEND_APP_SECRET_ARN \
+            MODEL_PROVIDER_SECRET_ARN \
+            OBSERVABILITY_SECRET_ARN \
+            DATABASE_SECRET_ARN \
+            IKEA_IMAGE_CATALOG_RUN_ID
+          do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Repository variable ${required_name} must be set before release publication can build one immutable deploy bundle."
+              exit 1
+            fi
+          done
+
+      - name: Resolve bootstrap inputs
+        id: bootstrap_inputs
+        env:
+          IKEA_IMAGE_CATALOG_RUN_ID: ${{ vars.IKEA_IMAGE_CATALOG_RUN_ID }}
+        run: |
+          set -euo pipefail
+          bootstrap_json="$(
+            python scripts/deploy/read_bootstrap_inputs.py \
+              --image-catalog-run-id "${IKEA_IMAGE_CATALOG_RUN_ID}"
+          )"
+          echo "postgres_seed_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"postgres_seed_version\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
+          echo "image_catalog_run_id=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"image_catalog_run_id\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -141,17 +172,43 @@ jobs:
             --app-version "${{ steps.version.outputs.version }}" \
             --git-tag "${{ steps.version.outputs.tag }}" \
             --git-sha "${{ steps.version.outputs.git_sha }}" \
+            --postgres-seed-version "${{ steps.bootstrap_inputs.outputs.postgres_seed_version }}" \
+            --image-catalog-run-id "${{ steps.bootstrap_inputs.outputs.image_catalog_run_id }}" \
             --ui-repository "${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}" \
             --ui-digest "${{ steps.ui_image.outputs.digest }}" \
             --backend-repository "${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}" \
             --backend-digest "${{ steps.backend_image.outputs.digest }}" \
             --output release-manifest.json
 
-      - name: Upload release manifest artifact
+      - name: Render immutable release bundle
+        run: |
+          set -euo pipefail
+          python scripts/deploy/build_release_bundle.py \
+            --release-manifest release-manifest.json \
+            --output-dir deploy-bundle \
+            --backend-app-secret-arn "${{ vars.BACKEND_APP_SECRET_ARN }}" \
+            --model-provider-secret-arn "${{ vars.MODEL_PROVIDER_SECRET_ARN }}" \
+            --observability-secret-arn "${{ vars.OBSERVABILITY_SECRET_ARN }}" \
+            --database-secret-arn "${{ vars.DATABASE_SECRET_ARN }}"
+
+      - name: Write immutable deploy SSM payload
+        run: |
+          set -euo pipefail
+          python scripts/deploy/write_ssm_command_payload.py \
+            --mode deploy \
+            --bundle-dir deploy-bundle \
+            --output release-deploy-ssm-command.json
+
+      - name: Archive release bundle
+        run: |
+          set -euo pipefail
+          tar -C deploy-bundle -czf release-bundle.tar.gz .
+
+      - name: Upload deploy payload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-manifest-${{ steps.version.outputs.tag }}
-          path: release-manifest.json
+          name: release-deploy-ssm-command-${{ steps.version.outputs.tag }}
+          path: release-deploy-ssm-command.json
           if-no-files-found: error
 
       - name: Create immutable Git tag
@@ -170,7 +227,127 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "${RELEASE_TAG}" release-manifest.json \
+          gh release create "${RELEASE_TAG}" \
+            release-manifest.json \
+            release-bundle.tar.gz \
+            release-deploy-ssm-command.json \
             --verify-tag \
             --title "${RELEASE_TAG}" \
             --generate-notes
+
+  deploy:
+    name: Deploy release to EC2 via SSM
+    needs: publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: designagent-dev-release-operations
+      cancel-in-progress: false
+    steps:
+      - name: Download immutable deploy payload artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.deploy_payload_artifact_name }}
+          path: release-command
+
+      - name: Require deploy configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+        run: |
+          set -euo pipefail
+          for required_name in AWS_DEPLOY_ROLE_ARN DEPLOY_TARGET_TAG_KEY DEPLOY_TARGET_TAG_VALUE; do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Repository variable ${required_name} must be set before automatic deploy can run."
+              exit 1
+            fi
+          done
+
+      - name: Configure AWS deploy credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target instance
+        id: target_instance
+        env:
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+        run: |
+          set -euo pipefail
+          instance_ids="$(
+            aws ec2 describe-instances \
+              --filters \
+                "Name=tag:${DEPLOY_TARGET_TAG_KEY},Values=${DEPLOY_TARGET_TAG_VALUE}" \
+                "Name=instance-state-name,Values=running" \
+              --query 'Reservations[].Instances[].InstanceId' \
+              --output text
+          )"
+          count="$(wc -w <<<"${instance_ids}" | tr -d ' ')"
+          if [[ "${count}" -ne 1 ]]; then
+            echo "Expected exactly one running deploy target for tag ${DEPLOY_TARGET_TAG_KEY}=${DEPLOY_TARGET_TAG_VALUE}, found ${count}: ${instance_ids}"
+            exit 1
+          fi
+          echo "instance_id=${instance_ids}" >> "${GITHUB_OUTPUT}"
+
+      - name: Send deploy command
+        id: send_command
+        env:
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+          RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          command_id="$(
+            aws ssm send-command \
+              --instance-ids "${INSTANCE_ID}" \
+              --document-name AWS-RunShellScript \
+              --comment "Deploy ${RELEASE_TAG}" \
+              --parameters file://release-command/release-deploy-ssm-command.json \
+              --query 'Command.CommandId' \
+              --output text
+          )"
+          echo "command_id=${command_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for deploy command
+        env:
+          COMMAND_ID: ${{ steps.send_command.outputs.command_id }}
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          while true; do
+            status="$(
+              aws ssm get-command-invocation \
+                --command-id "${COMMAND_ID}" \
+                --instance-id "${INSTANCE_ID}" \
+                --query 'Status' \
+                --output text
+            )"
+            case "${status}" in
+              Pending|InProgress|Delayed)
+                sleep 5
+                ;;
+              Success)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text
+                exit 0
+                ;;
+              *)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text || true
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardErrorContent' \
+                  --output text || true
+                echo "Deploy command failed with status ${status}."
+                exit 1
+                ;;
+            esac
+          done

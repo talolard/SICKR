@@ -1,0 +1,179 @@
+name: Release Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Deploy a tagged release or roll back to the previous deployed bundle."
+        required: true
+        type: choice
+        options:
+          - deploy_release
+          - rollback_previous
+      release_tag:
+        description: "Release tag to deploy when mode=deploy_release, for example v0.1.2."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  deploy:
+    name: Manual deploy or rollback via SSM
+    runs-on: ubuntu-latest
+    concurrency:
+      group: designagent-dev-release-operations
+      cancel-in-progress: false
+    steps:
+      - name: Require workflow inputs
+        if: ${{ github.event.inputs.mode == 'deploy_release' }}
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_TAG}" ]]; then
+            echo "release_tag is required when mode=deploy_release."
+            exit 1
+          fi
+
+      - name: Require deploy configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+        run: |
+          set -euo pipefail
+          for required_name in AWS_DEPLOY_ROLE_ARN DEPLOY_TARGET_TAG_KEY DEPLOY_TARGET_TAG_VALUE; do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Repository variable ${required_name} must be set before deploy automation can run."
+              exit 1
+            fi
+          done
+
+      - name: Download immutable deploy payload asset
+        if: ${{ github.event.inputs.mode == 'deploy_release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-command
+          gh release download "${RELEASE_TAG}" \
+            --pattern release-deploy-ssm-command.json \
+            --dir release-command
+
+      - name: Write rollback payload
+        if: ${{ github.event.inputs.mode == 'rollback_previous' }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-command
+          cat > release-command/release-deploy-ssm-command.json <<'EOF'
+          {
+            "commands": [
+              "set -euo pipefail",
+              "test -s /var/lib/ikea-agent/deploy/previous_release_tag.txt",
+              "PREVIOUS_RELEASE_TAG=$(cat /var/lib/ikea-agent/deploy/previous_release_tag.txt)",
+              "python3 /var/lib/ikea-agent/deploy/releases/${PREVIOUS_RELEASE_TAG}/scripts/host_bundle_runner.py rollback-previous --state-dir /var/lib/ikea-agent/deploy"
+            ]
+          }
+          EOF
+
+      - name: Configure AWS deploy credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target instance
+        id: target_instance
+        env:
+          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
+          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+        run: |
+          set -euo pipefail
+          instance_ids="$(
+            aws ec2 describe-instances \
+              --filters \
+                "Name=tag:${DEPLOY_TARGET_TAG_KEY},Values=${DEPLOY_TARGET_TAG_VALUE}" \
+                "Name=instance-state-name,Values=running" \
+              --query 'Reservations[].Instances[].InstanceId' \
+              --output text
+          )"
+          count="$(wc -w <<<"${instance_ids}" | tr -d ' ')"
+          if [[ "${count}" -ne 1 ]]; then
+            echo "Expected exactly one running deploy target for tag ${DEPLOY_TARGET_TAG_KEY}=${DEPLOY_TARGET_TAG_VALUE}, found ${count}: ${instance_ids}"
+            exit 1
+          fi
+          echo "instance_id=${instance_ids}" >> "${GITHUB_OUTPUT}"
+
+      - name: Send SSM command
+        id: send_command
+        env:
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+          MODE: ${{ github.event.inputs.mode }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${MODE}" == "deploy_release" ]]; then
+            comment="Deploy ${RELEASE_TAG}"
+          else
+            comment="Rollback previous deployed release"
+          fi
+          command_id="$(
+            aws ssm send-command \
+              --instance-ids "${INSTANCE_ID}" \
+              --document-name AWS-RunShellScript \
+              --comment "${comment}" \
+              --parameters file://release-command/release-deploy-ssm-command.json \
+              --query 'Command.CommandId' \
+              --output text
+          )"
+          echo "command_id=${command_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for SSM command
+        env:
+          COMMAND_ID: ${{ steps.send_command.outputs.command_id }}
+          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          while true; do
+            status="$(
+              aws ssm get-command-invocation \
+                --command-id "${COMMAND_ID}" \
+                --instance-id "${INSTANCE_ID}" \
+                --query 'Status' \
+                --output text
+            )"
+            case "${status}" in
+              Pending|InProgress|Delayed)
+                sleep 5
+                ;;
+              Success)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text
+                exit 0
+                ;;
+              *)
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardOutputContent' \
+                  --output text || true
+                aws ssm get-command-invocation \
+                  --command-id "${COMMAND_ID}" \
+                  --instance-id "${INSTANCE_ID}" \
+                  --query 'StandardErrorContent' \
+                  --output text || true
+                echo "SSM command failed with status ${status}."
+                exit 1
+                ;;
+            esac
+          done

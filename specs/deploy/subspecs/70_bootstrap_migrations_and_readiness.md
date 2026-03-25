@@ -92,6 +92,9 @@ Bootstrap source of truth:
 
 - canonical parquet and image-catalog inputs prepared by repo tooling
 - seed versions recorded in `ops.seed_state`
+- release automation must pin the exact bootstrap inputs needed for one release,
+  including the release commit's canonical parquet fingerprint and the selected
+  image-catalog run id
 
 Required bootstrap behavior:
 
@@ -99,6 +102,8 @@ Required bootstrap behavior:
 - bootstrap may no-op if the required seed versions are already present
 - bootstrap must fail the deploy if required seed state is missing or cannot be
   refreshed
+- deploy verification must compare the resulting seed versions against the
+  release bundle's expected values, not only against a generic `ready` state
 
 The existing seed script already supports a version-aware skip path.
 The deployed bootstrap contract should preserve that behavior instead of forcing
