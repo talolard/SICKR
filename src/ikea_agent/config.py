@@ -72,6 +72,7 @@ class AppSettings(BaseSettings):
         default="postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent",
         validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
+    database_pool_mode: Literal["queuepool", "nullpool"] = Field(default="queuepool")
     artifact_root_dir: str = Field(default="data/artifacts")
     artifact_storage_backend: Literal["local_disk", "s3"] = Field(default="local_disk")
     artifact_s3_bucket: str | None = Field(default=None)
@@ -126,6 +127,18 @@ class AppSettings(BaseSettings):
         if resolved and resolved.model:
             return resolved.model
         return None
+
+    @property
+    def runtime_environment(self) -> str:
+        """Return the environment label that should be attached to runtime telemetry."""
+
+        return self.logfire_environment or self.app_env
+
+    @property
+    def release_version(self) -> str:
+        """Return the current release identifier used in logs and deploy checks."""
+
+        return self.logfire_service_version or "dev"
 
 
 @lru_cache(maxsize=1)

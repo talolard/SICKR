@@ -126,7 +126,10 @@ def build_chat_runtime() -> ChatRuntime:
 
     settings = get_settings()
     database_url = resolve_database_url(database_url=settings.database_url)
-    sqlalchemy_engine = create_database_engine(database_url)
+    sqlalchemy_engine = create_database_engine(
+        database_url,
+        pool_mode=settings.database_pool_mode,
+    )
     session_factory = create_session_factory(sqlalchemy_engine)
 
     embedding_settings = build_google_embedding_settings(dimensions=settings.embedding_dimensions)

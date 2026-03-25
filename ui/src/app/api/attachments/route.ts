@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
+
 const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
 const uploadUrl = new URL("../attachments", agUiUrl).toString();
 
@@ -32,18 +34,37 @@ export const POST = async (request: NextRequest): Promise<Response> => {
     });
   }
 
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      "content-type": contentType,
-      ...(fileName ? { "x-filename": fileName } : {}),
-      "x-thread-id": threadId,
-      ...(runId ? { "x-run-id": runId } : {}),
-    },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "content-type": contentType,
+        ...(fileName ? { "x-filename": fileName } : {}),
+        "x-thread-id": threadId,
+        ...(runId ? { "x-run-id": runId } : {}),
+      },
+      body,
+    });
+  } catch (error) {
+    logServerRouteEvent("error", "ui_attachment_upload_upstream_unreachable", {
+      detail: error instanceof Error ? error.message : "Unknown attachment upload failure.",
+      route: "/api/attachments",
+      run_id: runId,
+      thread_id: threadId,
+    });
+    throw error;
+  }
 
   const text = await response.text();
+  if (!response.ok) {
+    logServerRouteEvent("error", "ui_attachment_upload_failed", {
+      route: "/api/attachments",
+      run_id: runId,
+      status_code: response.status,
+      thread_id: threadId,
+    });
+  }
   return new Response(text, {
     status: response.status,
     headers: {
