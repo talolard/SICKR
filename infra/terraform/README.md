@@ -146,6 +146,9 @@ The EC2 origin host stays intentionally simple:
 - bootstrap user data that installs Docker and the Compose plugin
 - no required host-level reverse proxy; CloudFront talks directly to the `ui`
   origin on `3000` and the `backend` origin on `8000`
+- the optional EC2 key-pair variable remains available as dormant fallback
+  configuration, but the current security-group posture does not open SSH
+  port `22`
 
 ## Outputs
 

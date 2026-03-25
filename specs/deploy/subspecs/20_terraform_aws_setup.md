@@ -301,6 +301,15 @@ Terraform does not own:
 - host-local application code checkout
 - ad hoc SSH deploy scripting
 
+Current SSH posture note:
+
+- keep the optional EC2 key-pair variable for now because SSH is an allowed
+  fallback in principle
+- do not treat it as an active v1 access path because the current network
+  posture does not open inbound port `22`
+- if fallback SSH becomes operationally necessary later, add that change
+  intentionally rather than assuming the key-pair variable already enables it
+
 The Dockerization and CI/CD subspec defines the release artifacts and deploy
 contract.
 
