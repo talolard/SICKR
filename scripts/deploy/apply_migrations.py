@@ -15,6 +15,7 @@ from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
+from scripts.deploy.alembic_config import set_sqlalchemy_url
 
 logger = getLogger(__name__)
 
@@ -25,7 +26,7 @@ def _repo_root() -> Path:
 
 def _alembic_config(*, database_url: str) -> Config:
     config = Config(str(_repo_root() / "alembic.ini"))
-    config.set_main_option("sqlalchemy.url", database_url)
+    set_sqlalchemy_url(config, database_url)
     return config
 
 

@@ -23,6 +23,7 @@ _READ_ONLY_FIELDS = {
     "status",
     "taskDefinitionArn",
 }
+_PLACEHOLDER_COMMAND = ["sh", "-c", "sleep infinity"]
 
 
 def _load_payload(path: Path) -> dict[str, Any]:
@@ -96,6 +97,9 @@ def _render_container(
     rendered["environment"] = [
         {"name": name, "value": value} for name, value in sorted(env_map.items())
     ]
+    command = rendered.get("command")
+    if command == _PLACEHOLDER_COMMAND:
+        rendered.pop("command", None)
     return rendered
 
 

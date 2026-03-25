@@ -10,6 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from psycopg import sql
+from scripts.deploy.alembic_config import set_sqlalchemy_url
 from sqlalchemy.engine import make_url
 
 
@@ -65,7 +66,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
         pytest.skip(f"Postgres is not reachable for migration validation: {exc}")
 
     cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", target_url)
+    set_sqlalchemy_url(cfg, target_url)
     cfg.set_main_option("script_location", "migrations")
 
     try:
@@ -96,6 +97,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             ("app", "analysis_detections"),
             ("app", "search_runs"),
             ("app", "search_results"),
+            ("app", "revealed_preferences"),
             ("app", "room_3d_assets"),
             ("app", "room_3d_snapshots"),
             ("catalog", "products_canonical"),

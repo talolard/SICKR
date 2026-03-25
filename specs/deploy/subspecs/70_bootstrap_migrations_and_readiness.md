@@ -75,6 +75,9 @@ Required bootstrap behavior:
 - bootstrap must be idempotent
 - bootstrap may no-op if the required seed versions are already present
 - bootstrap must record the resulting seed versions in `ops.seed_state`
+- bootstrap seed versions must be content-based and stable across CI, local
+  checkouts, and runtime environments; checkout path and file mtimes are not
+  allowed inputs to the version hash
 - bootstrap must prepare `catalog.product_images.public_url` for
   `direct_public_url` mode
 - bootstrap is a separate workflow or one-off job, not a mandatory step inside
@@ -113,6 +116,8 @@ Required policy:
 - migrations must target the real Aurora database, not a container-local DB
 - migration success must be observable and fail the deploy if head is not
   reached
+- additive persistence tables such as `app.revealed_preferences` must arrive
+  through Alembic revisions, not through opportunistic runtime schema repair
 
 Deploy rule:
 
@@ -128,6 +133,8 @@ Required deploy-time verification:
 
 - required `catalog.*` tables are populated
 - `ops.seed_state` reflects a ready environment
+- the expected `postgres_seed_version` is computed from stable content hashes
+  rather than environment-specific file metadata
 - if deployed image mode is `direct_public_url`, product-image metadata is ready
   for that mode
 - the verification command fails loudly when the environment is not ready for

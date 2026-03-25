@@ -28,6 +28,7 @@ def _base_task_definition() -> dict[str, object]:
             {
                 "name": "backend",
                 "image": "public.ecr.aws/docker/library/busybox:stable",
+                "command": ["sh", "-c", "sleep infinity"],
                 "environment": [
                     {"name": "APP_ENV", "value": "dev"},
                     {"name": "LOGFIRE_SERVICE_VERSION", "value": "bootstrap"},
@@ -56,6 +57,7 @@ def test_render_task_definition_strips_read_only_fields_and_updates_values() -> 
     assert "status" not in rendered
     container = rendered["containerDefinitions"][0]
     assert container["image"].endswith("@sha256:abcd")
+    assert "command" not in container
     assert container["environment"] == [
         {"name": "APP_ENV", "value": "dev"},
         {
@@ -103,3 +105,4 @@ def test_render_ecs_task_definition_main_writes_file(
 
     rendered = json.loads(output_path.read_text(encoding="utf-8"))
     assert rendered["containerDefinitions"][0]["image"].endswith("@sha256:efgh")
+    assert "command" not in rendered["containerDefinitions"][0]

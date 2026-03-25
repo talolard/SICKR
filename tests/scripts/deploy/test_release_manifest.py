@@ -206,3 +206,10 @@ def test_write_release_manifest_rejects_invalid_image_catalog_run_id(
 
     with pytest.raises(ValueError, match="run id"):
         write_release_manifest_main()
+
+
+def test_release_please_config_uses_plain_v_tags_without_component_prefix() -> None:
+    config = json.loads(Path("release-please-config.json").read_text(encoding="utf-8"))
+
+    assert config["include-v-in-tag"] is True
+    assert "component" not in config["packages"]["."]
