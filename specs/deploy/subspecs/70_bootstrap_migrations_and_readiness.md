@@ -188,7 +188,8 @@ Required backend readiness conditions:
 Required UI readiness conditions:
 
 - the UI process is up
-- the UI can reach the backend over `PY_AG_UI_URL`
+- the UI can reach the backend REST proxy surface over `BACKEND_PROXY_BASE_URL`
+- the UI can reach AG-UI over `PY_AG_UI_URL`
 - the app can serve normal pages without immediate backend-path failure
 
 ## Required Health Endpoint Contract

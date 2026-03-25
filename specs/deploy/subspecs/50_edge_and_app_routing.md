@@ -108,8 +108,16 @@ Required ALB rules:
 
 - default listener action forwards to the UI target group
 - one listener rule forwards `/ag-ui/*` to the backend target group
+- one backend-only listener on port `8000` forwards all paths to the backend
+  target group for UI server-side proxy traffic
 
 There is no required `nginx` layer in this architecture.
+
+Internal routing rule:
+
+- the browser never uses the backend-only ALB listener directly
+- Next server proxy routes use `BACKEND_PROXY_BASE_URL`
+- AG-UI client traffic uses `PY_AG_UI_URL`
 
 ## Why nginx Is Not Required
 

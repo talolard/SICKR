@@ -18,6 +18,8 @@ def test_s3_attachment_storage_backend_persists_and_materializes_bytes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.delenv("AWS_DEFAULT_PROFILE", raising=False)
     backend = S3AttachmentStorageBackend(
         root_dir=tmp_path / "artifacts",
         bucket="private-artifacts",
