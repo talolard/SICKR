@@ -20,7 +20,7 @@ data "aws_iam_policy_document" "github_oidc_assume_role" {
     condition {
       test     = "ForAnyValue:StringLike"
       variable = "${local.github_oidc_provider_host}:sub"
-      values   = local.github_release_subjects
+      values   = local.github_actions_subjects
     }
   }
 }
@@ -70,6 +70,8 @@ data "aws_iam_policy_document" "deploy_access" {
     sid    = "EcsDeployOperations"
     effect = "Allow"
     actions = [
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticloadbalancing:DescribeTargetGroups",
       "ecs:DescribeServices",
       "ecs:DescribeTaskDefinition",
       "ecs:DescribeTasks",
