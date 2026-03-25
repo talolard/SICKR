@@ -109,17 +109,19 @@ jobs:
             exit 1
           fi
 
-          postgres_seed_version="$(
-            python - <<'PY'
-from pathlib import Path
+          python - <<'PY' >> "${GITHUB_OUTPUT}"
+          from pathlib import Path
+          import os
 
-from scripts.deploy.seed_fingerprint import calculate_postgres_seed_version
+          from scripts.deploy.bootstrap_inputs import create_release_bootstrap_inputs
 
-print(calculate_postgres_seed_version(repo_root=Path.cwd()))
-PY
-          )"
-          echo "postgres_seed_version=${postgres_seed_version}" >> "${GITHUB_OUTPUT}"
-          echo "image_catalog_run_id=${IKEA_IMAGE_CATALOG_RUN_ID}" >> "${GITHUB_OUTPUT}"
+          inputs = create_release_bootstrap_inputs(
+              repo_root=Path.cwd(),
+              image_catalog_run_id=os.environ["IKEA_IMAGE_CATALOG_RUN_ID"],
+          )
+          print(f"postgres_seed_version={inputs.postgres_seed_version}")
+          print(f"image_catalog_run_id={inputs.image_catalog_run_id}")
+          PY
 
       - name: Configure AWS release credentials
         uses: aws-actions/configure-aws-credentials@v4
