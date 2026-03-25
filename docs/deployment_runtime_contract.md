@@ -146,6 +146,8 @@ The runtime contract now exposes these deploy-facing commands:
 - `uv run python scripts/deploy/verify_seed_state.py`
 - `uv run python scripts/deploy/wait_for_http_ready.py --url <health-url>`
 - `uv run python scripts/deploy/prove_agui_streaming.py --url <ag-ui-agent-url>`
+  - this validates SSE response framing and first-event delivery only
+  - it does not by itself prove unbuffered progressive streaming through CloudFront and `nginx`
 
 Expected health URLs:
 

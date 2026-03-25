@@ -10,9 +10,19 @@ export async function GET(
 ): Promise<Response> {
   const params = await context.params;
   const upstreamUrl = new URL(`../attachments/${params.attachment_id}`, agUiUrl).toString();
-  const response = await fetch(upstreamUrl, {
-    method: "GET",
-  });
+  let response: Response;
+  try {
+    response = await fetch(upstreamUrl, {
+      method: "GET",
+    });
+  } catch (error) {
+    logServerRouteEvent("error", "ui_attachment_read_upstream_unreachable", {
+      attachment_id: params.attachment_id,
+      detail: error instanceof Error ? error.message : "Unknown attachment read failure.",
+      route: "/attachments/[attachment_id]",
+    });
+    throw error;
+  }
   if (!response.ok) {
     logServerRouteEvent("error", "ui_attachment_read_failed", {
       attachment_id: params.attachment_id,

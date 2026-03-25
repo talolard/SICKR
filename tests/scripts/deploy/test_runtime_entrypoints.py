@@ -95,6 +95,7 @@ def test_prove_agui_stream_accepts_event_stream_response() -> None:
     assert result.status == "ok"
     assert result.observed_chunks == 1
     assert result.first_chunk_preview is not None
+    assert "does not prove unbuffered progressive streaming" in result.detail
 
 
 def test_prove_agui_stream_rejects_non_streaming_response() -> None:

@@ -1,4 +1,4 @@
-"""Prove that one AG-UI endpoint returns a live SSE response."""
+"""Check that one AG-UI endpoint responds as SSE and emits an early event chunk."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ _HTTP_OK = 200
 
 @dataclass(frozen=True, slots=True)
 class AgUiStreamingProof:
-    """Compact outcome from validating one AG-UI streaming endpoint."""
+    """Compact outcome from a narrow AG-UI SSE response-surface check."""
 
     status: Literal["ok", "failed"]
     detail: str
@@ -78,7 +78,7 @@ def prove_agui_stream(
     client: httpx.Client | None = None,
     first_chunk_timeout_seconds: float = 15.0,
 ) -> AgUiStreamingProof:
-    """Post one AG-UI request and verify that SSE streaming begins."""
+    """Post one AG-UI request and verify that SSE response framing begins promptly."""
 
     owns_client = client is None
     http_client = client or httpx.Client(
@@ -130,7 +130,12 @@ def prove_agui_stream(
                 observed_chunks += 1
                 return AgUiStreamingProof(
                     status="ok",
-                    detail="Observed at least one non-empty streamed AG-UI chunk.",
+                    detail=(
+                        "Observed an SSE response with one non-empty AG-UI chunk. "
+                        "This checks SSE response shape and first-event delivery only; "
+                        "it does not prove unbuffered progressive streaming "
+                        "through the public edge."
+                    ),
                     status_code=response.status_code,
                     content_type=content_type,
                     first_chunk_preview=chunk[:200],
@@ -162,9 +167,15 @@ def prove_agui_stream(
 
 
 def main() -> int:
-    """Run the deploy-oriented AG-UI streaming proof."""
+    """Run the deploy-oriented AG-UI SSE response-surface check."""
 
-    parser = argparse.ArgumentParser(description="Prove AG-UI SSE streaming works.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Check that an AG-UI endpoint returns text/event-stream and emits one "
+            "non-empty chunk before the first-event timeout. "
+            "This is not a full proof of edge-safe progressive streaming."
+        )
+    )
     parser.add_argument(
         "--url",
         default=_default_ag_ui_url(),
@@ -178,7 +189,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--message",
-        default="Deploy streaming proof request.",
+        default="Deploy SSE response-surface check request.",
         help="User message used when building the default AG-UI payload.",
     )
     parser.add_argument("--thread-id", default="deploy-proof-thread")
