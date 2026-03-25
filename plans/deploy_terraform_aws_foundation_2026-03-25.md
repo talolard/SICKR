@@ -101,12 +101,18 @@ Primary validation:
 - `terraform fmt -recursive infra/terraform`
 - `terraform -chdir=infra/terraform/environments/dev init -backend=false`
 - `terraform -chdir=infra/terraform/environments/dev validate`
+- `terraform -chdir=infra/terraform/environments/dev init`
+- `terraform -chdir=infra/terraform/environments/dev plan -var-file=terraform.tfvars -lock=false -refresh=false`
 
-Useful follow-up validation if AWS credentials are refreshed:
+Live-account note:
 
-- `terraform -chdir=infra/terraform/environments/dev plan`
-- targeted `aws` checks for Route53, ACM, CloudFront, RDS, and S3
+- use `AWS_PROFILE=tal`, `AWS_DEFAULT_PROFILE=tal`, and `AWS_REGION=eu-central-1`
+- if Terraform or the S3 backend needs fully resolved credentials, run
+  `eval "$(aws configure export-credentials --profile tal --format env)"`
+- targeted `aws` checks for Route53, ACM, CloudFront, RDS, and S3 remain useful
+  follow-up validation once the environment values are in place
 
-Because the local AWS SSO session is currently expired, this slice should treat
-live-account validation as pending credentials rather than block the
-implementation on it.
+This branch no longer treats live-account validation as blocked on an expired
+session. The current expectation is that contributors validate against the real
+AWS account with the `tal` profile or exported credentials before calling the
+Terraform slice ready.

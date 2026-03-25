@@ -60,6 +60,9 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 ## Implementation pointers
 
 - Tool rendering and user-visible tool UX policy: [docs/subagent_tool_rendering_policy.md](docs/subagent_tool_rendering_policy.md)
+- Deployment infrastructure source of truth: [infra/terraform/README.md](infra/terraform/README.md)
+  and `specs/deploy/subspecs/20_terraform_aws_setup.md`; prefer Terraform
+  outputs over ad hoc AWS discovery for deployment-owned infrastructure.
 - CopilotKit and AG-UI backend protocol notes: [external_docs/pydantic_ai_ag_ui.md](external_docs/pydantic_ai_ag_ui.md)
 - UI integration spec: [spec/ui/pydanticai_copilotkit_integration.md](spec/ui/pydanticai_copilotkit_integration.md)
 - Frontend planning and execution guidance: [docs/frontend_delivery_guidelines.md](docs/frontend_delivery_guidelines.md)

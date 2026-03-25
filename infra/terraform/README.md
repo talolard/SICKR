@@ -76,7 +76,16 @@ Use Tal's personal AWS context:
 
 ```bash
 export AWS_DEFAULT_PROFILE=tal
+export AWS_PROFILE=tal
 export AWS_REGION=eu-central-1
+```
+
+If the local profile resolves to short-lived credentials, export the resolved
+session into the current shell before a live `init` or `plan` so Terraform, the
+S3 backend, and the AWS provider all use the same identity:
+
+```bash
+eval "$(aws configure export-credentials --profile tal --format env)"
 ```
 
 Then run:
@@ -115,11 +124,18 @@ The `dev` environment root composes five thin modules:
 - `storage`: product-image and private-artifact S3 buckets
 - `edge`: CloudFront, `us-east-1` ACM, validation records, and public aliases
 
+Network posture inside that root stays explicit:
+
+- the app host lives only in public subnets
+- each database subnet gets an explicit private route table with no internet
+  route
+- there is no NAT gateway in v1
+
 The CloudFront distribution encodes the required routing split from the deploy
 spec:
 
 - default behavior for the app origin
-- `/ag-ui/*` as the streaming-sensitive dynamic behavior
+- `/ag-ui/*` as the streaming-sensitive dynamic behavior, also zero-cache
 - `/static/product-images/*` as the S3-backed image behavior
 
 The EC2 origin host stays intentionally simple:
@@ -163,10 +179,15 @@ terraform -chdir=infra/terraform/environments/dev validate
 terraform fmt -recursive infra/terraform
 ```
 
-Useful live-account validation, once AWS credentials are refreshed, is:
+Useful live-account validation is:
 
 ```bash
 terraform -chdir=infra/terraform/environments/dev init
-terraform -chdir=infra/terraform/environments/dev plan -var-file=terraform.tfvars
+terraform -chdir=infra/terraform/environments/dev plan -var-file=terraform.tfvars -lock=false -refresh=false
 terraform -chdir=infra/terraform/environments/dev output
 ```
+
+The exact PR `#95` head has already completed a live remote-backend `init` and
+`plan` with exported credentials from the `tal` profile. Treat that exported
+credential path as the current operator workflow, not as a pending future
+validation step.

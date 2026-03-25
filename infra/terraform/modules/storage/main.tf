@@ -94,6 +94,45 @@ resource "aws_s3_bucket_lifecycle_configuration" "private_artifacts" {
   bucket = aws_s3_bucket.private_artifacts.id
 
   rule {
+    id     = "expire-user-uploads"
+    status = "Enabled"
+
+    filter {
+      prefix = "attachments/user-upload/"
+    }
+
+    expiration {
+      days = 90
+    }
+  }
+
+  rule {
+    id     = "expire-generated-artifacts"
+    status = "Enabled"
+
+    filter {
+      prefix = "attachments/generated/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+
+  rule {
+    id     = "expire-floor-plan-artifacts"
+    status = "Enabled"
+
+    filter {
+      prefix = "attachments/floor-plan/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+
+  rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
 

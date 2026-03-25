@@ -82,6 +82,19 @@ resource "aws_route_table" "public" {
   })
 }
 
+resource "aws_route_table" "database" {
+  for_each = aws_subnet.database
+
+  vpc_id = aws_vpc.main.id
+
+  tags = merge(var.common_tags, {
+    Name               = "${var.name_prefix}-${each.key}"
+    Component          = "network"
+    Role               = "database-route-table"
+    DataClassification = "private"
+  })
+}
+
 resource "aws_route" "public_internet" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
@@ -93,6 +106,13 @@ resource "aws_route_table_association" "public" {
 
   subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "database" {
+  for_each = aws_subnet.database
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.database[each.key].id
 }
 
 resource "aws_security_group" "app_host" {

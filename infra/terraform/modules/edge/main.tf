@@ -2,7 +2,7 @@ resource "aws_cloudfront_cache_policy" "dynamic_disabled" {
   name        = "${var.name_prefix}-dynamic-disabled"
   comment     = "Disable caching for dynamic application and AG-UI traffic."
   default_ttl = 0
-  max_ttl     = 1
+  max_ttl     = 0
   min_ttl     = 0
 
   parameters_in_cache_key_and_forwarded_to_origin {
