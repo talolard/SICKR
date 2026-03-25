@@ -199,6 +199,12 @@ Manual deploys should still exist, but they should use the same ECS path:
 - render ECS task-definition revisions from the current baseline
 - deploy those revisions to ECS
 
+The manual ref deploy workflow is a separate emergency/operator path. It should
+remain digest-driven and may use one unique per-run image tag as a temporary
+push handle, but it must not try to publish canonical immutable release tags
+such as `vX.Y.Z` or `sha-<commit>`. Those identities belong to the real release
+workflow only.
+
 Rollback means redeploying an older immutable release tag. There should not be a
 host-local “previous release” mechanism anymore.
 

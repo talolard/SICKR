@@ -9,7 +9,8 @@ locals {
   name_prefix               = "${var.service_name}-${var.environment}"
   github_oidc_provider_url  = "https://token.actions.githubusercontent.com"
   github_oidc_provider_host = "token.actions.githubusercontent.com"
-  github_release_subjects = [
+  github_actions_subjects = [
+    "repo:${var.github_repository}:ref:refs/heads/main",
     "repo:${var.github_repository}:ref:refs/heads/${var.release_branch}",
   ]
 

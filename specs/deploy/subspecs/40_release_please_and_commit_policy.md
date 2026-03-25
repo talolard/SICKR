@@ -345,7 +345,10 @@ The implemented workflow therefore uses this auth posture:
 
 For artifact publication, the publish workflow also requires the repository
 variable `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the AWS publish
-role by OIDC instead of baking static AWS credentials into CI.
+role by OIDC instead of baking static AWS credentials into CI. That role trust
+must allow both the `release` branch and `main`, because the normal publish
+path runs from `release` while the manual ref deploy workflow is intentionally
+allowed to build and deploy a specific merged `main` commit.
 
 Do not silently widen bot permissions.
 

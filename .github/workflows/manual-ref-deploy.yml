@@ -73,9 +73,11 @@ jobs:
           git_sha="$(git rev-parse HEAD)"
           short_sha="${git_sha:0:12}"
           app_version="manual-${short_sha}"
+          image_push_tag="manual-${short_sha}-run${GITHUB_RUN_ID}-attempt${GITHUB_RUN_ATTEMPT}"
           echo "git_sha=${git_sha}" >> "${GITHUB_OUTPUT}"
           echo "short_sha=${short_sha}" >> "${GITHUB_OUTPUT}"
           echo "app_version=${app_version}" >> "${GITHUB_OUTPUT}"
+          echo "image_push_tag=${image_push_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure AWS publish credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -98,9 +100,7 @@ jobs:
           file: docker/backend.Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:manual-${{ steps.meta.outputs.short_sha }}
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:sha-${{ steps.meta.outputs.git_sha }}
+          tags: ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:${{ steps.meta.outputs.image_push_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.meta.outputs.git_sha }}
@@ -114,9 +114,7 @@ jobs:
           file: docker/ui.Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:manual-${{ steps.meta.outputs.short_sha }}
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:sha-${{ steps.meta.outputs.git_sha }}
+          tags: ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:${{ steps.meta.outputs.image_push_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.meta.outputs.git_sha }}
