@@ -14,17 +14,12 @@ variable "public_hostname" {
 }
 
 variable "app_origin_domain_name" {
-  description = "Stable origin hostname that resolves to the EC2 Elastic IP."
+  description = "Public ALB DNS name used by CloudFront as the app origin."
   type        = string
 }
 
-variable "ui_origin_port" {
-  description = "Host port exposed by the UI origin."
-  type        = number
-}
-
-variable "backend_origin_port" {
-  description = "Host port exposed by the backend origin."
+variable "app_origin_port" {
+  description = "HTTP port exposed by the ALB origin."
   type        = number
 }
 
@@ -38,13 +33,8 @@ variable "cloudfront_price_class" {
   type        = string
 }
 
-variable "default_app_origin_read_timeout_seconds" {
-  description = "Read timeout for the default app-origin behavior."
-  type        = number
-}
-
-variable "ag_ui_origin_read_timeout_seconds" {
-  description = "Read timeout for the AG-UI origin behavior."
+variable "app_origin_read_timeout_seconds" {
+  description = "Read timeout for the shared ALB app origin."
   type        = number
 }
 

@@ -12,22 +12,22 @@ Current scope:
 - provider, tagging, state, and account guardrails
 - hosted-zone discovery for `talperry.com`
 - GitHub OIDC provider for Actions
-- shared IAM roles for runtime, release publication, deploy, and Terraform apply
+- shared IAM roles for release publication, deploy, and Terraform apply
 - ECR repositories for `ui` and `backend`
 - Secrets Manager containers for runtime config, model providers, observability,
   and database access
-- one dedicated deployment VPC with public app-host subnets and private DB subnets
-- one single-host EC2 origin with an Elastic IP, SSM posture, and origin DNS
+- one dedicated deployment VPC with public runtime subnets and private DB subnets
+- one public ALB
+- one ECS cluster with two Fargate services
 - one Aurora PostgreSQL Serverless v2 cluster with pause-friendly parameter groups
 - one product-image bucket and one private-artifacts bucket
 - one CloudFront distribution, viewer ACM certificate, and public DNS alias
 
 The Route53 hosted zone for `talperry.com` remains shared infrastructure that is
-discovered as a data source.
-Terraform manages only the deployment-owned records inside that zone:
+discovered as a data source. Terraform manages only the deployment-owned
+records inside that zone:
 
 - `designagent.talperry.com`
-- `origin.designagent.talperry.com`
 - viewer-certificate validation records
 
 That keeps the deployment records in Terraform without taking ownership of the
@@ -45,15 +45,14 @@ infra/terraform/
       providers.tf
       versions.tf
   modules/
-    compute/
     database/
     edge/
     network/
+    runtime/
     storage/
   environments/
     dev/
       backend.tf
-      compute.tf
       database.tf
       edge.tf
       identity.tf
@@ -63,6 +62,7 @@ infra/terraform/
       outputs.tf
       providers.tf
       registry.tf
+      runtime.tf
       secrets.tf
       storage.tf
       terraform.tfvars.example
@@ -118,15 +118,16 @@ That keeps the bootstrap simple:
 
 The `dev` environment root composes five thin modules:
 
-- `network`: VPC, subnets, route table, and security groups
-- `compute`: EC2 origin host, Elastic IP, and origin Route53 record
+- `network`: VPC, subnets, route tables, and security groups
+- `runtime`: ALB, ECS cluster, task definitions, services, log groups, and
+  task IAM roles
 - `database`: Aurora Serverless v2 and the pause-friendly parameter group
 - `storage`: product-image and private-artifact S3 buckets
 - `edge`: CloudFront, `us-east-1` ACM, validation records, and public aliases
 
 Network posture inside that root stays explicit:
 
-- the app host lives only in public subnets
+- the ALB and Fargate tasks live in public subnets
 - each database subnet gets an explicit private route table with no internet
   route
 - there is no NAT gateway in v1
@@ -134,21 +135,27 @@ Network posture inside that root stays explicit:
 The CloudFront distribution encodes the required routing split from the deploy
 spec:
 
-- default behavior for the app origin
+- default behavior for the ALB app origin
 - `/ag-ui/*` as the streaming-sensitive dynamic behavior, also zero-cache
 - `/static/product-images/*` as the S3-backed image behavior
 
-The EC2 origin host stays intentionally simple:
+The ECS runtime stays intentionally simple:
 
-- single x86_64 instance in a public subnet
-- runtime IAM instance profile plus SSM core access
-- Elastic IP attached and published as `origin.designagent.talperry.com`
-- bootstrap user data that installs Docker and the Compose plugin
-- no required host-level reverse proxy; CloudFront talks directly to the `ui`
-  origin on `3000` and the `backend` origin on `8000`
-- the optional EC2 key-pair variable remains available as dormant fallback
-  configuration, but the current security-group posture does not open SSH
-  port `22`
+- one public ALB
+- one ECS cluster
+- one `ui` Fargate service and one `backend` Fargate service
+- placeholder task definitions with `desired_count = 0` until CI performs the
+  first real rollout
+- no EC2 host, no user data, no SSM rollout target, and no required `nginx`
+  layer
+- public IPs on the tasks as an explicit v1 tradeoff to avoid NAT and keep the
+  network surface small
+
+CloudFront uses the ALB DNS name directly as the only application origin.
+The ALB listener owns the HTTP route split:
+
+- default `*` -> `ui` target group
+- `/ag-ui/*` -> `backend` target group
 
 ## Outputs
 
@@ -158,9 +165,11 @@ operators need:
 - GitHub Actions OIDC provider ARN
 - ECR repository names and URIs
 - Secrets Manager secret names and ARNs
-- runtime, release-publish, deploy, and Terraform-apply role ARNs
+- release-publish, deploy, and Terraform-apply role ARNs
 - product-image and private-artifact bucket names and ARNs
-- app-host instance id and public IP
+- ECS cluster name
+- ECS backend and UI service names
+- ALB DNS name
 - Aurora endpoint, port, and master-secret ARN
 - CloudFront distribution id, ARN, domain name, and viewer certificate ARN
 
@@ -169,9 +178,11 @@ repository variable `AWS_RELEASE_ROLE_ARN`.
 
 The deploy workflow should use:
 
-- `app_host_instance_id` as the SSM deploy target
-- `cloudfront_distribution_id` for targeted invalidation only if a later deploy
-  step truly needs it
+- `ecs_cluster_name`
+- `ecs_backend_service_name`
+- `ecs_ui_service_name`
+- `cloudfront_distribution_id` only if a later deploy step truly needs targeted
+  invalidation
 - the secret ARNs from Terraform outputs rather than rediscovering them in AWS
 
 ## Validation

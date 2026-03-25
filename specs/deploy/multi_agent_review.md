@@ -20,10 +20,12 @@ Later decision override:
 - newer spec updates supersede the older planning assumptions in this document
   where they conflict
 - specifically, the current source of truth is:
+  - `CloudFront + ALB + ECS Fargate + Aurora + S3` is the canonical runtime
+  - CloudFront uses the ALB as its only app origin
+  - the ALB owns the `/ag-ui/*` versus default app path split
   - environment bootstrap is separate from normal app deploy
   - normal deploys run migrations plus seed verification, not full catalog reseed
-  - `nginx` is not a required v1 layer; CloudFront routes directly to the `ui`
-    and `backend` origins by path
+  - `nginx` is not a required v1 layer
 
 ## Purpose
 
@@ -218,25 +220,25 @@ Important planning context from the human owner:
 
 - remote state, providers, tagging, outputs
 - ECR, IAM/OIDC, Secrets Manager
-- VPC/subnets/SGs, EC2 origin host
+- VPC/subnets/SGs, ALB, and ECS runtime baseline
 - Aurora
 - S3 buckets
 - only after streaming proof: CloudFront/ACM and the real `/ag-ui/*` behavior
 
-### Phase 4: Images And Host Deploy Contract
+### Phase 4: Images And Runtime Contract
 
 - production Dockerfiles
-- host runtime contract with `docker compose`
+- ECS runtime contract
 - env/secrets injection
 - pinned digest consumption
-- host deploy runner
+- ECS task-definition rendering and service rollout helpers
 
 ### Phase 5: Release And Deploy Automation
 
 - release manifest generation/consumption
 - image build/publish workflow
-- deploy workflow via SSM
-- rollback-by-previous-manifest
+- deploy workflow via ECS task-definition revisions and service rollout
+- rollback-by-redeploying a previous immutable release manifest
 - consume the chosen `release-please` plus PR-title-enforcement contract and
   finish publication/deploy automation on top of it
 
@@ -360,7 +362,7 @@ Planning impact:
 
 Answer:
 - the public hostname should be `designagent.talperry.com`
-- the corresponding origin hostname should be `origin.designagent.talperry.com`
+- there is no separate origin hostname in the current ALB-based design
 - do not make origin-only rehearsal a required milestone before the first real
   end-to-end deploy through the intended public path
 

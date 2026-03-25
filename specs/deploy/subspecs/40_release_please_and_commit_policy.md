@@ -38,9 +38,9 @@ Current implementation honesty note:
 - the repo does not yet prove the full target contract end to end
 - the current publication workflow accepts only a merged PR into `release`
   whose title starts with `chore(release):`
-- the current publication workflow writes the release manifest and renders the
-  immutable deploy bundle plus deploy payload before tag push, but it still
-  pushes the immutable Git tag before creating the GitHub release
+- the current publication workflow writes the release manifest and resolves the
+  ECS deploy inputs before tag push, but it still pushes the immutable Git tag
+  before creating the GitHub release
 - that means a failure after tag push can leave the repo with a tag but no
   GitHub release, and reruns currently fail on the duplicate-tag guard
 - stronger provenance, failure-safe final publication, and promotion-boundary
@@ -250,8 +250,8 @@ Target publication invariant for this repo:
   - both images are pushed to `ECR`
   - both images are tagged with the exact release version
   - the release manifest exists and records the exact digests
-  - the immutable deploy bundle exists for that same release manifest
-  - the immutable deploy command payload exists for that same release bundle
+  - the ECS deploy workflow can consume that manifest without rebuilding or
+    retagging images
   - the immutable Git tag is created for that same release commit
   - the GitHub release is created from that same immutable tag
 
@@ -265,8 +265,7 @@ What the current implementation actually enforces:
 - the workflow resolves the version from the checked-out ref
 - the workflow builds and pushes both images before writing the release manifest
 - the workflow writes the release manifest before creating the Git tag
-- the workflow renders the immutable deploy bundle and deploy SSM payload before
-  creating the Git tag
+- the workflow resolves the ECS deploy inputs before creating the Git tag
 - the workflow pushes the immutable Git tag before creating the GitHub release
 
 Current unresolved gap:
@@ -285,7 +284,7 @@ Current implemented publication order:
 3. build and push both images
 4. capture the resulting digests
 5. write and upload the release manifest artifact
-6. render the immutable deploy bundle and deploy SSM payload
+6. resolve the ECS deploy inputs from the current service baselines
 7. create and push the immutable Git tag for that same commit
 8. attempt to create the GitHub release from that immutable tag
 
@@ -376,8 +375,8 @@ What is true today:
 - PR-title enforcement exists for PRs targeting `main`
 - publication is currently keyed off a merged `chore(release): ...` PR, not
   stronger `release-please` provenance
-- publication currently renders the manifest, immutable deploy bundle, and
-  deploy payload before pushing the immutable Git tag
+- publication currently renders the manifest and ECS deploy inputs before
+  pushing the immutable Git tag
 - final publication is not yet failure-safe after tag push
 - the `main -> release` promotion rule is still documented policy rather than
   enforced repository behavior

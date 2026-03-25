@@ -1,6 +1,5 @@
 locals {
   public_hostname_trimmed = trimsuffix(var.public_hostname, ".")
-  origin_hostname_trimmed = trimsuffix(var.origin_hostname, ".")
   selected_availability_zones = slice(
     data.aws_availability_zones.available.names,
     0,
@@ -24,8 +23,6 @@ locals {
     database        = "tal-maria-ikea/${var.environment}/database"
   }
 
-  runtime_role_name               = "${local.name_prefix}-runtime"
-  runtime_instance_profile        = "${local.name_prefix}-runtime"
   release_publish_role_name       = "${local.name_prefix}-release-publish"
   deploy_role_name                = "${local.name_prefix}-deploy"
   terraform_apply_role_name       = "${local.name_prefix}-terraform-apply"

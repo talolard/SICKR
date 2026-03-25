@@ -4,7 +4,7 @@ output "vpc_id" {
 }
 
 output "public_subnet_ids" {
-  description = "Ordered public subnet ids for the EC2 host and future expansion."
+  description = "Ordered public subnet ids for the ALB and public-IP Fargate tasks."
   value       = [for key in sort(keys(aws_subnet.public)) : aws_subnet.public[key].id]
 }
 
@@ -13,12 +13,22 @@ output "database_subnet_ids" {
   value       = [for key in sort(keys(aws_subnet.database)) : aws_subnet.database[key].id]
 }
 
-output "app_host_security_group_id" {
-  description = "Security group id for the internet-facing EC2 origin host."
-  value       = aws_security_group.app_host.id
+output "alb_security_group_id" {
+  description = "Security group id for the internet-facing application load balancer."
+  value       = aws_security_group.alb.id
+}
+
+output "ui_service_security_group_id" {
+  description = "Security group id for the UI ECS service."
+  value       = aws_security_group.ui_service.id
+}
+
+output "backend_service_security_group_id" {
+  description = "Security group id for the backend ECS service."
+  value       = aws_security_group.backend_service.id
 }
 
 output "database_security_group_id" {
-  description = "Security group id for Aurora ingress from the EC2 origin host."
+  description = "Security group id for Aurora ingress from the backend ECS service."
   value       = aws_security_group.database.id
 }

@@ -29,7 +29,8 @@ jobs:
     outputs:
       release_tag: ${{ steps.version.outputs.tag }}
       release_version: ${{ steps.version.outputs.version }}
-      deploy_payload_artifact_name: release-deploy-ssm-command-${{ steps.version.outputs.tag }}
+      release_git_sha: ${{ steps.version.outputs.git_sha }}
+      release_manifest_artifact_name: release-manifest-${{ steps.version.outputs.tag }}
     steps:
       - name: Resolve release ref
         id: release_ref
@@ -85,27 +86,15 @@ jobs:
             exit 1
           fi
 
-      - name: Require immutable bundle configuration
+      - name: Require bootstrap metadata configuration
         env:
-          BACKEND_APP_SECRET_ARN: ${{ vars.BACKEND_APP_SECRET_ARN }}
-          MODEL_PROVIDER_SECRET_ARN: ${{ vars.MODEL_PROVIDER_SECRET_ARN }}
-          OBSERVABILITY_SECRET_ARN: ${{ vars.OBSERVABILITY_SECRET_ARN }}
-          DATABASE_SECRET_ARN: ${{ vars.DATABASE_SECRET_ARN }}
           IKEA_IMAGE_CATALOG_RUN_ID: ${{ vars.IKEA_IMAGE_CATALOG_RUN_ID }}
         run: |
           set -euo pipefail
-          for required_name in \
-            BACKEND_APP_SECRET_ARN \
-            MODEL_PROVIDER_SECRET_ARN \
-            OBSERVABILITY_SECRET_ARN \
-            DATABASE_SECRET_ARN \
-            IKEA_IMAGE_CATALOG_RUN_ID
-          do
-            if [[ -z "${!required_name:-}" ]]; then
-              echo "Repository variable ${required_name} must be set before release publication can build one immutable deploy bundle."
-              exit 1
-            fi
-          done
+          if [[ -z "${IKEA_IMAGE_CATALOG_RUN_ID}" ]]; then
+            echo "Repository variable IKEA_IMAGE_CATALOG_RUN_ID must be set before release publication can pin bootstrap inputs."
+            exit 1
+          fi
 
       - name: Resolve bootstrap inputs
         id: bootstrap_inputs
@@ -120,7 +109,7 @@ jobs:
           echo "postgres_seed_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"postgres_seed_version\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
           echo "image_catalog_run_id=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"image_catalog_run_id\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
 
-      - name: Configure AWS credentials
+      - name: Configure AWS release credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_RELEASE_ROLE_ARN }}
@@ -180,35 +169,11 @@ jobs:
             --backend-digest "${{ steps.backend_image.outputs.digest }}" \
             --output release-manifest.json
 
-      - name: Render immutable release bundle
-        run: |
-          set -euo pipefail
-          python scripts/deploy/build_release_bundle.py \
-            --release-manifest release-manifest.json \
-            --output-dir deploy-bundle \
-            --backend-app-secret-arn "${{ vars.BACKEND_APP_SECRET_ARN }}" \
-            --model-provider-secret-arn "${{ vars.MODEL_PROVIDER_SECRET_ARN }}" \
-            --observability-secret-arn "${{ vars.OBSERVABILITY_SECRET_ARN }}" \
-            --database-secret-arn "${{ vars.DATABASE_SECRET_ARN }}"
-
-      - name: Write immutable deploy SSM payload
-        run: |
-          set -euo pipefail
-          python scripts/deploy/write_ssm_command_payload.py \
-            --mode deploy \
-            --bundle-dir deploy-bundle \
-            --output release-deploy-ssm-command.json
-
-      - name: Archive release bundle
-        run: |
-          set -euo pipefail
-          tar -C deploy-bundle -czf release-bundle.tar.gz .
-
-      - name: Upload deploy payload artifact
+      - name: Upload release manifest artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-deploy-ssm-command-${{ steps.version.outputs.tag }}
-          path: release-deploy-ssm-command.json
+          name: release-manifest-${{ steps.version.outputs.tag }}
+          path: release-manifest.json
           if-no-files-found: error
 
       - name: Create immutable Git tag
@@ -229,39 +194,68 @@ jobs:
           set -euo pipefail
           gh release create "${RELEASE_TAG}" \
             release-manifest.json \
-            release-bundle.tar.gz \
-            release-deploy-ssm-command.json \
             --verify-tag \
             --title "${RELEASE_TAG}" \
             --generate-notes
 
   deploy:
-    name: Deploy release to EC2 via SSM
+    name: Deploy release to ECS Fargate
     needs: publish
     runs-on: ubuntu-latest
     concurrency:
       group: designagent-dev-release-operations
       cancel-in-progress: false
     steps:
-      - name: Download immutable deploy payload artifact
-        uses: actions/download-artifact@v4
+      - name: Checkout release commit
+        uses: actions/checkout@v5
         with:
-          name: ${{ needs.publish.outputs.deploy_payload_artifact_name }}
-          path: release-command
+          ref: ${{ needs.publish.outputs.release_git_sha }}
 
       - name: Require deploy configuration
         env:
           AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
-          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
         run: |
           set -euo pipefail
-          for required_name in AWS_DEPLOY_ROLE_ARN DEPLOY_TARGET_TAG_KEY DEPLOY_TARGET_TAG_VALUE; do
+          for required_name in AWS_DEPLOY_ROLE_ARN ECS_CLUSTER_NAME ECS_BACKEND_SERVICE_NAME ECS_UI_SERVICE_NAME; do
             if [[ -z "${!required_name:-}" ]]; then
-              echo "Repository variable ${required_name} must be set before automatic deploy can run."
+              echo "Repository variable ${required_name} must be set before automatic ECS deploy can run."
               exit 1
             fi
           done
+
+      - name: Download release manifest artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.release_manifest_artifact_name }}
+          path: release-assets
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          set -euo pipefail
+          manifest_path="release-assets/release-manifest.json"
+          python - <<'PY' "${manifest_path}" >> "${GITHUB_OUTPUT}"
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print(f"app_version={payload['app_version']}")
+          print(f"git_tag={payload['git_tag']}")
+          print(f"git_sha={payload['git_sha']}")
+          print(f"backend_image_ref={payload['backend_image']['digest_ref']}")
+          print(f"ui_image_ref={payload['ui_image']['digest_ref']}")
+          print(f"postgres_seed_version={payload['bootstrap']['postgres_seed_version']}")
+          print(f"image_catalog_run_id={payload['bootstrap']['image_catalog_run_id']}")
+          PY
 
       - name: Configure AWS deploy credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -269,85 +263,246 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Resolve target instance
-        id: target_instance
+      - name: Describe backend ECS service
         env:
-          DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
-          DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
         run: |
           set -euo pipefail
-          instance_ids="$(
-            aws ec2 describe-instances \
-              --filters \
-                "Name=tag:${DEPLOY_TARGET_TAG_KEY},Values=${DEPLOY_TARGET_TAG_VALUE}" \
-                "Name=instance-state-name,Values=running" \
-              --query 'Reservations[].Instances[].InstanceId' \
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_BACKEND_SERVICE_NAME}" \
+            --query 'services[0]' \
+            > backend-service.json
+
+      - name: Describe UI ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_UI_SERVICE_NAME}" \
+            --query 'services[0]' \
+            > ui-service.json
+
+      - name: Export ECS network and task-definition metadata
+        id: ecs
+        run: |
+          set -euo pipefail
+          python - <<'PY' backend-service.json ui-service.json
+          import json
+          import sys
+          from pathlib import Path
+
+          backend_service = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          ui_service = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+
+          backend_network = {"awsvpcConfiguration": backend_service["networkConfiguration"]["awsvpcConfiguration"]}
+          Path("backend-network-configuration.json").write_text(
+              json.dumps(backend_network, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          output_lines = [
+              f"backend_task_definition={backend_service['taskDefinition']}",
+              f"ui_task_definition={ui_service['taskDefinition']}",
+          ]
+          Path.home().joinpath("ecs-output.txt").write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+          PY
+          cat "${HOME}/ecs-output.txt" >> "${GITHUB_OUTPUT}"
+
+      - name: Download current backend task definition
+        env:
+          BACKEND_TASK_DEFINITION: ${{ steps.ecs.outputs.backend_task_definition }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${BACKEND_TASK_DEFINITION}" \
+            --query 'taskDefinition' \
+            > backend-task-definition.json
+
+      - name: Download current UI task definition
+        env:
+          UI_TASK_DEFINITION: ${{ steps.ecs.outputs.ui_task_definition }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${UI_TASK_DEFINITION}" \
+            --query 'taskDefinition' \
+            > ui-task-definition.json
+
+      - name: Render backend task definition
+        run: |
+          set -euo pipefail
+          python scripts/deploy/render_ecs_task_definition.py \
+            --input backend-task-definition.json \
+            --output backend-task-definition.rendered.json \
+            --container backend \
+            --image "${{ steps.release.outputs.backend_image_ref }}" \
+            --set-env "LOGFIRE_SERVICE_VERSION=${{ steps.release.outputs.app_version }}"
+
+      - name: Render UI task definition
+        run: |
+          set -euo pipefail
+          python scripts/deploy/render_ecs_task_definition.py \
+            --input ui-task-definition.json \
+            --output ui-task-definition.rendered.json \
+            --container ui \
+            --image "${{ steps.release.outputs.ui_image_ref }}" \
+            --set-env "APP_RELEASE_VERSION=${{ steps.release.outputs.app_version }}"
+
+      - name: Register backend task definition revision
+        id: backend_taskdef
+        run: |
+          set -euo pipefail
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file://backend-task-definition.rendered.json \
+              --query 'taskDefinition.taskDefinitionArn' \
               --output text
           )"
-          count="$(wc -w <<<"${instance_ids}" | tr -d ' ')"
-          if [[ "${count}" -ne 1 ]]; then
-            echo "Expected exactly one running deploy target for tag ${DEPLOY_TARGET_TAG_KEY}=${DEPLOY_TARGET_TAG_VALUE}, found ${count}: ${instance_ids}"
+          echo "arn=${task_definition_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run backend migrations on Fargate
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          cat > migration-overrides.json <<'EOF'
+          {
+            "containerOverrides": [
+              {
+                "name": "backend",
+                "command": ["python", "scripts/deploy/apply_migrations.py"]
+              }
+            ]
+          }
+          EOF
+          task_arn="$(
+            aws ecs run-task \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --launch-type FARGATE \
+              --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+              --network-configuration file://backend-network-configuration.json \
+              --overrides file://migration-overrides.json \
+              --query 'tasks[0].taskArn' \
+              --output text
+          )"
+          if [[ -z "${task_arn}" || "${task_arn}" == "None" ]]; then
+            echo "Failed to start migration task."
             exit 1
           fi
-          echo "instance_id=${instance_ids}" >> "${GITHUB_OUTPUT}"
-
-      - name: Send deploy command
-        id: send_command
-        env:
-          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
-          RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          command_id="$(
-            aws ssm send-command \
-              --instance-ids "${INSTANCE_ID}" \
-              --document-name AWS-RunShellScript \
-              --comment "Deploy ${RELEASE_TAG}" \
-              --parameters file://release-command/release-deploy-ssm-command.json \
-              --query 'Command.CommandId' \
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+          exit_code="$(
+            aws ecs describe-tasks \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
               --output text
           )"
-          echo "command_id=${command_id}" >> "${GITHUB_OUTPUT}"
+          if [[ "${exit_code}" != "0" ]]; then
+            aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+            echo "Migration task failed with exit code ${exit_code}."
+            exit 1
+          fi
 
-      - name: Wait for deploy command
+      - name: Verify seed state on Fargate
         env:
-          COMMAND_ID: ${{ steps.send_command.outputs.command_id }}
-          INSTANCE_ID: ${{ steps.target_instance.outputs.instance_id }}
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+          POSTGRES_SEED_VERSION: ${{ steps.release.outputs.postgres_seed_version }}
         run: |
           set -euo pipefail
-          while true; do
-            status="$(
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${INSTANCE_ID}" \
-                --query 'Status' \
-                --output text
-            )"
-            case "${status}" in
-              Pending|InProgress|Delayed)
-                sleep 5
-                ;;
-              Success)
-                aws ssm get-command-invocation \
-                  --command-id "${COMMAND_ID}" \
-                  --instance-id "${INSTANCE_ID}" \
-                  --query 'StandardOutputContent' \
-                  --output text
-                exit 0
-                ;;
-              *)
-                aws ssm get-command-invocation \
-                  --command-id "${COMMAND_ID}" \
-                  --instance-id "${INSTANCE_ID}" \
-                  --query 'StandardOutputContent' \
-                  --output text || true
-                aws ssm get-command-invocation \
-                  --command-id "${COMMAND_ID}" \
-                  --instance-id "${INSTANCE_ID}" \
-                  --query 'StandardErrorContent' \
-                  --output text || true
-                echo "Deploy command failed with status ${status}."
-                exit 1
-                ;;
-            esac
-          done
+          cat > seed-verification-overrides.json <<EOF
+          {
+            "containerOverrides": [
+              {
+                "name": "backend",
+                "command": [
+                  "python",
+                  "scripts/deploy/verify_seed_state.py",
+                  "--expected-postgres-seed-version",
+                  "${POSTGRES_SEED_VERSION}"
+                ]
+              }
+            ]
+          }
+          EOF
+          task_arn="$(
+            aws ecs run-task \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --launch-type FARGATE \
+              --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+              --network-configuration file://backend-network-configuration.json \
+              --overrides file://seed-verification-overrides.json \
+              --query 'tasks[0].taskArn' \
+              --output text
+          )"
+          if [[ -z "${task_arn}" || "${task_arn}" == "None" ]]; then
+            echo "Failed to start seed verification task."
+            exit 1
+          fi
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+          exit_code="$(
+            aws ecs describe-tasks \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
+              --output text
+          )"
+          if [[ "${exit_code}" != "0" ]]; then
+            aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+            echo "Seed verification task failed with exit code ${exit_code}."
+            exit 1
+          fi
+
+      - name: Update backend ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_BACKEND_SERVICE_NAME}" \
+            --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+            --desired-count 1 \
+            --force-new-deployment \
+            >/dev/null
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_BACKEND_SERVICE_NAME}"
+
+      - name: Register UI task definition revision
+        id: ui_taskdef
+        run: |
+          set -euo pipefail
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file://ui-task-definition.rendered.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text
+          )"
+          echo "arn=${task_definition_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update UI ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+          UI_TASK_DEFINITION_ARN: ${{ steps.ui_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_UI_SERVICE_NAME}" \
+            --task-definition "${UI_TASK_DEFINITION_ARN}" \
+            --desired-count 1 \
+            --force-new-deployment \
+            >/dev/null
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_UI_SERVICE_NAME}"
