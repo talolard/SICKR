@@ -1,62 +1,113 @@
 # Deployment Project Status
 
+Last updated: 2026-03-25
+
 Read [guiding_principles.md](./guiding_principles.md) first.
-Read [final_deployment_recommendation_2026-03-24_synthesized.md](./final_deployment_recommendation_2026-03-24_synthesized.md)
-and [subspecs/00_context.md](./subspecs/00_context.md) for the current source
-of truth. Those documents trump older deployment notes, review comments, and
-superseded plans.
+The documents under `specs/deploy/` are the current source of truth for this
+deployment project and trump older deployment plans, notes, and critiques.
 
-## Current Shape
+## Current Canonical Direction
 
-The deployment project has a real AWS foundation in place:
+The deployment project has pivoted from:
 
-- Route53, CloudFront, S3 buckets, EC2 host, and Aurora exist in account
-  `046673074482`
-- GitHub repo variables and Secrets Manager containers are mostly wired
-- the product-image corpus is being pushed to S3 separately from app releases
+- `CloudFront + EC2 host + SSM + docker compose`
 
-The current implementation stack is still mid-transition.
+to:
 
-## Important Simplification Adopted Today
+- `CloudFront + ALB + ECS Fargate + Aurora + S3`
 
-The deploy model is now explicitly simpler than the earlier review stack:
+This is an intentional simplification move. The trade is:
 
-- **environment bootstrap** is separate from **application deploy**
-- normal app deploys run migrations plus seed verification
-- normal app deploys do **not** require a host-local image catalog
-- product-image URLs should point at same-host CloudFront URLs backed by the
-  uploaded `masters/` keyspace
-- `nginx` is no longer a required v1 architecture layer
-- CloudFront should route directly to the `ui` origin by default and to the
-  `backend` origin for `/ag-ui/*`
+- higher steady-state app runtime cost
+- much lower host-management burden
 
-## What Is Implemented
+For this project, that is the right trade.
 
-- deploy specs and subspecs exist and are now updated to the simplified model
-- the deploy bundle runner no longer assumes a host-local image catalog for
-  steady-state deploy
-- deploy env examples no longer advertise bootstrap-only host variables as part
-  of the normal runtime contract
-- the dead duplicate seeded-catalog readiness module has been removed
-- the unused Postgres URL-shape helper and its dedicated test have been removed
-- product-image URL helpers no longer carry dead run-id parameters now that the
-  public URL contract is `masters/<image-asset-key>`
-- Terraform now models direct UI/backend origin ports and no longer installs
-  `nginx` in host bootstrap
+## What Is Implemented In The Repo Now
 
-## Major Remaining Gaps
+The repo now contains:
 
-- Terraform and CloudFront implementation still need to be fully aligned with
-  the no-`nginx` routing model in the live environment, not just in code
-- release/deploy automation still needs a clean separation between one-off
-  environment bootstrap and steady-state image rollout
-- final public-path validation on `designagent.talperry.com` is still pending
+- production `ui` and `backend` Dockerfiles
+- release-manifest generation
+- release-please-driven image publication
+- ECS-oriented deploy workflows
+- an ECS task-definition renderer
+- Terraform modules for:
+  - network
+  - database
+  - storage
+  - edge
+  - runtime
+- a rewritten deploy spec set that treats Fargate+ALB as canonical
 
-## Near-Term Priority
+The old EC2-host deploy path has been removed from the repo surface:
 
-The next implementation priority should be:
+- no host deploy bundle renderer
+- no host-bundle runner
+- no SSM command payload writer
+- no production `docker compose` deploy file
+- no host deploy env example
+- no EC2 compute module
 
-1. finish aligning the deploy automation and Terraform with the simplified
-   routing/bootstrap model
-2. complete the product-image URL/seeding contract
-3. validate the end-to-end public path and launch-readiness gates
+## What This Makes Redundant
+
+The following work should now be treated as obsolete, not as an alternate path:
+
+- provisioning or debugging the single EC2 app host
+- origin-host DNS for the app runtime
+- SSM-based deploy workflows
+- host-local rollback bookkeeping
+- host-local compose orchestration
+- any design that still assumes `nginx` or a host reverse proxy is required
+
+## Major Gaps Still Open
+
+The pivot is real, but it does not mean the deployment is done.
+
+The biggest remaining gaps are:
+
+1. The new Terraform runtime still needs real `plan` and likely iterative fixes.
+2. The GitHub repo variables need to shift from EC2-targeting values to ECS
+   values:
+   - `ECS_CLUSTER_NAME`
+   - `ECS_BACKEND_SERVICE_NAME`
+   - `ECS_UI_SERVICE_NAME`
+3. The first environment bootstrap still has to happen against the target
+   Aurora cluster.
+4. Product images still need to be present in the public bucket before launch.
+5. We still need one real end-to-end proof of:
+   - AG-UI streaming through `CloudFront -> ALB -> backend`
+   - Aurora pause-to-zero under the deployed runtime posture
+
+## Work We Need To Do Before First Real Deploy
+
+Before the first real ECS deploy can succeed, we still need:
+
+1. `terraform validate`
+2. a real Terraform apply for the Fargate/ALB runtime
+3. GitHub repo variables updated from Terraform outputs
+4. one release publish run to push immutable images
+5. one one-off bootstrap run for the target environment
+6. one deploy workflow run against ECS
+
+## Epic Impact
+
+This architecture pivot changes the meaning of several epics and tasks.
+
+Most importantly:
+
+- Terraform/AWS work now means ECS+ALB runtime, not EC2 host bring-up
+- build/publish/deploy automation now means ECS task-definition and service
+  rollout, not SSM host orchestration
+- launch-readiness validation must prove the public ECS path, not an EC2 host
+- the Beads graph has been updated so the runtime, edge, and deploy tasks now
+  point at the ECS/ALB substrate rather than the obsolete host path
+
+## Recommended Next Sequence
+
+1. Finish and validate the Terraform Fargate/ALB runtime shape.
+2. Populate the new ECS GitHub repo variables from Terraform outputs.
+3. Run one first release publication to produce immutable image digests and a
+   release manifest.
+4. Bootstrap the environment once.
+5. Run the first ECS deploy and public-path validation.

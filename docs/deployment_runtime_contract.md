@@ -6,36 +6,36 @@ deployment assumptions.
 
 The files under `specs/deploy/` are the current source of truth for deployment
 work and trump older deployment notes and plans. This document exists to make
-the runtime environment contract explicit for implementers and deploy tooling.
+the deploy-time runtime contract explicit for implementers and CI.
 
 ## Purpose
 
-This project uses a split runtime:
+This project now deploys the application runtime as:
 
-- one `backend` container
-- one `ui` container
-- one host-level deploy layer that injects runtime configuration
+- one `backend` ECS Fargate task definition and service
+- one `ui` ECS Fargate task definition and service
+- one ALB that routes `/ag-ui/*` to `backend` and everything else to `ui`
+- one CloudFront distribution in front of that ALB and the product-image bucket
 
-The contract below is the stable deploy-facing environment surface. The release
-workflow, Terraform outputs, and later host deploy automation should all reuse
-this contract instead of inventing new environment semantics.
+This contract keeps one important distinction explicit:
 
-This contract also makes one deployment distinction explicit:
+- **environment bootstrap** is one-off work that populates database state and
+  image metadata
+- **application deploy** rolls out new `ui` and `backend` images onto ECS
 
-- **environment bootstrap** prepares catalog data and image metadata
-- **application deploy** rolls out new `ui` and `backend` images
-
-Normal application deploys do not require repo-local image-catalog files on the
-host.
+Normal application deploys do not require repo-local image catalogs, host-local
+state, or a machine-oriented deploy bundle.
 
 ## Rules
 
 - never bake long-lived secrets into images
-- keep non-secret runtime config in plain env files or explicit deploy config
-- keep secrets in AWS Secrets Manager and map secret keys to environment
-  variables at container start
-- prefer canonical variable names even where the application still accepts older
-  aliases for compatibility
+- keep non-secret runtime config in ECS task-definition environment values
+- keep secrets in AWS Secrets Manager and inject them through ECS task
+  definition `secrets`
+- prefer canonical variable names even where the application still accepts
+  older aliases for compatibility
+- let Terraform own the stable task-definition baseline and let CI own
+  task-definition revisions and service rollouts
 
 ## Secrets Manager Contract
 
@@ -50,18 +50,19 @@ Expected key usage inside those secrets:
 
 | Secret | Expected keys | Notes |
 | --- | --- | --- |
-| `backend-app` | reserved for backend-only sensitive values | create now so later deploy automation has a stable ARN even if v1 leaves it empty |
-| `model-providers` | `GEMINI_API_KEY`, `FAL_KEY` | use canonical names; do not prefer `GOOGLE_API_KEY` or `FAI_AI_API_KEY` in deployed env |
+| `backend-app` | reserved for backend-only sensitive values | keep stable even if v1 leaves it empty |
+| `model-providers` | `GEMINI_API_KEY`, `FAL_KEY` | use canonical names in deployed env |
 | `observability` | `LOGFIRE_TOKEN` | optional for remote Logfire export |
 | `database` | `DATABASE_URL` | one DSN for the Aurora writer endpoint |
 
-Deploy tooling should project secret JSON keys into container environment
-variables with the same names.
+Deploy automation should not read individual secret values in CI. Instead:
 
-## Backend Contract
+- Terraform wires the secret ARNs into the ECS task definitions
+- ECS resolves the secret keys into environment variables at task start
 
-The backend container should receive these non-secret values directly from the
-host deploy layer:
+## Backend Task Contract
+
+The backend ECS task definition should carry these non-secret values directly:
 
 | Variable | Required value for current deploy | Why |
 | --- | --- | --- |
@@ -69,23 +70,23 @@ host deploy layer:
 | `LOG_LEVEL` | `INFO` | conservative default for low-volume public use |
 | `LOG_JSON` | `true` | keeps logs structured for Logfire and later collection |
 | `LOGFIRE_SERVICE_NAME` | `ikea-agent` | stable service identity |
+| `LOGFIRE_SERVICE_VERSION` | release version, patched by CI | ties telemetry to the rolled-out revision |
 | `LOGFIRE_ENVIRONMENT` | `dev` | explicit environment labeling for traces and logs |
-| `LOGFIRE_SERVICE_VERSION` | release version, for example `0.1.0` | ties telemetry to the published release |
 | `LOGFIRE_SEND_MODE` | `if-token-present` | deploy works without a token but exports when configured |
 | `DATABASE_POOL_MODE` | `nullpool` | deploy-friendly connection policy for Aurora pause-to-zero |
 | `ALLOW_MODEL_REQUESTS` | `1` | the deployed app should use the real model path |
 | `IMAGE_SERVING_STRATEGY` | `direct_public_url` | public launch requires bucket-backed image delivery |
-| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base for runtime payloads |
-| `ARTIFACT_ROOT_DIR` | `/var/lib/ikea-agent/artifacts` | mounted writable path for local materialization and read cache |
-| `ARTIFACT_STORAGE_BACKEND` | `s3` | deployed private artifacts must not rely on container-local disk as the durable store |
-| `ARTIFACT_S3_BUCKET` | deploy-specific private bucket name | durable private storage bucket for uploads and generated artifacts |
-| `ARTIFACT_S3_PREFIX` | `dev` or other environment prefix | optional bucket-relative root for private object keys |
-| `ARTIFACT_S3_REGION` | `eu-central-1` | explicit region when the runtime should not rely on ambient AWS config |
+| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-host image base for runtime payloads |
+| `ARTIFACT_ROOT_DIR` | `/var/lib/ikea-agent/artifacts` | writable in-container materialization/cache root |
+| `ARTIFACT_STORAGE_BACKEND` | `s3` | durable private artifacts live outside container-local disk |
+| `ARTIFACT_S3_BUCKET` | deploy-specific private bucket name | durable private storage bucket |
+| `ARTIFACT_S3_PREFIX` | `dev` | optional bucket-relative root for private object keys |
+| `ARTIFACT_S3_REGION` | `eu-central-1` | explicit region when runtime should not rely on ambient config |
 | `FEEDBACK_CAPTURE_ENABLED` | `0` | keep optional local capture disabled in deployed v1 |
 | `TRACE_CAPTURE_ENABLED` | `0` | keep local trace-bundle capture disabled in deployed v1 |
 
-The backend container should receive these secret-backed values from Secrets
-Manager:
+The backend task should receive these secret-backed values from ECS secret
+injection:
 
 - `DATABASE_URL`
 - `GEMINI_API_KEY`
@@ -99,143 +100,90 @@ Product-image note:
   `https://designagent.talperry.com/static/product-images/masters/<image-asset-key>`
   into `catalog.product_images.public_url`
 
-## UI Contract
+## UI Task Contract
 
-The UI container should receive only non-secret runtime values:
+The UI ECS task definition should remain secret-free and should carry:
 
 | Variable | Required value for current deploy | Why |
 | --- | --- | --- |
 | `NODE_ENV` | `production` | production Next.js behavior |
 | `APP_ENV` | `dev` | release/environment tag for server-side UI logs |
-| `APP_RELEASE_VERSION` | release version, for example `0.1.0` | release tag for server-side UI logs |
-| `PY_AG_UI_URL` | `http://backend:8000/ag-ui/` | server-side UI routes call the backend over the internal container network |
+| `APP_RELEASE_VERSION` | release version, patched by CI | release tag for server-side UI logs |
+| `PY_AG_UI_URL` | `http://<alb-dns>/ag-ui/` | server-side UI routes call the backend through the shared ALB path split |
 | `NEXT_PUBLIC_USE_MOCK_AGENT` | `0` | deployed UI must use the real backend |
 | `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED` | `0` | keep trace capture off unless explicitly enabled later |
 
 No browser-visible secrets belong in the UI runtime contract.
 
-## Host And Deploy Contract
+## ECS Baseline Contract
 
-The host deploy layer should work from these inputs:
+Terraform should own the stable ECS baseline:
 
-| Variable | Source |
+- ECS cluster name
+- ALB and target groups
+- task-definition families
+- task execution and task roles
+- secret ARNs wired into task definitions
+- CloudWatch log groups
+- initial services with `desired_count = 0` and placeholder task definitions
+
+The CI deploy workflow should then:
+
+1. build and push immutable image digests
+2. write the release manifest
+3. describe the current ECS task definitions
+4. render new task-definition revisions by replacing the image and release
+   version fields
+5. run one-off backend migration and seed-verification tasks on Fargate
+6. update the backend service to the new task definition
+7. update the UI service to the new task definition
+
+This keeps the stable runtime contract in Terraform while keeping release
+rollouts source-controlled and repeatable.
+
+## Deploy Inputs
+
+The ECS deploy workflow should work from these inputs:
+
+| Input | Source |
 | --- | --- |
 | `AWS_REGION` | fixed deploy config: `eu-central-1` |
-| `COMPOSE_PROJECT_NAME` | fixed deploy config: `ikea-agent-dev` |
-| `BACKEND_IMAGE_REF` | release manifest `backend_image.digest_ref` |
-| `UI_IMAGE_REF` | release manifest `ui_image.digest_ref` |
+| `ECS_CLUSTER_NAME` | Terraform output / GitHub repo variable |
+| `ECS_BACKEND_SERVICE_NAME` | Terraform output / GitHub repo variable |
+| `ECS_UI_SERVICE_NAME` | Terraform output / GitHub repo variable |
 | `RELEASE_VERSION` | release manifest `app_version` |
 | `RELEASE_GIT_TAG` | release manifest `git_tag` |
 | `RELEASE_GIT_SHA` | release manifest `git_sha` |
-| `BACKEND_APP_SECRET_ARN` | Terraform output |
-| `MODEL_PROVIDER_SECRET_ARN` | Terraform output |
-| `OBSERVABILITY_SECRET_ARN` | Terraform output |
-| `DATABASE_SECRET_ARN` | Terraform output |
-| `PRODUCT_IMAGE_BASE_URL` | fixed deploy config: `https://designagent.talperry.com/static/product-images` |
-| `BACKEND_HOST_PORT` | fixed deploy config: `8000` |
-| `UI_HOST_PORT` | fixed deploy config: `3000` |
-| `DEPLOY_STATE_DIR` | fixed deploy config: `/var/lib/ikea-agent/deploy` |
-| `BACKEND_SECRETS_ENV_FILE` | fixed deploy config: `/var/lib/ikea-agent/deploy/runtime/backend.secrets.env` |
-| `HOST_ARTIFACT_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/artifacts` |
+| `BACKEND_IMAGE_REF` | release manifest `backend_image.digest_ref` |
+| `UI_IMAGE_REF` | release manifest `ui_image.digest_ref` |
+| `POSTGRES_SEED_VERSION` | release manifest `bootstrap.postgres_seed_version` |
+| `IMAGE_CATALOG_RUN_ID` | release manifest `bootstrap.image_catalog_run_id` |
 
-The host should mount one writable path for backend artifact materialization and
-cache:
+Old EC2 deploy inputs such as host ports, deploy-state directories, SSM
+payloads, and Compose project names are intentionally out of contract now.
 
-- `/var/lib/ikea-agent/artifacts`
+## Rollback Contract
 
-The host should also keep one deploy-state root:
+There is no special host-side rollback state anymore.
 
-- `/var/lib/ikea-agent/deploy`
+Rollback should mean:
 
-That deploy-state root stores:
+- select an older immutable Git release tag
+- read its release manifest
+- render ECS task-definition revisions from the current baseline with the older
+  digest refs
+- redeploy those services through the same ECS workflow
 
-- extracted release bundles under `releases/<git_tag>/`
-- one non-versioned backend secret env file under `runtime/backend.secrets.env`
-- the current deployed release tag
-- the previous deployed release tag
-- current and previous manifest snapshots for rollback bookkeeping
+That is simpler and more transparent than maintaining host-local “previous
+release” files.
 
-The deploy runner should consume release-manifest digests, fetch the required
-Secrets Manager values, and inject only the contract above into the containers.
-It should not persist secret values in versioned release directories.
+## Validation Expectations
 
-## Environment Bootstrap Contract
+Useful validation for this contract includes:
 
-Environment bootstrap is a separate workflow from normal app deploy.
-
-Its job is to:
-
-- upload immutable product image objects to S3
-- seed or refresh `catalog.*` and `ops.seed_state`
-- prepare `catalog.product_images.public_url` for `direct_public_url` mode
-
-This workflow may use:
-
-- `uv run python scripts/deploy/bootstrap_catalog.py`
-- repo-local parquet inputs
-- repo-local image-catalog run outputs
-
-It is not a required step on every release deploy.
-
-## Application Deploy Entry Points
-
-The steady-state deploy contract now exposes these deploy-facing commands:
-
-- `uv run python scripts/deploy/apply_migrations.py`
-- `uv run python scripts/deploy/verify_seed_state.py`
-- `uv run python scripts/deploy/wait_for_http_ready.py --url <health-url>`
-- `uv run python scripts/deploy/prove_agui_streaming.py --url <ag-ui-agent-url>`
-  - this validates SSE response framing and first-event delivery only
-  - it does not by itself prove unbuffered progressive streaming through the
-    full public CloudFront path
-
-Expected health URLs:
-
-- backend liveness: `/api/health/live`
-- backend readiness: `/api/health/ready`
-- UI liveness: `/api/health/live`
-- UI readiness: `/api/health/ready`
-
-`/api/health` remains the compatibility alias for UI readiness.
-
-## Deploy Bundle Contract
-
-The release and deploy workflows now render one deploy bundle before invoking
-SSM. That bundle is the host-side execution unit and contains:
-
-- `release-manifest.json`
-- `host.env`
-- `backend.env`
-- `ui.env`
-- `docker-compose.yml`
-- `scripts/host_bundle_runner.py`
-- one pre-rendered `release-deploy-ssm-command.json` payload distributed with
-  the release assets
-
-The host runner is responsible for:
-
-1. reading the secret ARNs from `host.env`
-2. projecting secret JSON keys into the non-versioned runtime secret env file
-3. pulling pinned image digests
-4. running migrations
-5. running seed verification against the already-prepared environment
-6. starting backend, then UI
-7. waiting for backend readiness, UI readiness, and one lightweight app check
-8. updating current and previous deploy state markers
-
-Rollback uses the previous recorded deploy bundle by exact image digests and
-skips schema migration by default, because DB rollback is not assumed safe.
-Both deploy and rollback operations are serialized by the workflow concurrency
-key and by a host-local deploy lock so two overlapping SSM commands cannot
-interleave state changes.
-
-## Example Env Files
-
-These example files document the current expected values:
-
-- `docker/env/backend.env.example`
-- `docker/env/ui.env.example`
-- `docker/env/host.env.example`
-- `docker/compose.deploy.yml`
-
-They are examples, not sources of secret truth.
+- local tests for manifest parsing and ECS task-definition rendering
+- `terraform validate` for the Fargate/ALB runtime surface
+- CI dry runs or real workflow validation for task-definition registration
+- one real Fargate migration task run before the first public launch
+- one real public-path validation on `designagent.talperry.com` after the ECS
+  services are live

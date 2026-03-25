@@ -1,13 +1,9 @@
 # Synthesized Deployment Review And Revised Recommendation
 
-This document merges the two critique notes and incorporates the inline comments
-left in both.
-
-This is the canonical top-level deployment spec for the near-term public
-deployment.
-The focused specs in
-[subspecs/](./subspecs/) decompose this document into implementation-facing
-areas.
+This document is the canonical top-level deployment spec for the near-term
+public deployment.
+The focused specs in [subspecs/](./subspecs/) decompose this document into
+implementation-facing areas.
 Read [subspecs/00_context.md](./subspecs/00_context.md) before reading the
 individual subspecs.
 
@@ -15,348 +11,165 @@ Branching rule:
 - start all deployment-project implementation from `tal/deployproject` or from
   a stacked branch that descends from it
 
-## Comment Checklist
-
-- [x] CloudFront/CDN and TLS: switched the public-edge recommendation to
-  `CloudFront + ACM`, and called out that streaming paths need special handling.
-- [x] CloudFront plus SSE concern: kept CloudFront, but made `/ag-ui/*`
-  streaming validation an explicit deployment requirement.
-- [x] Do not turn this into a full Terraform spec yet: kept infra details
-  intentionally high level and moved exact AWS resource design to a deferred
-  section.
-- [x] Aurora Serverless v2 should scale to `0`: made scale-to-zero the intended
-  operating mode for this low-duty-cycle deployment.
-- [x] Close connections after 15 minutes: added
-  `idle_session_timeout = 15 minutes` as part of the database plan.
-- [x] Clarify why `idle_session_timeout` matters: explained that it helps drain
-  idle sessions so Aurora can pause, but app-side connection behavior still has
-  to cooperate.
-- [x] Keep `RDS Proxy` out for this use case: made it an explicit non-goal for
-  this deployment.
-- [x] Use the latest Aurora PostgreSQL version: updated the recommendation to
-  "latest Aurora PostgreSQL version that supports the required `pgvector`
-  extension."
-- [x] Drop the "Terraform later" critique for now: removed that as a core issue
-  since a dedicated Terraform spec will follow separately.
-- [x] Pick the `main -> release` promotion model if a `release` branch exists:
-  made that the recommended branch model.
-- [x] Release tooling should now be explicit: selected `release-please` for
-  release PR preparation, changelog generation, and version-file updates, while
-  keeping final publication gated on built and pushed artifacts plus a release
-  manifest.
-- [x] Ignore Helm/commit-SHA conventions for this repo: omitted that line of
-  critique from the synthesis.
-- [x] Split static product images from dynamic attachments: added a public image
-  bucket and a separate private runtime-artifacts bucket.
-- [x] Product images should be public: routed them through CloudFront-backed
-  public URLs.
-- [x] Attachments should be private: kept them in private storage with fresh
-  presigned access at read time rather than durable public URLs.
-- [x] Use an AWS-managed secret store: recommended AWS Secrets Manager at a high
-  level, without specifying the exact injection mechanism yet.
-- [x] Domain is a future subdomain of `talperry.com`: captured that as the
-  expected public DNS shape.
-- [x] Keep AWS detail minimal for now: reduced the infra prerequisites to a
-  short operational contract.
-- [x] Single-instance risk is acceptable for this friend-sharing phase: stated
-  that explicitly.
-
 ## Scope
 
-This is not the Terraform spec and not the final AWS resource design. The goal
-here is narrower:
+This is not the full Terraform implementation and not the final launch runbook.
+Its job is to state the correct cohesive deployment picture so the subspecs and
+tasks can decompose it consistently.
 
-- correct the routing and deployment picture
-- turn the overlapping critiques into one coherent recommendation
-- make the key decisions explicit
-- leave low-value infrastructure detail deferred
+## Canonical Recommendation
 
-## Revised Recommendation
-
-### 1. Deployment Shape
-
-Use this near-term topology:
+Use this topology:
 
 - one `CloudFront` distribution as the public edge
 - one ACM certificate attached to CloudFront
-- one public app domain on a subdomain of `talperry.com`, specifically
-  `designagent.talperry.com`
-- one small EC2 host as the application origin
-- one `ui` container running Next.js
-- one `backend` container running FastAPI + PydanticAI + AG-UI
+- one public hostname: `designagent.talperry.com`
+- one public `ALB` as the application origin behind CloudFront
+- one `ui` ECS Fargate service running Next.js
+- one `backend` ECS Fargate service running FastAPI + PydanticAI + AG-UI
 - Aurora Serverless v2 PostgreSQL
 - one public S3 bucket for product images
 - one private S3 bucket for attachments and generated runtime artifacts
 
-This keeps the current application architecture intact while deleting an
-unnecessary reverse-proxy layer from the v1 path.
+This replaces the older single-EC2-host deploy model.
 
-### 2. Public Routing Model
+## Why This Is The Better Shape
 
-The biggest correction from the earlier recommendation is this:
+For this project, the priority order is:
 
-- many browser-visible routes are still owned by the Next.js app, even when they
-  proxy to the backend behind the scenes
-- only the AG-UI transport should go directly to the backend
+- simplicity
+- automation
+- repeatability
+- easy debugging
+- then cost optimization inside those constraints
 
-Recommended public routing:
+The EC2 design kept dragging a machine-management layer along with it:
 
-| Public path | Public origin target | Notes |
-| --- | --- | --- |
-| `/`, app pages, `/_next/*` | `ui` origin | Normal Next.js app traffic |
-| `/api/copilotkit` | `ui` origin | CopilotKit runtime route lives in Next.js |
-| `/api/attachments` | `ui` origin | Next.js route currently handles attachment upload proxying |
-| `/attachments/*` | `ui` origin | Keep browser contract stable even if reads later resolve to presigned URLs |
-| `/api/thread-data/*` | `ui` origin | Next.js route proxies backend thread APIs |
-| `/api/agents*` | `ui` origin | Next.js route proxies backend metadata APIs |
-| `/api/traces*` | `ui` origin | Keep disabled in production-like deploys for now |
-| `/ag-ui/*` | `backend` origin | Direct AG-UI SSE transport path |
-| `/static/product-images/*` | CloudFront S3 image origin | Cacheable public image path |
+- host bootstrap
+- package drift
+- SSM command orchestration
+- host-local compose state
+- host-local rollback state
 
-That preserves one public app domain while keeping the current same-origin
-browser assumptions for the application itself.
+The Fargate+ALB design removes that entire class of problems. It is not the
+lowest steady-state cost option, but it is the cleaner operational system for a
+single-developer side project.
 
-### 3. Edge, CDN, And TLS
+## Public Routing Model
 
-Use `CloudFront` as the public edge and TLS termination layer.
+The browser-visible contract remains:
 
-Recommended CloudFront behaviors:
+- `ui` owns `/`, `/_next/*`, `/api/copilotkit`, `/api/attachments`,
+  `/attachments/*`, `/api/thread-data/*`, `/api/agents*`, and `/api/traces*`
+- `backend` owns `/ag-ui/*`
+- product images live at `/static/product-images/*`
 
-- default app behavior forwards to the EC2 app origin and should be effectively
-  non-cacheing for dynamic app traffic
-- `/ag-ui/*` uses a dedicated dynamic behavior with caching disabled and
-  streaming validated end to end
-- `/static/product-images/*` uses the S3 image origin with normal CDN caching
+The routing layers should enforce that split like this:
 
-Important note for AG-UI:
+- CloudFront default behavior -> ALB
+- CloudFront `/ag-ui/*` behavior -> same ALB, no-cache, streaming-safe
+- CloudFront `/static/product-images/*` behavior -> S3 image origin
+- ALB default listener action -> UI target group
+- ALB `/ag-ui/*` listener rule -> backend target group
 
-- `/ag-ui/*` streams SSE responses
-- CloudFront forwards requests to custom origins over HTTP/1.1
-- CloudFront supports `Transfer-Encoding: chunked`, which is the response shape
-  that matters most for streaming
-- CloudFront's origin response timeout is effectively also the maximum allowed
-  gap between response packets
-- for `POST` requests, if the origin stops responding for longer than that read
-  timeout, CloudFront drops the connection and does not retry
-- the CloudFront plus backend-origin path must therefore be configured and
-  tested so streaming is not buffered or broken
-- the `/ag-ui/*` behavior should use caching disabled, and its timeout settings
-  must be chosen with long-lived streaming in mind
-- this is not a nice-to-have; it is a launch gate
+There is no required `nginx` layer.
 
-This lets CloudFront handle the public certificate, the UI/backend path split,
-and static image delivery without a separate `nginx` tier in v1.
-
-### 4. Database
+## Database
 
 Use Aurora Serverless v2 PostgreSQL, on the latest Aurora PostgreSQL version
-that supports the required `pgvector` extension.
+that supports `pgvector`.
 
-Near-term database policy:
+Policy:
 
-- commit to Serverless v2 auto-pause down to `0` ACU for this deployment
-- do not use `RDS Proxy`
-- set `idle_session_timeout = 15 minutes`
-- keep application connections from lingering indefinitely
+- commit to pause-to-zero
+- keep `idle_session_timeout = 15 minutes`
+- keep application connection handling pause-friendly
+- do not add `RDS Proxy`
 
-Why the timeout matters:
+If pooled connections prevent reliable pause-to-zero, prefer `NullPool` in the
+deployed runtime.
 
-- Aurora can only pause when idle sessions are actually gone
-- `idle_session_timeout` helps by draining old idle sessions
-- that does not remove the need for application-side connection discipline
+## Storage
 
-So the deployed runtime should use a connection strategy that is intentionally
-pause-friendly. Start with conservative pooling. If the current pooled engine
-prevents reliable pause-to-zero, switch the deployed runtime to `NullPool`.
+Keep the storage split by artifact family:
 
-The acceptance criteria for this database choice should be:
+- product images are static and public
+- attachments and generated runtime artifacts are dynamic and private
 
-- the cluster reliably returns to `0` ACU after inactivity
-- the first request after idle is allowed to be slow, but succeeds cleanly
-- the UI or app path tolerates cold-wake latency without looking broken
+Product images:
 
-### 5. Storage
+- live in the public bucket
+- are fronted by CloudFront
+- are exposed at `/static/product-images/*`
+- are seeded into the catalog as same-host `public_url` values
 
-The storage story should be split by artifact family, not treated as one generic
-"files on S3" decision.
+Attachments and generated artifacts:
 
-#### Product Images
+- live in the private bucket
+- keep stable IDs in durable state
+- are resolved at request time through app-owned same-origin routes
 
-Product images are static and should be public.
+## Release And Deployment Model
 
-Recommended shape:
+Use one application-level version per deployable release.
 
-- store them in a dedicated public S3 bucket
-- front that bucket with CloudFront
-- expose them at `/static/product-images/*` on the app domain
-- use `IMAGE_SERVING_STRATEGY=direct_public_url` in deployed environments
-- seed `public_url` values to the CloudFront-backed image URLs
+The release flow should be:
 
-That removes unnecessary backend proxy load and matches the static access
-pattern.
+1. release-please prepares and promotes the release
+2. CI builds the `ui` and `backend` images
+3. CI pushes both images to ECR under immutable version and commit tags
+4. CI writes one release manifest containing the pinned digests and bootstrap
+   metadata
+5. CI creates the immutable Git tag and GitHub release
+6. CI or a manual workflow renders new ECS task-definition revisions from the
+   current Terraform-owned baseline
+7. deploy automation runs one-off backend migration and seed-verification tasks
+   on Fargate
+8. deploy automation updates the backend ECS service
+9. deploy automation updates the UI ECS service
 
-#### Attachments And Generated Runtime Artifacts
+There should be no host-local deploy bundle, no SSM command payload, and no
+host-local rollback bookkeeping.
 
-Attachments and generated artifacts are dynamic and should stay private.
+Rollback means redeploying an older immutable release tag through the same ECS
+workflow.
 
-Recommended shape:
+## Bootstrap Versus Steady State
 
-- store them in a separate private S3 bucket
-- keep stable attachment or artifact IDs in durable state
-- do not store raw expiring presigned URLs as the durable contract
-- resolve reads to fresh presigned GET URLs, or redirect to them, at request time
+One-off environment bootstrap is still separate from steady-state app deploy.
 
-This keeps the privacy boundary correct without forcing the transcript state to
-depend on expiring URLs.
+One-off bootstrap includes:
 
-#### Trace Bundles
+- initial schema bring-up if needed
+- canonical seed/bootstrap flow
+- catalog image metadata seeding
 
-Trace bundles should remain disabled in production-like deployments for now. The
-current trace-reporting flow is developer-oriented and does not need to be part
-of the first public rollout.
+Steady-state deploy includes:
 
-### 6. Release And Deployment Model
+- migrations
+- seed verification
+- ECS service rollout
 
-Use one application-level version per deployable release, and release the `ui`
-and `backend` together.
+Normal deploys should not re-run catalog bootstrap.
 
-Recommended branch and release model:
+## Remaining Pre-Launch Work
 
-- `main` remains the normal integration branch
-- `release` is the promotion branch
-- changes move from `main` to `release`
-- do not merge feature branches directly into `release`
+This architecture choice does not make the project launch-ready by itself.
+Before first public launch we still need:
 
-Recommended artifact model:
+- Terraform to provision the ECS cluster, ALB, services, CloudFront, Aurora,
+  and buckets coherently
+- release and deploy automation to target ECS rather than EC2
+- one real proof of AG-UI streaming through `CloudFront -> ALB -> backend`
+- one real proof of Aurora pause-to-zero with the deployed connection policy
+- one one-off environment bootstrap for the target database
+- product images uploaded to the public bucket before launch
 
-- publish `ui` and `backend` images to ECR
-- deploy by exact immutable version tags or digests
-- keep one app-level semver per release
+## Summary
 
-Recommended deploy flow:
+The canonical deployment story is now:
 
-1. merge feature work into `main` with conventional-commit-style PR titles and
-   squash merge so the resulting `main` history carries release intent
-2. promote validated `main` commits into `release` without squashing away the
-   commit history that release tooling must analyze
-3. `release-please` creates or updates a draft release PR on `release`
-4. merging that release PR updates `CHANGELOG.md` and `version.txt` on
-   `release`
-5. publish automation builds and pushes both `ui` and `backend` images to ECR
-6. publish automation writes the release manifest and records the exact image
-   digests
-7. only after both images exist and the manifest exists do we create the
-   immutable Git tag and GitHub release
-8. CI then triggers an SSM-based deploy on the EC2 host
-9. the host pulls the exact pinned image references and runs
-   `docker compose up -d`
+- `CloudFront + ALB + ECS Fargate + Aurora + S3`
 
-Current implementation honesty note:
-
-- this is still the target release/publication flow, not a fully proven current
-  repository guarantee
-- the current repo already has separate release-preparation and
-  release-publication workflows
-- the current publish workflow still accepts:
-  - a merged PR into `release` whose title starts with `chore(release):`
-  - a manual `workflow_dispatch` run for an explicit ref
-- the current publish workflow writes the manifest before tag push, but it
-  still pushes the immutable tag before creating the GitHub release
-- that means a post-tag GitHub-release failure can leave the repo in a partial
-  publication state and reruns currently fail on the duplicate-tag guard
-- concrete release-please provenance checks and failure-safe final publication
-  remain unresolved implementation work
-
-Release-note behavior should be split clearly:
-
-- `release-please` is responsible for the reviewed in-repo changelog and
-  version-file update
-- the final GitHub release is created only after artifact publication and may
-  generate GitHub-native release notes from the immutable tag at that point
-
-Auth and publication gates should also stay explicit:
-
-- if the default GitHub token is insufficient for the desired release-please
-  PR behavior, `RELEASE_PLEASE_TOKEN` is a Tal-owned gate
-- image publication requires the repository variable `AWS_RELEASE_ROLE_ARN` so
-  GitHub Actions can assume the AWS publish role by OIDC
-- a release is not considered published until both images are built, pushed,
-  tagged with the release version, and captured in the release manifest
-
-### 7. Minimum Operational Contract
-
-These are the minimum non-negotiable operational pieces, without trying to
-fully spec AWS:
-
-- CloudFront + ACM for public TLS
-- a stable app domain on a subdomain of `talperry.com`
-- a stable origin path from CloudFront to the EC2 app host
-- AWS-managed secrets for database, model-provider, and observability credentials
-- `PY_AG_UI_URL` and similar app wiring set correctly between `ui` and `backend`
-- EC2 instance access for ECR pulls, S3 access, and SSM management
-- lightweight health checks before the first real deploy
-- a migration step plus seed-state verification before live traffic
-- basic observability for app logs and runtime traces
-
-For secrets, the recommendation is:
-
-- use AWS Secrets Manager at a high level
-- do not commit production `.env` files
-- do not bury secrets inside image builds
-
-For database/bootstrap, the recommendation is:
-
-- deployment must include schema migration
-- deployment must also verify that required catalog, embedding, and image
-  metadata are already ready before the app serves live traffic
-- initialization of that data belongs to a separate environment-bootstrap flow,
-  not to every release deploy
-
-### 8. Explicitly Accepted Tradeoffs
-
-This deployment is intentionally optimized for low fixed cost and easy sharing,
-not high availability.
-
-Accepted tradeoffs:
-
-- one EC2 host is a single point of failure
-- deployments may briefly brown out traffic unless the deploy script is careful
-- Aurora cold wakes are acceptable if the app handles them cleanly
-- we are choosing simplicity over a heavier platform move right now
-
-That is acceptable for this phase because the goal is to share the app with
-friends and gather real feedback, not to present a production-grade uptime
-story.
-
-## Deferred Details
-
-The following are intentionally deferred to the next layer of planning:
-
-- Terraform module and resource layout
-- exact AWS account and region wiring
-- VPC, subnet, and security-group specifics
-- exact secret-injection mechanism
-- exact health endpoint contracts
-- exact environment-bootstrap operator flow
-- rollback runbook details
-- future refinements to branch protection and release-please workflow policy
-
-## Bottom Line
-
-The corrected near-term picture is:
-
-- CloudFront as the public edge and TLS layer
-- one EC2 host running `ui` and `backend`
-- direct backend routing only for `/ag-ui/*`
-- product images served publicly from a separate S3 + CloudFront path
-- private attachments and generated artifacts stored separately with presigned
-  read access
-- Aurora Serverless v2 PostgreSQL, latest supported `pgvector`-capable version,
-  explicitly tuned for pause-to-zero
-- a simple `main -> release` promotion flow with `release-please`,
-  manifest-backed artifact publication, SSM-based deployment, and a separate
-  environment-bootstrap flow for catalog data
-
-That is a more cohesive and correct deployment recommendation than the current
-doc, without pretending we have already finished the Terraform or AWS
-implementation details.
+The EC2/SSM/compose path is obsolete and should be removed rather than kept as
+a parallel option.

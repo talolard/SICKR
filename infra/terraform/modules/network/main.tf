@@ -115,29 +115,21 @@ resource "aws_route_table_association" "database" {
   route_table_id = aws_route_table.database[each.key].id
 }
 
-resource "aws_security_group" "app_host" {
-  name        = "${var.name_prefix}-app-host"
-  description = "Internet-facing security group for the single EC2 origin host."
+resource "aws_security_group" "alb" {
+  name        = "${var.name_prefix}-alb"
+  description = "Public ingress security group for the application load balancer."
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "UI origin traffic for CloudFront default behavior"
-    from_port   = var.app_ui_origin_port
-    to_port     = var.app_ui_origin_port
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "Backend AG-UI origin traffic for CloudFront streaming behavior"
-    from_port   = var.app_backend_origin_port
-    to_port     = var.app_backend_origin_port
+    description = "Public HTTP ingress for CloudFront and direct fallback access"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    description = "Allow the host to pull images, packages, and reach AWS APIs"
+    description = "Allow the ALB to reach the ECS services"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -145,24 +137,82 @@ resource "aws_security_group" "app_host" {
   }
 
   tags = merge(var.common_tags, {
-    Name               = "${var.name_prefix}-app-host"
+    Name               = "${var.name_prefix}-alb"
     Component          = "network"
-    Role               = "app-host-sg"
+    Role               = "alb-sg"
+    DataClassification = "internal"
+  })
+}
+
+resource "aws_security_group" "ui_service" {
+  name        = "${var.name_prefix}-ui-service"
+  description = "UI ECS service ingress from the ALB only."
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "UI traffic from the ALB"
+    from_port       = var.app_ui_origin_port
+    to_port         = var.app_ui_origin_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Allow UI tasks to reach the internet and AWS APIs"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(var.common_tags, {
+    Name               = "${var.name_prefix}-ui-service"
+    Component          = "network"
+    Role               = "ui-service-sg"
+    DataClassification = "internal"
+  })
+}
+
+resource "aws_security_group" "backend_service" {
+  name        = "${var.name_prefix}-backend-service"
+  description = "Backend ECS service ingress from the ALB only."
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Backend traffic from the ALB"
+    from_port       = var.app_backend_origin_port
+    to_port         = var.app_backend_origin_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Allow backend tasks to reach the internet and AWS APIs"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(var.common_tags, {
+    Name               = "${var.name_prefix}-backend-service"
+    Component          = "network"
+    Role               = "backend-service-sg"
     DataClassification = "internal"
   })
 }
 
 resource "aws_security_group" "database" {
   name        = "${var.name_prefix}-database"
-  description = "Private PostgreSQL access from the single app host only."
+  description = "Private PostgreSQL access from backend ECS tasks only."
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "PostgreSQL from the app host security group"
+    description     = "PostgreSQL from the backend ECS service security group"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.app_host.id]
+    security_groups = [aws_security_group.backend_service.id]
   }
 
   egress {

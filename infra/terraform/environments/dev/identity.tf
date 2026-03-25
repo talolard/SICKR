@@ -25,19 +25,6 @@ data "aws_iam_policy_document" "github_oidc_assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "runtime_assume_role" {
-  statement {
-    sid     = "Ec2AssumeRole"
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
-  }
-}
-
 data "aws_iam_policy_document" "terraform_apply_assume_role" {
   statement {
     sid     = "AccountRootAssumeRole"
@@ -48,76 +35,6 @@ data "aws_iam_policy_document" "terraform_apply_assume_role" {
       type        = "AWS"
       identifiers = ["arn:${data.aws_partition.current.partition}:iam::${var.aws_account_id}:root"]
     }
-  }
-}
-
-data "aws_iam_policy_document" "runtime_access" {
-  statement {
-    sid       = "EcrAuthorization"
-    effect    = "Allow"
-    actions   = ["ecr:GetAuthorizationToken"]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "EcrPull"
-    effect = "Allow"
-    actions = [
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:BatchGetImage",
-      "ecr:DescribeImages",
-      "ecr:DescribeRepositories",
-      "ecr:GetDownloadUrlForLayer",
-    ]
-    resources = [for repository in aws_ecr_repository.service : repository.arn]
-  }
-
-  statement {
-    sid    = "ReadRuntimeSecrets"
-    effect = "Allow"
-    actions = [
-      "secretsmanager:DescribeSecret",
-      "secretsmanager:GetSecretValue",
-    ]
-    resources = local.runtime_secret_arns
-  }
-
-  statement {
-    sid    = "PrivateArtifactsBucket"
-    effect = "Allow"
-    actions = [
-      "s3:ListBucket",
-    ]
-    resources = [
-      "arn:${data.aws_partition.current.partition}:s3:::${local.private_artifacts_bucket_name}",
-    ]
-  }
-
-  statement {
-    sid    = "PrivateArtifactsObjects"
-    effect = "Allow"
-    actions = [
-      "s3:AbortMultipartUpload",
-      "s3:DeleteObject",
-      "s3:GetObject",
-      "s3:PutObject",
-    ]
-    resources = [
-      "arn:${data.aws_partition.current.partition}:s3:::${local.private_artifacts_bucket_name}/*",
-    ]
-  }
-
-  statement {
-    sid    = "ProductImagesReadOnly"
-    effect = "Allow"
-    actions = [
-      "s3:GetObject",
-      "s3:ListBucket",
-    ]
-    resources = [
-      "arn:${data.aws_partition.current.partition}:s3:::${local.product_image_bucket_name}",
-      "arn:${data.aws_partition.current.partition}:s3:::${local.product_image_bucket_name}/*",
-    ]
   }
 }
 
@@ -150,17 +67,29 @@ data "aws_iam_policy_document" "release_publish_access" {
 
 data "aws_iam_policy_document" "deploy_access" {
   statement {
-    sid    = "InstanceDiscovery"
+    sid    = "EcsDeployOperations"
     effect = "Allow"
     actions = [
-      "ec2:DescribeInstances",
-      "ssm:DescribeInstanceInformation",
-      "ssm:GetCommandInvocation",
-      "ssm:ListCommandInvocations",
-      "ssm:ListCommands",
-      "ssm:SendCommand",
+      "ecs:DescribeServices",
+      "ecs:DescribeTaskDefinition",
+      "ecs:DescribeTasks",
+      "ecs:ListTasks",
+      "ecs:RegisterTaskDefinition",
+      "ecs:RunTask",
+      "ecs:UpdateService",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid     = "PassEcsTaskRoles"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${var.aws_account_id}:role/${local.name_prefix}-ecs-task-execution",
+      "arn:${data.aws_partition.current.partition}:iam::${var.aws_account_id}:role/${local.name_prefix}-backend-task",
+      "arn:${data.aws_partition.current.partition}:iam::${var.aws_account_id}:role/${local.name_prefix}-ui-task",
+    ]
   }
 }
 
@@ -172,8 +101,11 @@ data "aws_iam_policy_document" "terraform_apply_access" {
       "acm:*",
       "cloudfront:*",
       "ec2:*",
+      "ecs:*",
       "ecr:*",
+      "elasticloadbalancing:*",
       "iam:*",
+      "logs:*",
       "rds:*",
       "route53:*",
       "s3:*",
@@ -194,41 +126,6 @@ resource "aws_iam_openid_connect_provider" "github" {
     Role               = "github-oidc"
     DataClassification = "internal"
   }
-}
-
-resource "aws_iam_role" "runtime" {
-  name               = local.runtime_role_name
-  assume_role_policy = data.aws_iam_policy_document.runtime_assume_role.json
-
-  tags = {
-    Name               = local.runtime_role_name
-    Component          = "identity"
-    Role               = "runtime"
-    DataClassification = "internal"
-  }
-}
-
-resource "aws_iam_instance_profile" "runtime" {
-  name = local.runtime_instance_profile
-  role = aws_iam_role.runtime.name
-
-  tags = {
-    Name               = local.runtime_instance_profile
-    Component          = "identity"
-    Role               = "runtime"
-    DataClassification = "internal"
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "runtime_ssm_core" {
-  role       = aws_iam_role.runtime.name
-  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy" "runtime_access" {
-  name   = "${local.runtime_role_name}-access"
-  role   = aws_iam_role.runtime.id
-  policy = data.aws_iam_policy_document.runtime_access.json
 }
 
 resource "aws_iam_role" "release_publish" {

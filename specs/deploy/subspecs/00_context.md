@@ -4,15 +4,15 @@ Read this document before reading the deployment subspecs in this directory.
 
 These subspecs are a decomposition of the canonical parent deployment spec:
 [final_deployment_recommendation_2026-03-24_synthesized.md](../final_deployment_recommendation_2026-03-24_synthesized.md).
-That parent document is the top-level source of truth for the overall deployment
-recommendation.
+That parent document is the top-level source of truth for the overall
+deployment recommendation.
 This file is the shared context layer for the focused subspecs under
 `specs/deploy/subspecs/`.
 Read [guiding_principles.md](../guiding_principles.md) for the standing
 decision rules that should shape future epics, tasks, and implementation
 choices.
 Read [deployment_runtime_contract.md](../../docs/deployment_runtime_contract.md)
-for the concrete deploy-time environment contract that later infra and host
+for the concrete deploy-time environment contract that later infra and CI
 automation should consume.
 
 Branching rule:
@@ -21,25 +21,19 @@ Branching rule:
 - stacked deployment work should continue to merge back toward
   `tal/deployproject` as the base branch for this project
 
-Its job is to hold the shared context so later subspecs can stay focused and do
-not have to repeat the same background.
-
 ## Purpose
 
 These subspecs are for the near-term "share it with friends and get real
 feedback" deployment.
-We want to deploy this to show friends, but we don't need full production grade or scale.
-Notably, this will be accessed at low volume, for only a few hours a day, not even all days.
-Conversely, we do want automation where it can be done once and simply, so that deploys and updates are fast and simple.
-Because this is a single-developer project, repeatable and correct automation is
-preferred over a one-off fast launch path.
+We want a deployment that is simple, repeatable, cheap enough for very low
+traffic, and easy to debug without babysitting a host.
 
 ## Goals
 
 - keep the current product architecture intact
-- keep the first internet-facing deployment cheap and simple
-- make the deployment coherent enough that individual infra decisions can be
-  speced separately
+- keep the first internet-facing deployment cheap enough for a side project
+- prefer automation and repeatability over the fastest possible first launch
+- remove the EC2-host operational layer in favor of a simpler managed runtime
 - avoid broad rewrites just to make hosting easier
 
 ## Current Application Shape
@@ -61,35 +55,43 @@ The important public-route reality is:
 
 This split already exists in the app and should shape the deployment design.
 
-Operationally, we now also distinguish:
-
-- **environment bootstrap**: upload static image bytes and seed catalog/image
-  metadata into Aurora
-- **application deploy**: migrate, verify readiness, and roll out new `ui` and
-  `backend` images
-
-That separation is intentional and should stay visible in later tasks and
-automation.
-
 ## High-Level Decisions
 
 For the near-term deployment, we are assuming:
 
 - AWS account id `046673074482`
-- one public app domain
-- no product rewrite
-- Aurora Serverless v2 is the preferred database direction, because of scale-to-zero
-- pause-to-zero is a desired property of the low-duty-cycle deployment
-- `RDS Proxy` is out for this use case
+- one public app domain: `designagent.talperry.com`
+- AWS region `eu-central-1` for the app plane
+- `CloudFront + ALB + ECS Fargate + Aurora + S3` is now the canonical runtime
+  shape
+- CloudFront remains the public edge and CDN
+- one ALB does the HTTP path split between `ui` and `backend`
+- two ECS Fargate services run the application containers
+- Aurora Serverless v2 is the preferred database direction because of
+  scale-to-zero
+- pause-to-zero is a desired property of the database tier; the app tier does
+  not naturally scale to zero under Fargate
 - static product images and dynamic private attachments should not be treated as
   the same storage problem
-- normal application deploys should not require host-local catalog inputs
-- one-off environment bootstrap is acceptable when the dataset changes; it
-  should not be repeated on every release
-- `nginx` is not a required v1 layer; CloudFront should route directly to the
-  `ui` and `backend` origins by path
 - semver tooling details live in a dedicated subspec
 - Terraform and AWS shape live in a dedicated subspec
+
+## Why We Pivoted Away From EC2
+
+The EC2 design was workable, but it kept leaving behind a host-shaped surface:
+
+- SSM-based deploy orchestration
+- host bootstrap and package drift
+- host-local rollback state
+- host-local secret projection
+- host-level compose and port wiring
+
+That was directly at odds with the project goals of simplicity, automation, and
+low ops burden.
+
+The Fargate+ALB model is not cheaper at steady state, but it removes the host
+class of problems entirely. For this project, that trade is acceptable if it
+produces a more repeatable deployment system.
 
 ## Storage Posture
 
@@ -98,9 +100,8 @@ Shared storage posture for the near term:
 - product images are static and can be public
 - product images must be served from the public bucket/CDN path before launch;
   backend-proxy image serving is not acceptable for the deployed public path
-- product-image object keys should mirror the `masters/` image cache layout so
-  we can upload the existing corpus directly without inventing another keyspace
-- attachments and generated runtime artifacts are dynamic and should stay private (different bucket)
+- attachments and generated runtime artifacts are dynamic and should stay
+  private in a separate bucket
 - trace bundles remain developer-oriented and are not part of the first public
   rollout
 
@@ -109,35 +110,27 @@ Shared storage posture for the near term:
 Shared release posture for the near term:
 
 - `main` remains the normal integration branch
-- `release` is the intended promotion and publish branch fed from `main`
-- app-level semver is acceptable
-- release-please is the chosen semver and release-preparation mechanism
-- release-please is intended to own draft release PRs plus `CHANGELOG.md` and
-  `version.txt` updates on `release`
-- the implemented release automation now consists of:
-  - `.github/workflows/pr-title-main.yml`
-  - `.github/workflows/release-please.yml`
-  - `.github/workflows/release-publish.yml`
-- the release-helper config now consists of:
-- `release-please-config.json`
-- `.release-please-manifest.json`
-- release-tooling and commit-policy details live in a dedicated subspec
-- full release and deploy automation is a first-class project goal, not
-  post-launch polish
+- releases are promoted from `main` to `release`
+- `release-please` is the preferred semver and release-note automation mechanism
+- release publication means:
+  - immutable images were built and pushed
+  - an immutable release manifest exists
+  - an immutable Git tag and GitHub release were created
+- deploy automation rolls those immutable artifacts onto ECS; it does not build
+  on the runtime platform
 
-Important honesty note:
+## New Redundancies
 
-- the repository does not yet enforce the full intended release contract
-- the current publish workflow accepts either:
-  - a merged PR into `release` whose title starts with `chore(release):`
-  - a manual `workflow_dispatch` run with an explicit ref
-- the current publish workflow writes the release manifest before tagging, but
-  it still pushes the immutable Git tag before creating the GitHub release
-- if GitHub release creation fails after tag push, reruns currently fail on the
-  duplicate-tag guard
-- stronger release-please provenance checks, failure-safe final publication, and
-  concrete `main -> release` promotion enforcement remain unresolved work rather
-  than completed guarantees
+Because the canonical runtime is now ECS Fargate plus ALB, these older EC2-host
+surfaces are intentionally obsolete:
+
+- the single EC2 app host
+- origin-host DNS just for the app host
+- SSM deploy payloads
+- host-local deploy bundles
+- host-local rollback bookkeeping
+- `docker compose` as the production runtime substrate
+- `nginx` as a required deployment layer
 
 ## Authoring Rule For Subspecs
 
@@ -153,6 +146,7 @@ Future deployment subspecs should:
 - `00_context.md`
 - `10_cloudfront_product_images.md`
 - `20_terraform_aws_setup.md`
+- `25_ecs_fargate_alb_runtime.md`
 - `30_dockerization_and_cicd.md`
 - `40_release_please_and_commit_policy.md`
 - `50_edge_and_app_routing.md`

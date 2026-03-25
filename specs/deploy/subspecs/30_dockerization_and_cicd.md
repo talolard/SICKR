@@ -5,6 +5,8 @@ near-term deployment.
 
 Read [00_context.md](./00_context.md) first for the shared goals and high-level
 deployment decisions.
+Read [25_ecs_fargate_alb_runtime.md](./25_ecs_fargate_alb_runtime.md) for the
+runtime substrate.
 
 Implementation branch rule:
 - start work for this subspec from `tal/deployproject` or from a stacked branch
@@ -18,8 +20,8 @@ images:
 - one `ui` image for the Next.js app
 - one `backend` image for the FastAPI + AG-UI runtime
 
-Those images should be built in CI, pushed to `ECR`, and deployed by exact
-immutable references.
+Those images should be built in CI, pushed to `ECR`, and deployed to ECS by
+exact immutable references.
 
 The deploy contract between CI and infra should be a small release manifest that
 names:
@@ -28,9 +30,9 @@ names:
 - the released Git commit
 - the exact `ui` image reference and digest
 - the exact `backend` image reference and digest
+- the bootstrap metadata pinned to that release
 
-Infra should consume that manifest or the equivalent explicit image references.
-Deploy should not rebuild images on the host.
+Deploy should not rebuild images on the runtime platform.
 
 ## Why This Is Separate
 
@@ -39,12 +41,11 @@ This is a separate decision from Terraform and AWS topology.
 The CI/CD system needs a stable artifact contract even if we later change:
 
 - the Terraform module layout
-- the exact environment-bootstrap operator flow
+- the exact ALB or ECS service details
 - the deploy trigger mechanism
-- how many AWS resources are managed up front
 
 The key point is that downstream infra consumes pinned application artifacts,
-not source code and not ad hoc host-local builds.
+not source code and not host-local builds.
 
 ## Image Set
 
@@ -55,13 +56,13 @@ Only two deployable application images are in scope now:
 
 Do not introduce extra deployable images yet for:
 
+- reverse proxies
 - migration runners
 - data-seed jobs
 - local developer dependencies
 
-If later infra needs a reverse-proxy image or one-off job image, that can be
-specified separately. The near-term app release unit is still just `ui` plus
-`backend`.
+One-off migration and verification work should reuse the backend task
+definition with command overrides, not add a third deployable image.
 
 ## Dockerization Expectations
 
@@ -88,7 +89,6 @@ The deployed images should assume:
 - database state comes from Aurora
 - public product images come from the separate S3 + CloudFront path
 - private attachments and generated artifacts live outside container-local disk
-- heavy catalog/image bootstrap happens outside normal app deploys
 
 The concrete near-term file layout is:
 
@@ -96,16 +96,13 @@ The concrete near-term file layout is:
 - `docker/ui.Dockerfile`
 - `docker/env/backend.env.example`
 - `docker/env/ui.env.example`
-- `docker/env/host.env.example`
 - `scripts/deploy/read_release_version.py`
 - `scripts/deploy/write_release_manifest.py`
+- `scripts/deploy/render_ecs_task_definition.py`
 - `docs/deployment_runtime_contract.md`
 
 The current build posture intentionally targets `linux/amd64` for release
-publication.
-That is a dependency-compatibility decision, not a scale decision.
-It exists because the current Python runtime dependency set includes packages
-such as `usd-core` that do not publish the needed wheels for `linux/arm64`.
+publication because the dependency set still requires it.
 
 ## Registry Contract
 
@@ -126,49 +123,24 @@ Tagging posture:
 
 The deploy input should still prefer digests over tags.
 
-Operational rule:
-
-- tags are for discovery and operator convenience
-- digests are the source of truth for deployment and rollback
-
 ## Release Manifest
 
 CI should publish one machine-readable release manifest per release.
 
-Suggested shape:
+Required top-level content:
 
-```json
-{
-  "app_version": "1.4.2",
-  "git_tag": "v1.4.2",
-  "git_sha": "abc1234def5678",
-  "ui_image": {
-    "repository": "…/ui",
-    "version_tag": "v1.4.2",
-    "commit_tag": "sha-abc1234def5678",
-    "digest": "sha256:…"
-  },
-  "backend_image": {
-    "repository": "…/backend",
-    "version_tag": "v1.4.2",
-    "commit_tag": "sha-abc1234def5678",
-    "digest": "sha256:…"
-  }
-}
-```
-
-The exact serialization format can be JSON or another simple machine-readable
-format. The important part is that downstream deploy tooling receives one
-coherent release record for both services.
+- `app_version`
+- `git_tag`
+- `git_sha`
+- `bootstrap.postgres_seed_version`
+- `bootstrap.image_catalog_run_id`
+- `ui_image.digest_ref`
+- `backend_image.digest_ref`
 
 The implemented manifest writer lives at
 `scripts/deploy/write_release_manifest.py`.
 That script is the canonical serializer for the release manifest until a later
 deploy tool replaces it.
-
-`git_sha` must be the exact commit targeted by the immutable release tag.
-For this repo, that means the merged `release-please` release-PR commit that is
-used to build and publish the release artifacts.
 
 ## Build-Time Versus Runtime Configuration
 
@@ -189,231 +161,61 @@ Build-time inputs should not include:
 
 Runtime configuration belongs outside the images.
 
-The explicit deploy contract for that runtime configuration now lives in
+The explicit deploy contract for that runtime configuration lives in
 `docs/deployment_runtime_contract.md`.
-
-Expected runtime-only values include:
-
-- `DATABASE_URL`
-- model-provider credentials such as `GEMINI_API_KEY` or `GOOGLE_API_KEY`
-- `FAL_KEY` or `FAI_AI_API_KEY`
-- `PY_AG_UI_URL` for the `ui` container's server-side calls to the backend
-- `IMAGE_SERVING_STRATEGY=direct_public_url`
-- private artifact-storage configuration
-- observability credentials and environment metadata
-
-Near-term rule:
-
-- the `ui` image should be reusable across environments as much as possible
-- if a value must be visible in browser code, treat it as a deliberate public
-  build-time input
-- otherwise prefer server-side runtime configuration
-
-For this deployment phase, the default production posture should be:
-
-- `NEXT_PUBLIC_USE_MOCK_AGENT=0`
-- `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED=0`
 
 ## CI Responsibilities
 
-The current repo already has strong PR CI for lint, typecheck, unit tests,
-coverage, and deferred real-backend smoke.
+PR CI should continue to focus on:
 
-For this deployment phase, CI responsibilities should be split into two layers.
+- lint
+- typecheck
+- targeted tests
+- coverage
 
-### PR CI
+Release CI should do the deployment-specific work:
 
-PR CI should continue to do verification only.
+1. resolve the release version
+2. build and push both images
+3. write the release manifest
+4. create the immutable Git tag and GitHub release
+5. describe the current ECS task definitions
+6. render new ECS task-definition revisions by replacing:
+   - the image digest ref
+   - the release-version env value
+7. run the backend migration task on Fargate
+8. run the backend seed-verification task on Fargate
+9. update the backend ECS service
+10. update the UI ECS service
 
-It should:
+## Manual Deploy And Rollback
 
-- run the existing backend and frontend quality gates
-- run the deferred real-backend smoke path
-- confirm the code is releasable
+Manual deploys should still exist, but they should use the same ECS path:
 
-It should not:
+- select an immutable Git release tag
+- download that tag’s release manifest
+- render ECS task-definition revisions from the current baseline
+- deploy those revisions to ECS
 
-- push release images
-- mutate deployed infrastructure
-- run production migrations
-- seed production data
-- require production secrets
+Rollback means redeploying an older immutable release tag. There should not be a
+host-local “previous release” mechanism anymore.
 
-### Release CI/CD
+## Redundant Old Path
 
-Release automation should start only after code has already passed normal CI.
-For this phase, it should run from the release branch or an equivalent tagged
-release ref, not from every successful `main` push.
+The following old deploy surfaces are intentionally obsolete:
 
-Target contract for this phase:
+- release-bundle rendering
+- SSM command payload rendering
+- host-bundle runner scripts
+- `docker compose` production deployment
+- host-local rollback state
 
-Release automation should:
+## Verification
 
-- resolve the release version from the merged `release-please` release-PR
-  commit, as defined in
-  [40_release_please_and_commit_policy.md](./40_release_please_and_commit_policy.md)
-- build `ui` and `backend` images once
-- push both images to `ECR`
-- tag both images with the release version and the exact released
-  commit SHA
-- capture the resulting digests
-- publish the release manifest
-- create the immutable Git tag only after artifact publication succeeds
-- create the GitHub release only after the immutable tag exists and the release
-  manifest can be attached to it
-- generate final GitHub release notes at GitHub-release publication time, not
-  during release-PR preparation
-- render the deploy bundle and deploy-SSM payload from that same release commit
-- create the immutable Git tag only after artifact publication succeeds
-- create the GitHub release only after the immutable tag exists and the release
-  manifest, deploy bundle, and deploy payload can be attached to it
-- generate final GitHub release notes at GitHub-release publication time, not
-  during release-PR preparation
-- ensure manual tagged deploys consume the release-time deploy payload or
-  deploy bundle attached to the GitHub release rather than re-rendering deploy
-  artifacts from the current branch state
-- trigger deployment using those exact immutable references
+Useful verification for this subspec includes:
 
-Current implemented workflow split:
-
-- `.github/workflows/release-please.yml` prepares and updates release PRs on
-  `release`
-- `.github/workflows/release-publish.yml` runs after a merged
-  `chore(release): ...` PR on `release`
-- that workflow currently builds images, pushes them, writes the manifest,
-  renders the deploy bundle and deploy payload, creates the immutable tag, and
-  only then attempts the GitHub release
-
-Current unresolved safety gaps:
-
-- the publish trigger does not yet verify stronger release-please provenance
-  than the merged-PR title prefix
-- manual `workflow_dispatch` remains available and can publish any supplied ref
-- the workflow is not yet failure-safe after tag push:
-  - if `gh release create` fails after the tag is pushed, the rerun is blocked
-    by the duplicate-tag guard
-- the release branch model and promotion enforcement are still policy and
-  workflow intent; they are not yet fully enforced repo controls
-
-Current release-preparation behavior should stay explicit:
-
-- `release-please` is the reviewed release-preparation step, not the final
-  publication step
-- `CHANGELOG.md` and `version.txt` are updated on the release PR branch so Tal
-  can inspect them before merge
-- a successful completion of the publish workflow is currently the closest thing
-  to the published external release record
-- the stronger guarantee that publication is fully failure-safe after image
-  publication is not yet true in the current workflow implementation
-
-For release publication, the current workflow expects the repository variable
-`AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the publish role via OIDC
-before pushing to ECR.
-
-The deploy step should be separate from image build, even if both happen in the
-same workflow file.
-
-## Deployment Interface To Infra
-
-This subspec intentionally does not choose the exact Terraform module layout or
-the exact one-off environment-bootstrap operator flow.
-
-It does define the interface that infra should expect:
-
-- infra provides an environment that can pull the `ui` and `backend` images from
-  `ECR`
-- infra injects runtime configuration and secrets at container start
-- infra runs schema migration and seed verification before normal app traffic is
-  considered healthy
-- infra deploys by pinned image digests, not by floating tags
-
-If the deploy mechanism is `SSM + docker compose`, it should consume the release
-manifest or equivalent explicit digest inputs.
-
-If that mechanism later changes, the artifact contract should stay the same.
-
-## Health And Deployment Gates
-
-Before a new release is considered live, deploy automation should verify at
-least:
-
-- `ui` starts and serves normal app pages
-- `backend` starts and serves its health or metadata endpoints
-- the `ui` can reach the backend over the configured internal `PY_AG_UI_URL`
-- required migrations have completed
-- required seed state exists for the deployed app mode
-
-This spec does not require a full synthetic test suite in deploy.
-It does require a minimal post-deploy health gate before the release is treated
-as successful.
-
-## Rollback Posture
-
-Rollback should be simple:
-
-- redeploy the previous known-good release manifest
-- repin both services to the earlier image digests
-
-That means:
-
-- deployment history must preserve prior release manifests
-- the host should not depend on mutable `latest` tags
-- image retention in `ECR` must be compatible with keeping recent rollback
-  candidates
-
-Database migrations are the main rollback risk.
-
-Near-term operational rule:
-
-- destructive or hard-to-reverse schema changes should not be assumed safe for
-  instant rollback
-- rollout sequencing for those migrations may require a separate manual step or
-  later spec
-
-## What CI/CD Should Not Do Yet
-
-For this phase, do not add:
-
-- Kubernetes or GitOps platform machinery
-- multiple environment promotion layers beyond the existing release posture
-- blue/green or canary rollout systems
-- host-local image builds during deploy
-- CloudFront invalidation as a normal part of app deploy
-
-Product images are already expected to use immutable object keys, so normal app
-deploys should not depend on CDN invalidation.
-
-## Explicit Deferrals
-
-This subspec intentionally defers:
-
-- the exact Dockerfile contents
-- the exact deploy runner implementation on the host
-- the exact one-off environment-bootstrap commands
-- vulnerability-scanning policy beyond basic registry support
-- exact secret-store wiring and rotation policy
-- future refinements to release-please config or release-branch protections
-
-## Summary
-
-The near-term Dockerization and CI/CD target shape is:
-
-- two deployable images: `ui` and `backend`
-- `release-please` prepares the release PR, changelog, and version file on
-  `release`
-- CI builds them once per release and pushes them to `ECR`
-- CI emits one release manifest containing both pinned image digests
-- the intended end state is that CI creates the immutable tag and GitHub
-  release only after artifact publication succeeds and in a failure-safe way
-- infra deploys those exact artifacts and injects runtime config externally
-- PR CI stays verification-only
-- rollback is redeploying the previous pinned release
-
-What is true today:
-
-- the repo already has the split between release preparation and release
-  publication workflows
-- the current publication workflow does build, push, and manifest before tag
-  creation
-- it does not yet prove strict release-please provenance
-- it does not yet make final tag-plus-GitHub-release publication failure-safe
+- local Docker image builds
+- manifest writer tests
+- ECS task-definition rendering tests
+- CI validation that a release can register task-definition revisions and roll
+  out services without hand-edited AWS state

@@ -18,11 +18,6 @@ output "public_hostname" {
   value       = local.public_hostname_trimmed
 }
 
-output "origin_hostname" {
-  description = "Origin hostname reserved for the app host."
-  value       = local.origin_hostname_trimmed
-}
-
 output "github_oidc_provider_arn" {
   description = "OIDC provider ARN for GitHub Actions federation."
   value       = aws_iam_openid_connect_provider.github.arn
@@ -98,16 +93,6 @@ output "database_secret_name" {
   value       = aws_secretsmanager_secret.runtime["database"].name
 }
 
-output "runtime_role_arn" {
-  description = "EC2 runtime role ARN."
-  value       = aws_iam_role.runtime.arn
-}
-
-output "runtime_instance_profile_name" {
-  description = "EC2 runtime instance profile name."
-  value       = aws_iam_instance_profile.runtime.name
-}
-
 output "release_publish_role_arn" {
   description = "GitHub Actions role ARN for release image publication."
   value       = aws_iam_role.release_publish.arn
@@ -143,14 +128,24 @@ output "private_artifacts_bucket_arn" {
   value       = module.storage.private_artifacts_bucket_arn
 }
 
-output "app_host_instance_id" {
-  description = "EC2 instance id for the single app origin host."
-  value       = module.compute.instance_id
+output "ecs_cluster_name" {
+  description = "Name of the ECS cluster."
+  value       = module.runtime.cluster_name
 }
 
-output "app_host_public_ip" {
-  description = "Elastic IP assigned to the single app origin host."
-  value       = module.compute.public_ip
+output "ecs_backend_service_name" {
+  description = "Name of the backend ECS service."
+  value       = module.runtime.backend_service_name
+}
+
+output "ecs_ui_service_name" {
+  description = "Name of the UI ECS service."
+  value       = module.runtime.ui_service_name
+}
+
+output "app_alb_dns_name" {
+  description = "DNS name of the public ALB used as the CloudFront app origin."
+  value       = module.runtime.alb_dns_name
 }
 
 output "database_cluster_identifier" {

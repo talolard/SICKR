@@ -124,28 +124,14 @@ resource "aws_cloudfront_distribution" "main" {
 
   origin {
     domain_name = var.app_origin_domain_name
-    origin_id   = "app-origin-default"
+    origin_id   = "app-origin"
 
     custom_origin_config {
-      http_port                = var.ui_origin_port
+      http_port                = var.app_origin_port
       https_port               = 443
       origin_protocol_policy   = "http-only"
       origin_ssl_protocols     = ["TLSv1.2"]
-      origin_read_timeout      = var.default_app_origin_read_timeout_seconds
-      origin_keepalive_timeout = var.origin_keepalive_timeout_seconds
-    }
-  }
-
-  origin {
-    domain_name = var.app_origin_domain_name
-    origin_id   = "app-origin-ag-ui"
-
-    custom_origin_config {
-      http_port                = var.backend_origin_port
-      https_port               = 443
-      origin_protocol_policy   = "http-only"
-      origin_ssl_protocols     = ["TLSv1.2"]
-      origin_read_timeout      = var.ag_ui_origin_read_timeout_seconds
+      origin_read_timeout      = var.app_origin_read_timeout_seconds
       origin_keepalive_timeout = var.origin_keepalive_timeout_seconds
     }
   }
@@ -161,7 +147,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   default_cache_behavior {
-    target_origin_id         = "app-origin-default"
+    target_origin_id         = "app-origin"
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]
@@ -172,7 +158,7 @@ resource "aws_cloudfront_distribution" "main" {
 
   ordered_cache_behavior {
     path_pattern             = "/ag-ui/*"
-    target_origin_id         = "app-origin-ag-ui"
+    target_origin_id         = "app-origin"
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods           = ["GET", "HEAD", "OPTIONS"]

@@ -301,7 +301,8 @@ This subspec depends on and constrains other deploy specs:
 
 This subspec intentionally does not decide:
 
-- the exact shell commands or compose invocations used on the host
+- the exact helper scripts or CI step layout used to render and register ECS
+  task-definition revisions
 - the exact health endpoint route names
 - the full zero-downtime deployment story
 - the full observability dashboard and alert set

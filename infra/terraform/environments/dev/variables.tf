@@ -40,12 +40,6 @@ variable "public_hostname" {
   default     = "designagent.talperry.com"
 }
 
-variable "origin_hostname" {
-  description = "Origin hostname for the EC2-backed application host."
-  type        = string
-  default     = "origin.designagent.talperry.com"
-}
-
 variable "github_repository" {
   description = "GitHub repository allowed to assume the release and deploy roles."
   type        = string
@@ -71,7 +65,7 @@ variable "vpc_cidr" {
 }
 
 variable "public_subnet_cidrs" {
-  description = "CIDR blocks for the public subnets used by the app host."
+  description = "CIDR blocks for the public subnets used by the ALB and Fargate tasks."
   type        = list(string)
   default     = ["10.42.0.0/24", "10.42.1.0/24"]
 }
@@ -82,46 +76,52 @@ variable "database_subnet_cidrs" {
   default     = ["10.42.10.0/24", "10.42.11.0/24"]
 }
 
-variable "app_host_ami_ssm_parameter_name" {
-  description = "SSM parameter used to resolve the current Amazon Linux 2023 x86_64 AMI."
-  type        = string
-  default     = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"
-}
-
-variable "app_host_instance_type" {
-  description = "EC2 instance type for the single public origin host."
-  type        = string
-  default     = "t3.small"
-}
-
-variable "app_host_root_volume_size_gib" {
-  description = "Root volume size for the app host."
-  type        = number
-  default     = 20
-}
-
-variable "app_ui_origin_port" {
-  description = "Host port exposed for the UI origin behind CloudFront."
+variable "ui_container_port" {
+  description = "Container port exposed by the UI ECS service."
   type        = number
   default     = 3000
 }
 
-variable "app_backend_origin_port" {
-  description = "Host port exposed for the backend AG-UI origin behind CloudFront."
+variable "backend_container_port" {
+  description = "Container port exposed by the backend ECS service."
   type        = number
   default     = 8000
 }
 
-variable "app_host_artifact_root_dir" {
-  description = "Writable host path reserved for private runtime artifacts."
-  type        = string
-  default     = "/var/lib/ikea-agent/artifacts"
+variable "ui_task_cpu" {
+  description = "CPU units reserved for the UI Fargate task."
+  type        = number
+  default     = 256
 }
 
-variable "app_host_ssh_key_name" {
-  description = "Optional EC2 key pair name for fallback SSH access."
-  type        = string
-  default     = null
+variable "ui_task_memory" {
+  description = "Memory in MiB reserved for the UI Fargate task."
+  type        = number
+  default     = 512
+}
+
+variable "backend_task_cpu" {
+  description = "CPU units reserved for the backend Fargate task."
+  type        = number
+  default     = 512
+}
+
+variable "backend_task_memory" {
+  description = "Memory in MiB reserved for the backend Fargate task."
+  type        = number
+  default     = 1024
+}
+
+variable "runtime_initial_desired_count" {
+  description = "Initial ECS service desired count before the first CI-managed deploy."
+  type        = number
+  default     = 0
+}
+
+variable "ecs_log_retention_days" {
+  description = "CloudWatch log retention in days for ECS task logs."
+  type        = number
+  default     = 14
 }
 
 variable "database_name" {
@@ -166,14 +166,8 @@ variable "cloudfront_price_class" {
   default     = "PriceClass_100"
 }
 
-variable "cloudfront_default_origin_read_timeout_seconds" {
-  description = "CloudFront origin read timeout for the default app behavior."
-  type        = number
-  default     = 30
-}
-
-variable "cloudfront_ag_ui_origin_read_timeout_seconds" {
-  description = "CloudFront origin read timeout for the AG-UI streaming behavior."
+variable "cloudfront_app_origin_read_timeout_seconds" {
+  description = "CloudFront origin read timeout for the shared ALB app origin."
   type        = number
   default     = 120
 }
