@@ -85,10 +85,14 @@ def test_build_release_bundle_writes_expected_files(
 
     backend_env = (output_dir / "backend.env").read_text(encoding="utf-8")
     assert "LOGFIRE_SERVICE_VERSION=1.4.2" in backend_env
+    assert "DATABASE_POOL_MODE=nullpool" in backend_env
     assert (
         "IMAGE_SERVICE_BASE_URL=https://designagent.talperry.com/static/product-images"
     ) in backend_env
     assert "IKEA_IMAGE_CATALOG_RUN_ID" not in backend_env
+    assert "HOST_BOOTSTRAP_ROOT_DIR" not in host_env
+    ui_env = (output_dir / "ui.env").read_text(encoding="utf-8")
+    assert "APP_RELEASE_VERSION=1.4.2" in ui_env
 
     manifest = json.loads((output_dir / "release-manifest.json").read_text(encoding="utf-8"))
     assert manifest["git_tag"] == "v1.4.2"

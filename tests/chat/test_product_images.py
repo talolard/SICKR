@@ -88,14 +88,14 @@ def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:
     )
 
 
-def test_build_seeded_public_image_url_uses_run_scoped_same_host_path() -> None:
+def test_build_seeded_public_image_url_uses_masters_same_host_path() -> None:
     assert (
         build_seeded_public_image_url(
             base_url="https://designagent.talperry.com/static/product-images",
             run_id="catalog-run-1",
             image_asset_key="90458891-primary.jpg",
         )
-        == "https://designagent.talperry.com/static/product-images/catalog-run-1/90458891-primary.jpg"
+        == "https://designagent.talperry.com/static/product-images/masters/90458891-primary.jpg"
     )
 
 

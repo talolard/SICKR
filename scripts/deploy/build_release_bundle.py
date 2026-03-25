@@ -21,7 +21,6 @@ _DEFAULT_BACKEND_HOST_PORT = 8000
 _DEFAULT_UI_HOST_PORT = 3000
 _DEFAULT_DEPLOY_STATE_DIR = "/var/lib/ikea-agent/deploy"
 _DEFAULT_HOST_ARTIFACT_ROOT_DIR = "/var/lib/ikea-agent/artifacts"
-_DEFAULT_HOST_BOOTSTRAP_ROOT_DIR = "/var/lib/ikea-agent/bootstrap"
 
 
 def _repo_root() -> Path:
@@ -55,7 +54,6 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--ui-host-port", type=int, default=_DEFAULT_UI_HOST_PORT)
     parser.add_argument("--deploy-state-dir", default=_DEFAULT_DEPLOY_STATE_DIR)
     parser.add_argument("--host-artifact-root-dir", default=_DEFAULT_HOST_ARTIFACT_ROOT_DIR)
-    parser.add_argument("--host-bootstrap-root-dir", default=_DEFAULT_HOST_BOOTSTRAP_ROOT_DIR)
     return parser.parse_args()
 
 
@@ -87,7 +85,6 @@ def main() -> int:
             f"{args.deploy_state_dir.rstrip('/')}/runtime/backend.secrets.env"
         ),
         "HOST_ARTIFACT_ROOT_DIR": args.host_artifact_root_dir,
-        "HOST_BOOTSTRAP_ROOT_DIR": args.host_bootstrap_root_dir,
         "RELEASE_VERSION": manifest.app_version,
         "RELEASE_GIT_TAG": manifest.git_tag,
         "RELEASE_GIT_SHA": manifest.git_sha,
@@ -100,6 +97,7 @@ def main() -> int:
         "LOGFIRE_ENVIRONMENT": "dev",
         "LOGFIRE_SERVICE_VERSION": manifest.app_version,
         "LOGFIRE_SEND_MODE": "if-token-present",
+        "DATABASE_POOL_MODE": "nullpool",
         "ALLOW_MODEL_REQUESTS": "1",
         "IMAGE_SERVING_STRATEGY": "direct_public_url",
         "IMAGE_SERVICE_BASE_URL": args.product_image_base_url,
@@ -109,6 +107,8 @@ def main() -> int:
     }
     ui_env = {
         "NODE_ENV": "production",
+        "APP_ENV": "dev",
+        "APP_RELEASE_VERSION": manifest.app_version,
         "PY_AG_UI_URL": "http://backend:8000/ag-ui/",
         "NEXT_PUBLIC_USE_MOCK_AGENT": "0",
         "NEXT_PUBLIC_TRACE_CAPTURE_ENABLED": "0",

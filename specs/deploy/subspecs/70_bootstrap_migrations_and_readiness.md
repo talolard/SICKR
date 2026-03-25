@@ -14,16 +14,28 @@ Implementation branch rule:
 
 ## Decision
 
+This project needs two different operational flows:
+
+- **environment bootstrap**
+- **application deploy**
+
+They must not be treated as the same thing.
+
 A release is not live when containers start.
 A release is live only after:
 
 - the target database schema is migrated to head
-- required catalog and image metadata bootstrap has completed
+- the required seeded catalog and image metadata already exist and verify as
+  ready
 - the backend is healthy enough to serve runtime traffic
 - the UI can reach the backend over its configured internal URL
 
-Bootstrap and readiness are therefore first-class deploy steps, not optional
-post-deploy cleanup.
+The key simplification is:
+
+- normal app deploys do **not** rebuild or reseed the catalog from repo-side
+  parquet and image-catalog inputs
+- that heavy data-preparation path belongs to environment bootstrap, not to
+  every release rollout
 
 ## Current Repo Reality
 
@@ -38,16 +50,48 @@ The repo already has concrete building blocks that this spec should use:
   backend readiness contract is not yet explicit
 
 So the deployed system should formalize those existing pieces instead of
-inventing a separate bootstrap story.
+inventing a separate data model.
 
-## Required Deploy Order
+## Environment Bootstrap Policy
+
+Environment bootstrap is required before first launch and any time the canonical
+catalog inputs materially change.
+
+Required bootstrap datasets:
+
+- `catalog.products_canonical`
+- `catalog.product_embeddings`
+- `catalog.product_images`
+- `ops.seed_state`
+
+Bootstrap source of truth:
+
+- canonical parquet and image-catalog inputs prepared by repo tooling
+- image bytes uploaded to the public product-image bucket
+- seed versions recorded in `ops.seed_state`
+
+Required bootstrap behavior:
+
+- bootstrap must be idempotent
+- bootstrap may no-op if the required seed versions are already present
+- bootstrap must record the resulting seed versions in `ops.seed_state`
+- bootstrap must prepare `catalog.product_images.public_url` for
+  `direct_public_url` mode
+- bootstrap is a separate workflow or one-off job, not a mandatory step inside
+  every application release deploy
+
+For v1, it is acceptable for this bootstrap to run from a dedicated operator
+workflow or explicit one-off command sequence rather than from normal app deploy
+automation.
+
+## Required Application Deploy Order
 
 Every release deploy must follow this order:
 
 1. Pull the exact `ui` and `backend` image digests selected by the release
    manifest.
 2. Run database migrations against the target Aurora cluster.
-3. Run required bootstrap or reseed tasks for catalog and image metadata.
+3. Verify that required seed state and catalog/image metadata are already ready.
 4. Start or restart the backend container.
 5. Wait for backend liveness, then backend readiness.
 6. Start or restart the UI container.
@@ -55,7 +99,7 @@ Every release deploy must follow this order:
 8. Only then treat the release as live.
 
 The deploy must fail closed.
-If any migration, bootstrap, or readiness step fails, the deploy is not
+If any migration, seed verification, or readiness step fails, the deploy is not
 successful.
 
 ## Schema Migration Policy
@@ -76,38 +120,24 @@ Deploy rule:
 - persistence schema creation in app startup is not a substitute for Alembic
   migration completion
 
-## Bootstrap Policy
+## Seed Verification Policy
 
-Bootstrap is required for the seeded catalog-side data that the runtime expects
-to exist before search and image hydration can work.
+Steady-state deploy needs verification, not reseeding.
 
-Required bootstrap datasets:
+Required deploy-time verification:
 
-- `catalog.products_canonical`
-- `catalog.product_embeddings`
-- `catalog.product_images`
-- `ops.seed_state`
+- required `catalog.*` tables are populated
+- `ops.seed_state` reflects a ready environment
+- if deployed image mode is `direct_public_url`, product-image metadata is ready
+  for that mode
+- the verification command fails loudly when the environment is not ready for
+  the current app mode
 
-Bootstrap source of truth:
+This is intentionally lighter than environment bootstrap:
 
-- canonical parquet and image-catalog inputs prepared by repo tooling
-- seed versions recorded in `ops.seed_state`
-- release automation must pin the exact bootstrap inputs needed for one release,
-  including the release commit's canonical parquet fingerprint and the selected
-  image-catalog run id
-
-Required bootstrap behavior:
-
-- bootstrap must be idempotent
-- bootstrap may no-op if the required seed versions are already present
-- bootstrap must fail the deploy if required seed state is missing or cannot be
-  refreshed
-- deploy verification must compare the resulting seed versions against the
-  release bundle's expected values, not only against a generic `ready` state
-
-The existing seed script already supports a version-aware skip path.
-The deployed bootstrap contract should preserve that behavior instead of forcing
-every release to reseed blindly.
+- deploy should verify that the data plane is ready
+- deploy should not require repo-local parquet or image-catalog files on the
+  host
 
 ## What Must Exist Before Live Traffic
 
@@ -115,7 +145,7 @@ Before the deploy is considered live, all of the following must be true:
 
 - Alembic revision is at head
 - required `catalog.*` seeded tables are populated
-- `ops.seed_state` reflects the expected seed versions
+- `ops.seed_state` reflects a ready seed state
 - if deployed image mode is `direct_public_url`, product-image metadata is ready
   for that mode
 - backend can open database sessions and serve request traffic
@@ -137,7 +167,7 @@ Liveness answers only:
 Liveness should not depend on:
 
 - a fully warmed Aurora cluster
-- completed seed validation beyond basic startup
+- completed seed verification beyond basic startup
 - successful end-to-end app traffic
 
 Its job is to detect dead processes, not incomplete startup.
@@ -153,7 +183,7 @@ Required backend readiness conditions:
 - database connection succeeds
 - schema revision is current
 - required seed-state rows exist
-- required seeded catalog and image metadata is available
+- required seeded catalog and image metadata are available
 
 Required UI readiness conditions:
 
@@ -170,7 +200,7 @@ Required v1 endpoint posture:
 
 - one backend liveness endpoint
 - one backend readiness endpoint
-- one UI-side health endpoint or equivalent proxy-safe readiness check
+- one UI-side health endpoint or equivalent readiness check
 
 Minimum backend liveness contract:
 
@@ -221,7 +251,7 @@ What is not acceptable:
 The minimum launch gates for the first public deployment are:
 
 1. migration step returns success
-2. bootstrap step returns success or explicit version-already-current skip
+2. seed verification step returns success
 3. backend liveness passes
 4. backend readiness passes
 5. UI readiness passes
@@ -259,9 +289,9 @@ This subspec depends on and constrains other deploy specs:
 
 - [20_terraform_aws_setup.md](./20_terraform_aws_setup.md)
   - Terraform must provide the Aurora database, secret access, and host runtime
-    environment needed by the migration and bootstrap steps
+    environment needed by the migration and readiness steps
 - [30_dockerization_and_cicd.md](./30_dockerization_and_cicd.md)
-  - CI/CD must treat migration, bootstrap, and readiness as required deploy
+  - CI/CD must treat migration, verification, and readiness as required deploy
     steps after image pull and before success
 - [40_release_please_and_commit_policy.md](./40_release_please_and_commit_policy.md)
   - release versioning does not change the launch gates, but every tagged
@@ -276,7 +306,7 @@ This subspec intentionally does not decide:
 - the full zero-downtime deployment story
 - the full observability dashboard and alert set
 - the exact rollback runbook mechanics for destructive migrations
-- whether bootstrap runs inside the backend image or a one-off companion image
+- the exact operator flow used for the one-off environment bootstrap
 
 Those belong in later implementation or runbook work once the basic launch
 contract is stable.
@@ -286,22 +316,24 @@ contract is stable.
 When implemented, verify it with the following checks:
 
 - confirm deploy always runs `alembic upgrade head` before live traffic
-- confirm required `catalog.*` rows exist after bootstrap
-- confirm `ops.seed_state` reflects the expected versions
+- confirm required `catalog.*` rows and `public_url` values are present after
+  environment bootstrap
+- confirm `ops.seed_state` reflects a ready environment
 - confirm backend liveness can pass before readiness
 - confirm backend readiness fails if DB connectivity or seed state is missing
 - confirm UI readiness fails if the UI cannot reach the backend
 - confirm a cold Aurora wake delays readiness but does not produce false
   success
-- confirm the deploy is not marked successful until migration, bootstrap,
-  backend readiness, and UI readiness all pass
+- confirm the deploy is not marked successful until migration, seed
+  verification, backend readiness, and UI readiness all pass
 
 ## Summary
 
 The required v1 launch contract is:
 
-- migrate first
-- bootstrap required seeded data second
+- bootstrap the environment separately
+- migrate on every deploy
+- verify seeded data on every deploy
 - start backend and wait for readiness
 - start UI and wait for readiness
 - tolerate Aurora cold wake without routing traffic early

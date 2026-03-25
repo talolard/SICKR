@@ -42,7 +42,7 @@ Use for:
 
 - startup
 - shutdown
-- migration/bootstrap outcomes
+- migration, seed-verification, and environment-bootstrap outcomes
 - upload/download outcomes
 - upstream proxy failures
 - agent-run start/complete/failure summaries
@@ -150,7 +150,7 @@ The repo already logs some tool-level starts and fallbacks.
 The main missing backend logging areas for deployment are:
 
 - startup configuration summary
-- migration/bootstrap lifecycle
+- migration, seed-verification, and environment-bootstrap lifecycle
 - attachment upload/download storage boundary
 - UI-proxy-facing route failures that affect the public app
 - release/version identity attached to startup and request handling
@@ -231,7 +231,7 @@ The first public deployment needs at least these signals:
 These signals should be enough to answer:
 
 - did the new release boot
-- did bootstrap succeed
+- did migration or seed verification fail
 - is AG-UI failing broadly or only for a specific run
 - are uploads/downloads broken
 - which release version is currently emitting those failures
@@ -316,7 +316,8 @@ Do not turn normal user interaction into a verbose frontend analytics stream.
 When implemented, verify the observability posture with these checks:
 
 - confirm backend startup logs include `release_version` and `environment`
-- confirm migration and bootstrap success/failure are visible in Logfire
+- confirm migration, seed verification, and one-off bootstrap success/failure
+  are visible in Logfire
 - confirm Next route-handler proxy failures are visible in Logfire
 - confirm AG-UI run failures are visible without per-chunk log spam
 - confirm attachment upload/read failures are visible without logging bytes or

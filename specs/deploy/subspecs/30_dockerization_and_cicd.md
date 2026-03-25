@@ -39,7 +39,7 @@ This is a separate decision from Terraform and AWS topology.
 The CI/CD system needs a stable artifact contract even if we later change:
 
 - the Terraform module layout
-- the exact host bootstrap details
+- the exact environment-bootstrap operator flow
 - the deploy trigger mechanism
 - how many AWS resources are managed up front
 
@@ -55,7 +55,6 @@ Only two deployable application images are in scope now:
 
 Do not introduce extra deployable images yet for:
 
-- `nginx` or `Caddy` customization
 - migration runners
 - data-seed jobs
 - local developer dependencies
@@ -89,6 +88,7 @@ The deployed images should assume:
 - database state comes from Aurora
 - public product images come from the separate S3 + CloudFront path
 - private attachments and generated artifacts live outside container-local disk
+- heavy catalog/image bootstrap happens outside normal app deploys
 
 The concrete near-term file layout is:
 
@@ -316,15 +316,15 @@ same workflow file.
 ## Deployment Interface To Infra
 
 This subspec intentionally does not choose the exact Terraform module layout or
-host bootstrap script.
+the exact one-off environment-bootstrap operator flow.
 
 It does define the interface that infra should expect:
 
 - infra provides an environment that can pull the `ui` and `backend` images from
   `ECR`
 - infra injects runtime configuration and secrets at container start
-- infra runs schema migration and any required bootstrap step before normal app
-  traffic is considered healthy
+- infra runs schema migration and seed verification before normal app traffic is
+  considered healthy
 - infra deploys by pinned image digests, not by floating tags
 
 If the deploy mechanism is `SSM + docker compose`, it should consume the release
@@ -341,7 +341,7 @@ least:
 - `backend` starts and serves its health or metadata endpoints
 - the `ui` can reach the backend over the configured internal `PY_AG_UI_URL`
 - required migrations have completed
-- required seed/bootstrap state exists for the deployed app mode
+- required seed state exists for the deployed app mode
 
 This spec does not require a full synthetic test suite in deploy.
 It does require a minimal post-deploy health gate before the release is treated
@@ -389,7 +389,7 @@ This subspec intentionally defers:
 
 - the exact Dockerfile contents
 - the exact deploy runner implementation on the host
-- the exact migration and bootstrap commands
+- the exact one-off environment-bootstrap commands
 - vulnerability-scanning policy beyond basic registry support
 - exact secret-store wiring and rotation policy
 - future refinements to release-please config or release-branch protections

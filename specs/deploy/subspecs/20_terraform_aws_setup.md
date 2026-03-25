@@ -22,6 +22,7 @@ For this deployment phase, the Terraform-managed target is:
 - one public app domain under `talperry.com`
 - one CloudFront distribution in front of the app
 - one small single-host app origin
+- no required host-level reverse proxy layer
 - one Aurora PostgreSQL Serverless v2 cluster with pause-to-zero enabled
 - one public image bucket and one private runtime-artifacts bucket
 - two ECR repositories: one for `ui`, one for `backend`
@@ -255,7 +256,9 @@ Why no NAT gateway in v1:
 Required security groups:
 
 - `app_host_sg`
-  - allow inbound `80` and `443` from the internet
+  - allow inbound traffic on the `ui` origin port and the `backend` origin port
+  - if practical, prefer restricting those ports to CloudFront-origin traffic;
+    if not, document the broader ingress as an explicit v1 tradeoff
   - allow all egress
 - `db_sg`
   - allow inbound PostgreSQL `5432` only from `app_host_sg`
@@ -269,7 +272,7 @@ Viewer-routing rule:
 
 - `designagent.talperry.com` is the only supported browser entrypoint
 - `origin.designagent.talperry.com` exists only so CloudFront has a stable custom-origin
-  hostname
+  hostname for the `ui` and `backend` origins
 - direct user traffic to the origin hostname is out of contract even if the
   host remains internet-reachable in v1
 
@@ -439,10 +442,17 @@ Required edge posture:
 
 Required CloudFront behavior split:
 
-- default behavior -> custom origin at `origin.designagent.talperry.com`
-- ordered behavior `/ag-ui/*` -> the same app origin, with caching disabled and
-  streaming-safe request/response posture
+- default behavior -> the `ui` custom origin at `origin.designagent.talperry.com`
+  on the UI host port
+- ordered behavior `/ag-ui/*` -> the `backend` custom origin at
+  `origin.designagent.talperry.com` on the backend host port, with caching
+  disabled and streaming-safe request/response posture
 - ordered behavior `/static/product-images/*` -> S3 product-image origin
+
+Required origin-port contract:
+
+- UI origin port: `3000`
+- backend origin port: `8000`
 
 Required image behavior posture:
 
@@ -456,13 +466,13 @@ Required app-origin behavior posture:
 
 - forward the methods needed by the app's dynamic routes
 - disable caching for dynamic app traffic
-- keep the default behavior simple and compatible with the existing Next.js and
-  backend route split
+- keep the default behavior simple and compatible with the existing Next.js
+  route ownership
 
 Required AG-UI behavior posture:
 
 - path pattern `/ag-ui/*`
-- target the same custom origin used for the app host
+- target the backend custom origin rather than the UI origin
 - disable caching
 - allow `POST`
 - forward the request details needed for streaming transport

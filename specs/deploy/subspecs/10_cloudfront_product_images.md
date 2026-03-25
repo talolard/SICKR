@@ -15,7 +15,7 @@ In deployed environments, product images should come from a CloudFront-backed S3
 origin, not from the backend proxy routes.
 
 The UI should still receive image URLs in the existing `image_urls` payload
-shape. The change is where those URLs point.
+shape. The change is where those URLs point and how those URLs are prepared.
 
 ## Why This Is Separate
 
@@ -68,6 +68,27 @@ For the image behavior:
 Because these images do not update in place, the image path should be treated as
 immutable.
 
+## Object-Key Contract
+
+The object-key contract is now explicit for v1:
+
+- upload the current local `images/masters/` tree directly to the product-image
+  bucket under `masters/`
+- seed `catalog.product_images.public_url` values under the same same-host path
+- do not include the catalog run id in the public URL path
+
+So the deployed public URL shape is:
+
+- `https://designagent.talperry.com/static/product-images/masters/<image-asset-key>`
+
+Why this is the chosen shape:
+
+- it matches the existing local sidecar cache layout
+- it avoids inventing a second object-key scheme only for deployment
+- it makes laptop-to-S3 sync straightforward
+- the crawl run id still exists as metadata in the database; it does not need to
+  be part of the public URL
+
 ## Cache Policy
 
 The intended cache posture is aggressive:
@@ -107,19 +128,12 @@ image URL on the app hostname.
 
 Example shape:
 
-- `https://designagent.talperry.com/static/product-images/<catalog-run-id>/<stable-key>.jpg`
-
-The exact object-key convention can be decided later, but it should be:
-
-- stable
-- deterministic
-- safe for long-lived CDN caching
+- `https://designagent.talperry.com/static/product-images/masters/<stable-key>.jpg`
 
 App-side seeding rule for v1:
 
 - the seed/bootstrap helpers should be able to derive that URL from:
   - the configured same-host base URL
-  - the image catalog run id
   - `image_asset_key`
 - runtime lookup may derive the same URL when `public_url` is missing, but the
   intended deployed state is still a seeded `public_url` column
@@ -142,6 +156,17 @@ No UI rewrite is required.
 The UI already consumes `image_urls` as plain URLs. As long as the catalog rows
 contain the CloudFront-backed URLs, the UI will render them as normal images.
 
+## Environment Bootstrap Boundary
+
+Product-image publication is part of **environment bootstrap**, not part of
+every application deploy.
+
+That means:
+
+- upload image bytes to S3 once for the selected dataset
+- seed or refresh `catalog.product_images.public_url`
+- do not require the application deploy host to carry a local image corpus
+
 ## What This Subspec Does Not Decide
 
 This subspec intentionally does not decide:
@@ -149,7 +174,6 @@ This subspec intentionally does not decide:
 - the exact S3 bucket policy
 - whether the S3 origin is public or fronted with CloudFront access control
 - the exact CloudFront distribution config outside this path behavior
-- the exact object-key generation logic
 - the exact seed job that writes `public_url`
 
 Those are implementation details for later infra or data-prep specs.

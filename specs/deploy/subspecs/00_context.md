@@ -61,6 +61,16 @@ The important public-route reality is:
 
 This split already exists in the app and should shape the deployment design.
 
+Operationally, we now also distinguish:
+
+- **environment bootstrap**: upload static image bytes and seed catalog/image
+  metadata into Aurora
+- **application deploy**: migrate, verify readiness, and roll out new `ui` and
+  `backend` images
+
+That separation is intentional and should stay visible in later tasks and
+automation.
+
 ## High-Level Decisions
 
 For the near-term deployment, we are assuming:
@@ -73,6 +83,11 @@ For the near-term deployment, we are assuming:
 - `RDS Proxy` is out for this use case
 - static product images and dynamic private attachments should not be treated as
   the same storage problem
+- normal application deploys should not require host-local catalog inputs
+- one-off environment bootstrap is acceptable when the dataset changes; it
+  should not be repeated on every release
+- `nginx` is not a required v1 layer; CloudFront should route directly to the
+  `ui` and `backend` origins by path
 - semver tooling details live in a dedicated subspec
 - Terraform and AWS shape live in a dedicated subspec
 
@@ -83,6 +98,8 @@ Shared storage posture for the near term:
 - product images are static and can be public
 - product images must be served from the public bucket/CDN path before launch;
   backend-proxy image serving is not acceptable for the deployed public path
+- product-image object keys should mirror the `masters/` image cache layout so
+  we can upload the existing corpus directly without inventing another keyspace
 - attachments and generated runtime artifacts are dynamic and should stay private (different bucket)
 - trace bundles remain developer-oriented and are not part of the first public
   rollout

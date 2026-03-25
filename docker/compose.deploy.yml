@@ -6,10 +6,9 @@ services:
       - backend.env
       - ${BACKEND_SECRETS_ENV_FILE}
     ports:
-      - 127.0.0.1:${BACKEND_HOST_PORT}:8000
+      - ${BACKEND_HOST_PORT}:8000
     volumes:
       - ${HOST_ARTIFACT_ROOT_DIR}:/var/lib/ikea-agent/artifacts
-      - ${HOST_BOOTSTRAP_ROOT_DIR}:/var/lib/ikea-agent/bootstrap:ro
 
   ui:
     image: ${UI_IMAGE_REF}
@@ -19,4 +18,4 @@ services:
     env_file:
       - ui.env
     ports:
-      - 127.0.0.1:${UI_HOST_PORT}:3000
+      - ${UI_HOST_PORT}:3000

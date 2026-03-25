@@ -15,11 +15,7 @@ def _write_bundle(tmp_path: Path, *, release_tag: str = "v1.4.2") -> Path:
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()
     (bundle_dir / "scripts").mkdir()
-    host_bootstrap_root = tmp_path / "host-bootstrap"
     run_id = "pilot-1000-20260318b"
-    catalog_path = host_bootstrap_root / "ikea_image_catalog" / "runs" / run_id / "catalog.parquet"
-    catalog_path.parent.mkdir(parents=True)
-    catalog_path.write_text("catalog-bytes\n", encoding="utf-8")
     backend_digest = "sha256:" + "2" * 64
     ui_digest = "sha256:" + "1" * 64
     (bundle_dir / "host.env").write_text(
@@ -38,7 +34,6 @@ def _write_bundle(tmp_path: Path, *, release_tag: str = "v1.4.2") -> Path:
                 "UI_HOST_PORT=3000",
                 "BACKEND_SECRETS_ENV_FILE="
                 + str(tmp_path / "state" / "runtime" / "backend.secrets.env"),
-                "HOST_BOOTSTRAP_ROOT_DIR=" + str(host_bootstrap_root),
                 "RELEASE_GIT_TAG=" + release_tag,
                 "RELEASE_GIT_SHA=abc1234def5678",
             ]
@@ -120,7 +115,6 @@ def test_deploy_bundle_runs_expected_sequence(
         bundle_dir=bundle_dir,
         state_dir=state_dir,
         run_migrations=True,
-        run_bootstrap=True,
     )
 
     assert (state_dir / "runtime" / "backend.secrets.env").read_text(
@@ -131,15 +125,11 @@ def test_deploy_bundle_runs_expected_sequence(
     ]
     assert commands[0][-3:] == ["pull", "backend", "ui"]
     assert "scripts.deploy.apply_migrations" in commands[1]
-    assert "scripts.deploy.bootstrap_catalog" in commands[2]
-    assert "--image-catalog-run-id" in commands[2]
-    assert "pilot-1000-20260318b" in commands[2]
-    assert "scripts.deploy.verify_seed_state" in commands[3]
-    assert "--expected-postgres-seed-version" in commands[3]
-    assert "a" * 64 in commands[3]
-    assert "--expected-image-catalog-seed-version" in commands[3]
-    assert commands[4][-2:] == ["-d", "backend"]
-    assert commands[5][-2:] == ["-d", "ui"]
+    assert "scripts.deploy.verify_seed_state" in commands[2]
+    assert "--expected-postgres-seed-version" not in commands[2]
+    assert "--expected-image-catalog-seed-version" not in commands[2]
+    assert commands[3][-2:] == ["-d", "backend"]
+    assert commands[4][-2:] == ["-d", "ui"]
     assert waits == [
         "http://127.0.0.1:8000/api/health/live",
         "http://127.0.0.1:8000/api/health/ready",
@@ -160,12 +150,11 @@ def test_rollback_previous_uses_previous_bundle(
     called: dict[str, object] = {}
 
     def _fake_deploy_bundle(
-        *, bundle_dir: Path, state_dir: Path, run_migrations: bool, run_bootstrap: bool
+        *, bundle_dir: Path, state_dir: Path, run_migrations: bool
     ) -> None:
         called["bundle_dir"] = bundle_dir
         called["state_dir"] = state_dir
         called["run_migrations"] = run_migrations
-        called["run_bootstrap"] = run_bootstrap
 
     monkeypatch.setattr(host_bundle_runner, "_deploy_bundle", _fake_deploy_bundle)
 
@@ -175,7 +164,6 @@ def test_rollback_previous_uses_previous_bundle(
         "bundle_dir": release_dir,
         "state_dir": state_dir,
         "run_migrations": False,
-        "run_bootstrap": False,
     }
 
 
@@ -196,5 +184,4 @@ def test_deploy_bundle_rejects_manifest_env_mismatch(tmp_path: Path) -> None:
             bundle_dir=bundle_dir,
             state_dir=state_dir,
             run_migrations=False,
-            run_bootstrap=False,
         )

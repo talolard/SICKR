@@ -25,12 +25,13 @@ def build_ranked_image_url(*, product_id: str, ordinal: int, base_url: str | Non
 def build_seeded_public_image_url(
     *,
     base_url: str,
-    run_id: str,
+    run_id: str | None,
     image_asset_key: str,
 ) -> str:
     """Return the deterministic same-host public URL used for deployed image seeding."""
 
-    return _join_base_url(base_url=base_url, path=f"/{run_id}/{image_asset_key}")
+    del run_id
+    return _join_base_url(base_url=base_url, path=f"/masters/{image_asset_key}")
 
 
 def build_catalog_image_url(

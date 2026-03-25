@@ -16,6 +16,15 @@ Branching rule:
 - start all deployment-project implementation from `tal/deployproject` or from
   a stacked branch that descends from it
 
+Later decision override:
+- newer spec updates supersede the older planning assumptions in this document
+  where they conflict
+- specifically, the current source of truth is:
+  - environment bootstrap is separate from normal app deploy
+  - normal deploys run migrations plus seed verification, not full catalog reseed
+  - `nginx` is not a required v1 layer; CloudFront routes directly to the `ui`
+    and `backend` origins by path
+
 ## Purpose
 
 The goal of this review is to extract:

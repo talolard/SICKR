@@ -347,7 +347,7 @@ def _resolve_seed_public_url(
 ) -> str | None:
     del canonical_image_url
     resolved_run_id = crawl_run_id or default_run_id
-    if product_image_base_url and resolved_run_id:
+    if product_image_base_url:
         return build_seeded_public_image_url(
             base_url=product_image_base_url,
             run_id=resolved_run_id,

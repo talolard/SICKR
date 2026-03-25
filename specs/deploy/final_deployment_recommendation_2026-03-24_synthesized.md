@@ -82,15 +82,14 @@ Use this near-term topology:
 - one public app domain on a subdomain of `talperry.com`, specifically
   `designagent.talperry.com`
 - one small EC2 host as the application origin
-- `nginx` on that EC2 host as the reverse proxy to local containers
 - one `ui` container running Next.js
 - one `backend` container running FastAPI + PydanticAI + AG-UI
 - Aurora Serverless v2 PostgreSQL
 - one public S3 bucket for product images
 - one private S3 bucket for attachments and generated runtime artifacts
 
-This keeps the current application architecture intact while making the public
-edge, storage policy, and deployment path more coherent.
+This keeps the current application architecture intact while deleting an
+unnecessary reverse-proxy layer from the v1 path.
 
 ### 2. Public Routing Model
 
@@ -104,14 +103,14 @@ Recommended public routing:
 
 | Public path | Public origin target | Notes |
 | --- | --- | --- |
-| `/`, app pages, `/_next/*` | `ui` via `nginx` | Normal Next.js app traffic |
-| `/api/copilotkit` | `ui` via `nginx` | CopilotKit runtime route lives in Next.js |
-| `/api/attachments` | `ui` via `nginx` | Next.js route currently handles attachment upload proxying |
-| `/attachments/*` | `ui` via `nginx` | Keep browser contract stable even if reads later resolve to presigned URLs |
-| `/api/thread-data/*` | `ui` via `nginx` | Next.js route proxies backend thread APIs |
-| `/api/agents*` | `ui` via `nginx` | Next.js route proxies backend metadata APIs |
-| `/api/traces*` | `ui` via `nginx` | Keep disabled in production-like deploys for now |
-| `/ag-ui/*` | `backend` via `nginx` | Direct AG-UI SSE transport path |
+| `/`, app pages, `/_next/*` | `ui` origin | Normal Next.js app traffic |
+| `/api/copilotkit` | `ui` origin | CopilotKit runtime route lives in Next.js |
+| `/api/attachments` | `ui` origin | Next.js route currently handles attachment upload proxying |
+| `/attachments/*` | `ui` origin | Keep browser contract stable even if reads later resolve to presigned URLs |
+| `/api/thread-data/*` | `ui` origin | Next.js route proxies backend thread APIs |
+| `/api/agents*` | `ui` origin | Next.js route proxies backend metadata APIs |
+| `/api/traces*` | `ui` origin | Keep disabled in production-like deploys for now |
+| `/ag-ui/*` | `backend` origin | Direct AG-UI SSE transport path |
 | `/static/product-images/*` | CloudFront S3 image origin | Cacheable public image path |
 
 That preserves one public app domain while keeping the current same-origin
@@ -139,14 +138,14 @@ Important note for AG-UI:
   gap between response packets
 - for `POST` requests, if the origin stops responding for longer than that read
   timeout, CloudFront drops the connection and does not retry
-- the CloudFront plus `nginx` path must therefore be configured and tested so
-  streaming is not buffered or broken
+- the CloudFront plus backend-origin path must therefore be configured and
+  tested so streaming is not buffered or broken
 - the `/ag-ui/*` behavior should use caching disabled, and its timeout settings
   must be chosen with long-lived streaming in mind
 - this is not a nice-to-have; it is a launch gate
 
-This lets CloudFront handle the public certificate and static image delivery
-while keeping `nginx` as the simple application origin and local reverse proxy.
+This lets CloudFront handle the public certificate, the UI/backend path split,
+and static image delivery without a separate `nginx` tier in v1.
 
 ### 4. Database
 
@@ -296,7 +295,7 @@ fully spec AWS:
 - `PY_AG_UI_URL` and similar app wiring set correctly between `ui` and `backend`
 - EC2 instance access for ECR pulls, S3 access, and SSM management
 - lightweight health checks before the first real deploy
-- a migration and bootstrap step that prepares schema plus required seeded data
+- a migration step plus seed-state verification before live traffic
 - basic observability for app logs and runtime traces
 
 For secrets, the recommendation is:
@@ -308,9 +307,10 @@ For secrets, the recommendation is:
 For database/bootstrap, the recommendation is:
 
 - deployment must include schema migration
-- deployment must also include initialization of required catalog, embedding, and
-  image metadata before the app serves live traffic
-- the exact production bootstrap mechanism is deferred
+- deployment must also verify that required catalog, embedding, and image
+  metadata are already ready before the app serves live traffic
+- initialization of that data belongs to a separate environment-bootstrap flow,
+  not to every release deploy
 
 ### 8. Explicitly Accepted Tradeoffs
 
@@ -336,9 +336,8 @@ The following are intentionally deferred to the next layer of planning:
 - exact AWS account and region wiring
 - VPC, subnet, and security-group specifics
 - exact secret-injection mechanism
-- exact `nginx` config blocks
 - exact health endpoint contracts
-- exact migration/bootstrap implementation
+- exact environment-bootstrap operator flow
 - rollback runbook details
 - future refinements to branch protection and release-please workflow policy
 
@@ -347,7 +346,7 @@ The following are intentionally deferred to the next layer of planning:
 The corrected near-term picture is:
 
 - CloudFront as the public edge and TLS layer
-- one EC2 app origin with `nginx`, `ui`, and `backend`
+- one EC2 host running `ui` and `backend`
 - direct backend routing only for `/ag-ui/*`
 - product images served publicly from a separate S3 + CloudFront path
 - private attachments and generated artifacts stored separately with presigned
@@ -355,7 +354,8 @@ The corrected near-term picture is:
 - Aurora Serverless v2 PostgreSQL, latest supported `pgvector`-capable version,
   explicitly tuned for pause-to-zero
 - a simple `main -> release` promotion flow with `release-please`,
-  manifest-backed artifact publication, and SSM-based deployment
+  manifest-backed artifact publication, SSM-based deployment, and a separate
+  environment-bootstrap flow for catalog data
 
 That is a more cohesive and correct deployment recommendation than the current
 doc, without pretending we have already finished the Terraform or AWS

@@ -17,7 +17,6 @@ import sys
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from hashlib import sha256
 from pathlib import Path
 from urllib import request
 
@@ -26,8 +25,6 @@ _UI_HEALTH_TIMEOUT_SECONDS = 60
 _HEALTH_POLL_INTERVAL_SECONDS = 5
 _HTTP_SUCCESS_MIN = 200
 _HTTP_SUCCESS_MAX_EXCLUSIVE = 300
-_HOST_IMAGE_CATALOG_ROOT_SUFFIX = "ikea_image_catalog"
-_CONTAINER_IMAGE_CATALOG_ROOT = Path("/var/lib/ikea-agent/bootstrap/ikea_image_catalog")
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -192,41 +189,6 @@ def _required_manifest_string(payload: dict[str, object], *path: str) -> str:
     return value
 
 
-def _catalog_source_for_run_dir(run_dir: Path) -> Path:
-    parquet_path = run_dir / "catalog.parquet"
-    if parquet_path.exists():
-        return parquet_path
-    jsonl_path = run_dir / "catalog.jsonl"
-    if jsonl_path.exists():
-        return jsonl_path
-    msg = f"Configured image catalog run has no catalog file: {run_dir}"
-    raise FileNotFoundError(msg)
-
-
-def _fingerprint_virtual_file(*, virtual_path: Path, actual_path: Path) -> str:
-    digest = sha256()
-    resolved_actual_path = actual_path.expanduser().resolve()
-    stat = resolved_actual_path.stat()
-    digest.update(virtual_path.as_posix().encode())
-    digest.update(str(stat.st_size).encode())
-    digest.update(str(stat.st_mtime_ns).encode())
-    return digest.hexdigest()
-
-
-def _expected_image_catalog_seed_version(
-    *, host_env: dict[str, str], image_catalog_run_id: str
-) -> str:
-    host_bootstrap_root = Path(host_env["HOST_BOOTSTRAP_ROOT_DIR"])
-    host_run_dir = (
-        host_bootstrap_root / _HOST_IMAGE_CATALOG_ROOT_SUFFIX / "runs" / image_catalog_run_id
-    )
-    catalog_source = _catalog_source_for_run_dir(host_run_dir)
-    container_source = (
-        _CONTAINER_IMAGE_CATALOG_ROOT / "runs" / image_catalog_run_id / catalog_source.name
-    )
-    return _fingerprint_virtual_file(virtual_path=container_source, actual_path=catalog_source)
-
-
 def _validate_bundle_contract(
     *, host_env: dict[str, str], manifest_payload: dict[str, object]
 ) -> dict[str, str]:
@@ -255,15 +217,7 @@ def _validate_bundle_contract(
                 f"{host_env[env_key]!r} != {manifest_value!r}"
             )
             raise ValueError(msg)
-    return {
-        "postgres_seed_version": _required_manifest_string(
-            manifest_payload, "bootstrap", "postgres_seed_version"
-        ),
-        "image_catalog_run_id": _required_manifest_string(
-            manifest_payload, "bootstrap", "image_catalog_run_id"
-        ),
-        "release_tag": release_tag,
-    }
+    return {"release_tag": release_tag}
 
 
 def _write_runtime_secret_env(*, host_env: dict[str, str], values: dict[str, str]) -> Path:
@@ -322,16 +276,11 @@ def _deploy_bundle(
     bundle_dir: Path,
     state_dir: Path,
     run_migrations: bool,
-    run_bootstrap: bool,
 ) -> None:
     host_env = _read_env_file(bundle_dir / "host.env")
     manifest_payload = _read_release_manifest_payload(bundle_dir)
     bundle_contract = _validate_bundle_contract(
         host_env=host_env, manifest_payload=manifest_payload
-    )
-    expected_image_catalog_seed_version = _expected_image_catalog_seed_version(
-        host_env=host_env,
-        image_catalog_run_id=bundle_contract["image_catalog_run_id"],
     )
     _write_runtime_secret_env(host_env=host_env, values=_merged_backend_secrets(host_env))
     _login_ecr(host_env)
@@ -350,23 +299,6 @@ def _deploy_bundle(
                 "scripts.deploy.apply_migrations",
             )
         )
-    if run_bootstrap:
-        _run_command(
-            _compose_command(
-                bundle_dir,
-                host_env,
-                "run",
-                "--rm",
-                "backend",
-                "python",
-                "-m",
-                "scripts.deploy.bootstrap_catalog",
-                "--image-catalog-root",
-                _CONTAINER_IMAGE_CATALOG_ROOT.as_posix(),
-                "--image-catalog-run-id",
-                bundle_contract["image_catalog_run_id"],
-            )
-        )
     _run_command(
         _compose_command(
             bundle_dir,
@@ -377,10 +309,6 @@ def _deploy_bundle(
             "python",
             "-m",
             "scripts.deploy.verify_seed_state",
-            "--expected-postgres-seed-version",
-            bundle_contract["postgres_seed_version"],
-            "--expected-image-catalog-seed-version",
-            expected_image_catalog_seed_version,
         )
     )
 
@@ -434,7 +362,6 @@ def _rollback_previous(*, state_dir: Path) -> None:
         bundle_dir=bundle_dir,
         state_dir=state_dir,
         run_migrations=False,
-        run_bootstrap=False,
     )
 
 
@@ -463,7 +390,6 @@ def main() -> int:
                 bundle_dir=args.bundle_dir.resolve(),
                 state_dir=state_dir,
                 run_migrations=True,
-                run_bootstrap=True,
             )
         return 0
     if args.command == "rollback-previous":

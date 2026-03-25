@@ -20,6 +20,14 @@ The contract below is the stable deploy-facing environment surface. The release
 workflow, Terraform outputs, and later host deploy automation should all reuse
 this contract instead of inventing new environment semantics.
 
+This contract also makes one deployment distinction explicit:
+
+- **environment bootstrap** prepares catalog data and image metadata
+- **application deploy** rolls out new `ui` and `backend` images
+
+Normal application deploys do not require repo-local image-catalog files on the
+host.
+
 ## Rules
 
 - never bake long-lived secrets into images
@@ -44,7 +52,7 @@ Expected key usage inside those secrets:
 | --- | --- | --- |
 | `backend-app` | reserved for backend-only sensitive values | create now so later deploy automation has a stable ARN even if v1 leaves it empty |
 | `model-providers` | `GEMINI_API_KEY`, `FAL_KEY` | use canonical names; do not prefer `GOOGLE_API_KEY` or `FAI_AI_API_KEY` in deployed env |
-| `observability` | `LOGFIRE_TOKEN` | optional for bootstrap, required for remote Logfire export |
+| `observability` | `LOGFIRE_TOKEN` | optional for remote Logfire export |
 | `database` | `DATABASE_URL` | one DSN for the Aurora writer endpoint |
 
 Deploy tooling should project secret JSON keys into container environment
@@ -67,7 +75,7 @@ host deploy layer:
 | `DATABASE_POOL_MODE` | `nullpool` | deploy-friendly connection policy for Aurora pause-to-zero |
 | `ALLOW_MODEL_REQUESTS` | `1` | the deployed app should use the real model path |
 | `IMAGE_SERVING_STRATEGY` | `direct_public_url` | public launch requires bucket-backed image delivery |
-| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base for runtime payloads and bootstrap seeding |
+| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base for runtime payloads |
 | `ARTIFACT_ROOT_DIR` | `/var/lib/ikea-agent/artifacts` | mounted writable path for local materialization and read cache |
 | `ARTIFACT_STORAGE_BACKEND` | `s3` | deployed private artifacts must not rely on container-local disk as the durable store |
 | `ARTIFACT_S3_BUCKET` | deploy-specific private bucket name | durable private storage bucket for uploads and generated artifacts |
@@ -84,18 +92,11 @@ Manager:
 - `FAL_KEY`
 - `LOGFIRE_TOKEN` when observability export is enabled
 
-Deploy-only bootstrap values are not required during steady-state runtime, but
-the deploy runner must be able to provide them to the migration/bootstrap
-entrypoints when needed:
-
-- `IKEA_IMAGE_CATALOG_ROOT_DIR`
-- `IKEA_IMAGE_CATALOG_RUN_ID`
-
-Seed/bootstrap note:
+Product-image note:
 
 - when `IMAGE_SERVICE_BASE_URL` is set, catalog seeding should write same-host
   public URLs of the form
-  `https://designagent.talperry.com/static/product-images/<run-id>/<image-asset-key>`
+  `https://designagent.talperry.com/static/product-images/masters/<image-asset-key>`
   into `catalog.product_images.public_url`
 
 ## UI Contract
@@ -136,7 +137,6 @@ The host deploy layer should work from these inputs:
 | `DEPLOY_STATE_DIR` | fixed deploy config: `/var/lib/ikea-agent/deploy` |
 | `BACKEND_SECRETS_ENV_FILE` | fixed deploy config: `/var/lib/ikea-agent/deploy/runtime/backend.secrets.env` |
 | `HOST_ARTIFACT_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/artifacts` |
-| `HOST_BOOTSTRAP_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/bootstrap` |
 
 The host should mount one writable path for backend artifact materialization and
 cache:
@@ -159,17 +159,35 @@ The deploy runner should consume release-manifest digests, fetch the required
 Secrets Manager values, and inject only the contract above into the containers.
 It should not persist secret values in versioned release directories.
 
-## Deploy-Time Entry Points
+## Environment Bootstrap Contract
 
-The runtime contract now exposes these deploy-facing commands:
+Environment bootstrap is a separate workflow from normal app deploy.
+
+Its job is to:
+
+- upload immutable product image objects to S3
+- seed or refresh `catalog.*` and `ops.seed_state`
+- prepare `catalog.product_images.public_url` for `direct_public_url` mode
+
+This workflow may use:
+
+- `uv run python scripts/deploy/bootstrap_catalog.py`
+- repo-local parquet inputs
+- repo-local image-catalog run outputs
+
+It is not a required step on every release deploy.
+
+## Application Deploy Entry Points
+
+The steady-state deploy contract now exposes these deploy-facing commands:
 
 - `uv run python scripts/deploy/apply_migrations.py`
-- `uv run python scripts/deploy/bootstrap_catalog.py`
 - `uv run python scripts/deploy/verify_seed_state.py`
 - `uv run python scripts/deploy/wait_for_http_ready.py --url <health-url>`
 - `uv run python scripts/deploy/prove_agui_streaming.py --url <ag-ui-agent-url>`
   - this validates SSE response framing and first-event delivery only
-  - it does not by itself prove unbuffered progressive streaming through CloudFront and `nginx`
+  - it does not by itself prove unbuffered progressive streaming through the
+    full public CloudFront path
 
 Expected health URLs:
 
@@ -191,7 +209,8 @@ SSM. That bundle is the host-side execution unit and contains:
 - `ui.env`
 - `docker-compose.yml`
 - `scripts/host_bundle_runner.py`
-- one pre-rendered `release-deploy-ssm-command.json` payload distributed with the release assets
+- one pre-rendered `release-deploy-ssm-command.json` payload distributed with
+  the release assets
 
 The host runner is responsible for:
 
@@ -199,8 +218,7 @@ The host runner is responsible for:
 2. projecting secret JSON keys into the non-versioned runtime secret env file
 3. pulling pinned image digests
 4. running migrations
-5. running bootstrap and seed verification using the bootstrap inputs pinned in
-   `release-manifest.json`
+5. running seed verification against the already-prepared environment
 6. starting backend, then UI
 7. waiting for backend readiness, UI readiness, and one lightweight app check
 8. updating current and previous deploy state markers

@@ -15,10 +15,17 @@ shared sidecar output root:
 - Image ranking prefers `is_og_image`, then `image_rank`, then canonical URL.
 - When `IMAGE_SERVICE_BASE_URL` is set during bootstrap, seeded `public_url`
   values should use the same-host deployment shape:
-  - `https://designagent.talperry.com/static/product-images/<crawl-run-id>/<image-asset-key>`
+  - `https://designagent.talperry.com/static/product-images/masters/<image-asset-key>`
 - In `direct_public_url` mode, runtime lookup prefers seeded `public_url`, then
-  can derive the same deterministic same-host URL from `crawl_run_id` and
-  `image_asset_key` when the row has not been backfilled yet.
+  can derive the same deterministic same-host URL from `image_asset_key` when
+  the row has not been backfilled yet.
+
+## Deployment Boundary
+
+- In deployed environments, the runtime does not need the local image catalog on
+  the host once the database has been seeded.
+- Uploading `images/masters/` to S3 and seeding `catalog.product_images.public_url`
+  is an environment-bootstrap task, not a normal per-release deploy step.
 
 ## UI Contract
 

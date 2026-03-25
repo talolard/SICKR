@@ -14,7 +14,7 @@ def test_resolve_seed_public_url_prefers_same_host_deployment_path() -> None:
 
     assert (
         public_url
-        == "https://designagent.talperry.com/static/product-images/catalog-run-3/10018194-primary.jpg"
+        == "https://designagent.talperry.com/static/product-images/masters/10018194-primary.jpg"
     )
 
 
