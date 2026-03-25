@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -11,14 +12,15 @@ from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from sqlalchemy import Engine, inspect, select, text
+from sqlalchemy import Engine, inspect, text
 
-from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
-from ikea_agent.shared.ops_schema import seed_state
-
-_REQUIRED_SEED_SYSTEMS: tuple[str, ...] = (
-    POSTGRES_SEED_SYSTEM,
-    IMAGE_CATALOG_SEED_SYSTEM,
+from ikea_agent.config import AppSettings
+from ikea_agent.shared.deploy_readiness import (
+    REQUIRED_SEED_SYSTEMS,
+    DeployCheckResult,
+    SeedVerificationDetails,
+    SeedVerificationResult,
+    collect_seed_verification,
 )
 
 
@@ -71,39 +73,63 @@ def _schema_check(engine: Engine) -> HealthCheckResult:
     )
 
 
-def _seed_state_check(engine: Engine) -> HealthCheckResult:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            select(
-                seed_state.c.system_name,
-                seed_state.c.status,
-            ).where(seed_state.c.system_name.in_(_REQUIRED_SEED_SYSTEMS))
-        ).all()
+def _coerce_health_check(result: DeployCheckResult) -> HealthCheckResult:
+    return HealthCheckResult(status=result.status, detail=result.detail)
 
-    states = {str(system_name): str(status) for system_name, status in rows}
-    missing = [system_name for system_name in _REQUIRED_SEED_SYSTEMS if system_name not in states]
-    unready = [
-        system_name
-        for system_name in _REQUIRED_SEED_SYSTEMS
-        if states.get(system_name) not in {None, "ready"}
-    ]
-    if missing:
-        return HealthCheckResult(
-            status="failed",
-            detail=f"Missing seed state rows: {', '.join(sorted(missing))}.",
-        )
-    if unready:
-        return HealthCheckResult(
-            status="failed",
-            detail=f"Seed state not ready: {', '.join(sorted(unready))}.",
-        )
-    return HealthCheckResult(
-        status="ok",
-        detail="Required seed state rows are ready.",
+
+def _seed_verification_check(
+    engine: Engine,
+    *,
+    settings: AppSettings,
+) -> SeedVerificationResult:
+    return collect_seed_verification(
+        engine,
+        image_serving_strategy=settings.image_serving_strategy,
     )
 
 
-def _readiness_payload(engine: Engine | None) -> tuple[int, dict[str, object]]:
+def _safe_dependency_check(
+    *,
+    label: str,
+    check: Callable[[], HealthCheckResult],
+) -> HealthCheckResult:
+    try:
+        return check()
+    except Exception as exc:
+        return HealthCheckResult(
+            status="failed",
+            detail=f"{label} check failed: {exc}",
+        )
+
+
+def _safe_seed_verification(
+    engine: Engine,
+    *,
+    settings: AppSettings,
+) -> SeedVerificationResult:
+    try:
+        return _seed_verification_check(engine, settings=settings)
+    except Exception as exc:
+        failed = DeployCheckResult(
+            status="failed",
+            detail=f"Seed verification failed: {exc}",
+        )
+        return SeedVerificationResult(
+            seed_state=failed,
+            catalog_data=failed,
+            details=SeedVerificationDetails(
+                systems={},
+                table_counts={},
+                missing_public_image_urls=None,
+            ),
+        )
+
+
+def _readiness_payload(
+    engine: Engine | None,
+    *,
+    settings: AppSettings,
+) -> tuple[int, dict[str, object]]:
     if engine is None:
         payload: dict[str, object] = {
             "status": "not_ready",
@@ -126,6 +152,14 @@ def _readiness_payload(engine: Engine | None) -> tuple[int, dict[str, object]]:
                         detail="Seed-state check skipped because no database engine is available.",
                     )
                 ),
+                "catalog_data": asdict(
+                    HealthCheckResult(
+                        status="skipped",
+                        detail=(
+                            "Catalog-data check skipped because no database engine is available."
+                        ),
+                    )
+                ),
             },
         }
         return 503, payload
@@ -137,8 +171,6 @@ def _readiness_payload(engine: Engine | None) -> tuple[int, dict[str, object]]:
             status="ok",
             detail="Database connectivity is healthy.",
         )
-        schema_check = _schema_check(engine)
-        seed_check = _seed_state_check(engine)
     except Exception as exc:  # pragma: no cover - defensive health fallback
         payload = {
             "status": "not_ready",
@@ -161,21 +193,42 @@ def _readiness_payload(engine: Engine | None) -> tuple[int, dict[str, object]]:
                         detail="Seed-state check skipped because database connectivity failed.",
                     )
                 ),
+                "catalog_data": asdict(
+                    HealthCheckResult(
+                        status="skipped",
+                        detail="Catalog-data check skipped because database connectivity failed.",
+                    )
+                ),
             },
         }
         return 503, payload
 
+    seed_verification = _safe_seed_verification(engine, settings=settings)
     checks: dict[str, dict[str, str]] = {
         "database": asdict(database_check),
-        "schema": asdict(schema_check),
-        "seed_state": asdict(seed_check),
+        "schema": asdict(
+            _safe_dependency_check(label="schema", check=lambda: _schema_check(engine))
+        ),
+        "seed_state": asdict(_coerce_health_check(seed_verification.seed_state)),
+        "catalog_data": asdict(_coerce_health_check(seed_verification.catalog_data)),
     }
-    if all(check["status"] == "ok" for check in checks.values()):
-        return 200, {"status": "ok", "checks": checks}
-    return 503, {"status": "not_ready", "checks": checks}
+    payload = {
+        "status": "ok"
+        if all(check["status"] == "ok" for check in checks.values())
+        else "not_ready",
+        "checks": checks,
+        "details": {
+            "required_seed_systems": list(REQUIRED_SEED_SYSTEMS),
+            "seed_state": seed_verification.details.systems,
+            "table_counts": seed_verification.details.table_counts,
+            "missing_public_image_urls": seed_verification.details.missing_public_image_urls,
+            "image_serving_strategy": settings.image_serving_strategy,
+        },
+    }
+    return (200 if payload["status"] == "ok" else 503), payload
 
 
-def register_health_routes(app: FastAPI, *, engine: Engine | None) -> None:
+def register_health_routes(app: FastAPI, *, engine: Engine | None, settings: AppSettings) -> None:
     """Register liveness and readiness routes used by deploy automation."""
 
     @app.get("/api/health/live")
@@ -185,5 +238,5 @@ def register_health_routes(app: FastAPI, *, engine: Engine | None) -> None:
     @app.get("/api/health")
     @app.get("/api/health/ready")
     async def ready_health() -> JSONResponse:
-        status_code, payload = _readiness_payload(engine)
+        status_code, payload = _readiness_payload(engine, settings=settings)
         return JSONResponse(status_code=status_code, content=payload)

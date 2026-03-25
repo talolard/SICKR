@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from sqlalchemy import Engine, insert
+from sqlalchemy import Engine, insert, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
@@ -25,6 +25,7 @@ from ikea_agent.config import get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator, BeadsTraceIssueResult
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
+from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
 from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
 from ikea_agent.shared.ops_schema import seed_state
@@ -105,6 +106,41 @@ def _ready_runtime(tmp_path: Path) -> _PersistenceRuntime:
                     "details_json": "{}",
                     "updated_at": datetime(2026, 3, 24, tzinfo=UTC),
                 },
+            ],
+        )
+        connection.execute(
+            insert(products_canonical),
+            [
+                {
+                    "canonical_product_key": "chair-1",
+                    "product_id": 1,
+                    "country": "Germany",
+                    "product_name": "Chair",
+                }
+            ],
+        )
+        connection.execute(
+            insert(product_embeddings),
+            [
+                {
+                    "canonical_product_key": "chair-1",
+                    "embedding_model": "test-model",
+                    "embedding_vector": [0.0] * 3072,
+                }
+            ],
+        )
+        connection.execute(
+            insert(product_images),
+            [
+                {
+                    "image_asset_key": "image-1",
+                    "canonical_product_key": "chair-1",
+                    "product_id": "1",
+                    "is_og_image": True,
+                    "storage_backend_kind": "test",
+                    "storage_locator": "images/chair-1.jpg",
+                    "public_url": "https://designagent.talperry.com/static/product-images/chair-1.jpg",
+                }
             ],
         )
     return _PersistenceRuntime(
@@ -207,6 +243,7 @@ def test_health_ready_route_reports_ok_for_seeded_runtime(tmp_path: Path) -> Non
     assert payload["checks"]["database"]["status"] == "ok"
     assert payload["checks"]["schema"]["status"] == "ok"
     assert payload["checks"]["seed_state"]["status"] == "ok"
+    assert payload["checks"]["catalog_data"]["status"] == "ok"
 
 
 def test_health_ready_route_reports_not_ready_when_seed_state_is_missing(tmp_path: Path) -> None:
@@ -224,6 +261,20 @@ def test_health_ready_route_reports_not_ready_when_seed_state_is_missing(tmp_pat
     payload = response.json()
     assert payload["status"] == "not_ready"
     assert payload["checks"]["seed_state"]["status"] == "failed"
+    assert payload["checks"]["catalog_data"]["status"] == "failed"
+
+
+def test_create_app_does_not_mutate_schema_on_startup(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "startup.sqlite3")
+    runtime = _PersistenceRuntime(
+        sqlalchemy_engine=engine,
+        session_factory=create_session_factory(engine),
+    )
+
+    create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False, mount_ag_ui=False)
+
+    inspector = inspect(engine)
+    assert not inspector.has_table("threads", schema="app")
 
 
 def test_agent_ag_ui_route_exists() -> None:

@@ -33,7 +33,6 @@ from ikea_agent.config import get_settings
 from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
-from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
@@ -96,8 +95,6 @@ def create_app(
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
-    if hasattr(chat_runtime, "sqlalchemy_engine"):
-        ensure_persistence_schema(chat_runtime.sqlalchemy_engine)
     asset_repository = (
         AssetRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -127,6 +124,7 @@ def create_app(
     register_health_routes(
         app,
         engine=getattr(chat_runtime, "sqlalchemy_engine", None),
+        settings=settings,
     )
     _register_attachment_routes(app, attachment_store)
     if settings.trace_capture_enabled and run_history_repository is not None:

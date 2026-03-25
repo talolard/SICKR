@@ -20,7 +20,7 @@ data "aws_iam_policy_document" "github_oidc_assume_role" {
     condition {
       test     = "ForAnyValue:StringLike"
       variable = "${local.github_oidc_provider_host}:sub"
-      values   = local.github_oidc_subjects
+      values   = local.github_release_subjects
     }
   }
 }

@@ -5,16 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 
-from sqlalchemy import select
-
 from ikea_agent.config import get_settings
-from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
-from ikea_agent.shared.ops_schema import seed_state
+from ikea_agent.shared.deploy_readiness import REQUIRED_SEED_SYSTEMS, collect_seed_verification
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
 
 
 def main() -> None:
-    """Check that required seed-state systems are present and marked ready."""
+    """Check that deploy-ready seed state and seeded catalog data are usable."""
 
     parser = argparse.ArgumentParser(description="Verify deployment seed-state readiness.")
     parser.add_argument("--database-url", default=None)
@@ -23,30 +20,31 @@ def main() -> None:
     settings = get_settings()
     database_url = resolve_database_url(database_url=args.database_url or settings.database_url)
     engine = create_database_engine(database_url)
-    required = (POSTGRES_SEED_SYSTEM, IMAGE_CATALOG_SEED_SYSTEM)
-
-    with engine.connect() as connection:
-        rows = connection.execute(
-            select(seed_state.c.system_name, seed_state.c.status, seed_state.c.version).where(
-                seed_state.c.system_name.in_(required)
-            )
-        ).all()
-
-    by_name = {
-        str(system_name): {"status": str(status), "version": str(version)}
-        for system_name, status, version in rows
-    }
-    missing = [system_name for system_name in required if system_name not in by_name]
-    unready = [
-        system_name
-        for system_name in required
-        if by_name.get(system_name, {}).get("status") != "ready"
-    ]
+    verification = collect_seed_verification(
+        engine,
+        image_serving_strategy=settings.image_serving_strategy,
+    )
     payload = {
-        "status": "ok" if not missing and not unready else "not_ready",
-        "systems": by_name,
-        "missing": missing,
-        "unready": unready,
+        "status": (
+            "ok"
+            if verification.seed_state.status == "ok" and verification.catalog_data.status == "ok"
+            else "not_ready"
+        ),
+        "required_seed_systems": list(REQUIRED_SEED_SYSTEMS),
+        "image_serving_strategy": settings.image_serving_strategy,
+        "checks": {
+            "seed_state": {
+                "status": verification.seed_state.status,
+                "detail": verification.seed_state.detail,
+            },
+            "catalog_data": {
+                "status": verification.catalog_data.status,
+                "detail": verification.catalog_data.detail,
+            },
+        },
+        "systems": verification.details.systems,
+        "table_counts": verification.details.table_counts,
+        "missing_public_image_urls": verification.details.missing_public_image_urls,
     }
     print(json.dumps(payload, sort_keys=True))
     if payload["status"] != "ok":

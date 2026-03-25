@@ -5,9 +5,8 @@ locals {
   name_prefix               = "${var.service_name}-${var.environment}"
   github_oidc_provider_url  = "https://token.actions.githubusercontent.com"
   github_oidc_provider_host = "token.actions.githubusercontent.com"
-  github_oidc_subjects = [
+  github_release_subjects = [
     "repo:${var.github_repository}:ref:refs/heads/${var.release_branch}",
-    "repo:${var.github_repository}:pull_request",
   ]
 
   product_image_bucket_name     = "${local.name_prefix}-${var.aws_account_id}-product-images"

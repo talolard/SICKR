@@ -47,4 +47,24 @@ describe("health route", () => {
     expect(response.headers.get("content-type")).toBe("application/problem+json");
     await expect(response.json()).resolves.toEqual({ status: "not_ready" });
   });
+
+  it("fails closed when the backend health route is unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED")));
+    const { GET } = await import("./route");
+
+    const response = await GET(new NextRequest("http://127.0.0.1:3000/api/health"));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      status: "not_ready",
+      checks: {
+        backend: {
+          status: "failed",
+          detail:
+            "UI readiness proxy could not reach backend health route: connect ECONNREFUSED",
+        },
+      },
+    });
+  });
 });
