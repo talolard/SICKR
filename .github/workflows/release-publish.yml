@@ -4,6 +4,12 @@ on:
   pull_request_target:
     types: [closed]
     branches: [release]
+  workflow_dispatch:
+    inputs:
+      release_ref:
+        description: "Merged release commit SHA to publish."
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -22,9 +28,12 @@ jobs:
   publish:
     name: Build, push, manifest, and publish
     if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == 'release' &&
-      startsWith(github.event.pull_request.title, 'chore(release):')
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.pull_request.merged == true &&
+        github.event.pull_request.base.ref == 'release' &&
+        startsWith(github.event.pull_request.title, 'chore(release):')
+      )
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.version.outputs.tag }}
@@ -36,9 +45,12 @@ jobs:
         id: release_ref
         env:
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          DISPATCH_RELEASE_REF: ${{ github.event.inputs.release_ref }}
         run: |
           set -euo pipefail
-          if [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
+          if [[ -n "${DISPATCH_RELEASE_REF:-}" ]]; then
+            echo "ref=${DISPATCH_RELEASE_REF}" >> "${GITHUB_OUTPUT}"
+          elif [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
             echo "ref=${MERGE_COMMIT_SHA}" >> "${GITHUB_OUTPUT}"
           else
             echo "Could not determine the release ref to publish."
