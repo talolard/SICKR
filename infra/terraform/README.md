@@ -143,7 +143,9 @@ The EC2 origin host stays intentionally simple:
 - single x86_64 instance in a public subnet
 - runtime IAM instance profile plus SSM core access
 - Elastic IP attached and published as `origin.designagent.talperry.com`
-- bootstrap user data that installs Docker, the Compose plugin, and `nginx`
+- bootstrap user data that installs Docker and the Compose plugin
+- no required host-level reverse proxy; CloudFront talks directly to the `ui`
+  origin on `3000` and the `backend` origin on `8000`
 
 ## Outputs
 

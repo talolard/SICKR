@@ -142,7 +142,6 @@ def seed_postgres_database(
     embedding_rows = _load_embedding_rows(embeddings_parquet=embeddings_parquet)
     image_rows = _load_image_rows(
         catalog_source=image_catalog_source,
-        default_run_id=image_catalog_run_id,
         product_image_base_url=product_image_base_url,
     )
 
@@ -286,7 +285,6 @@ def _load_embedding_rows(*, embeddings_parquet: Path) -> list[dict[str, object]]
 def _load_image_rows(
     *,
     catalog_source: Path,
-    default_run_id: str | None,
     product_image_base_url: str | None,
 ) -> list[dict[str, object]]:
     deduped_rows: dict[str, dict[str, object]] = {}
@@ -306,9 +304,6 @@ def _load_image_rows(
         )
         crawl_run_id = _str_or_none(row.get("crawl_run_id"))
         public_url = _resolve_seed_public_url(
-            canonical_image_url=canonical_image_url,
-            crawl_run_id=crawl_run_id,
-            default_run_id=default_run_id,
             image_asset_key=image_asset_key,
             product_image_base_url=product_image_base_url,
         )
@@ -339,18 +334,12 @@ def _load_image_rows(
 
 def _resolve_seed_public_url(
     *,
-    canonical_image_url: str | None,
-    crawl_run_id: str | None,
-    default_run_id: str | None,
     image_asset_key: str,
     product_image_base_url: str | None,
 ) -> str | None:
-    del canonical_image_url
-    resolved_run_id = crawl_run_id or default_run_id
     if product_image_base_url:
         return build_seeded_public_image_url(
             base_url=product_image_base_url,
-            run_id=resolved_run_id,
             image_asset_key=image_asset_key,
         )
     return None

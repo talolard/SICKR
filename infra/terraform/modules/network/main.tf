@@ -121,17 +121,17 @@ resource "aws_security_group" "app_host" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "HTTP for CloudFront origin traffic and emergency host checks"
-    from_port   = 80
-    to_port     = 80
+    description = "UI origin traffic for CloudFront default behavior"
+    from_port   = var.app_ui_origin_port
+    to_port     = var.app_ui_origin_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description = "HTTPS reserved for future host-local TLS if needed"
-    from_port   = 443
-    to_port     = 443
+    description = "Backend AG-UI origin traffic for CloudFront streaming behavior"
+    from_port   = var.app_backend_origin_port
+    to_port     = var.app_backend_origin_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }

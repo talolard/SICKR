@@ -18,6 +18,16 @@ variable "app_origin_domain_name" {
   type        = string
 }
 
+variable "ui_origin_port" {
+  description = "Host port exposed by the UI origin."
+  type        = number
+}
+
+variable "backend_origin_port" {
+  description = "Host port exposed by the backend origin."
+  type        = number
+}
+
 variable "product_image_bucket_regional_domain_name" {
   description = "Regional S3 domain name used as the CloudFront product-image origin."
   type        = string

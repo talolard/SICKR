@@ -149,9 +149,7 @@ def test_rollback_previous_uses_previous_bundle(
     (state_dir / "previous_release_tag.txt").write_text("v1.4.1\n", encoding="utf-8")
     called: dict[str, object] = {}
 
-    def _fake_deploy_bundle(
-        *, bundle_dir: Path, state_dir: Path, run_migrations: bool
-    ) -> None:
+    def _fake_deploy_bundle(*, bundle_dir: Path, state_dir: Path, run_migrations: bool) -> None:
         called["bundle_dir"] = bundle_dir
         called["state_dir"] = state_dir
         called["run_migrations"] = run_migrations

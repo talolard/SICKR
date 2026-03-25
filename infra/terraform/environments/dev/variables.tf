@@ -100,6 +100,18 @@ variable "app_host_root_volume_size_gib" {
   default     = 20
 }
 
+variable "app_ui_origin_port" {
+  description = "Host port exposed for the UI origin behind CloudFront."
+  type        = number
+  default     = 3000
+}
+
+variable "app_backend_origin_port" {
+  description = "Host port exposed for the backend AG-UI origin behind CloudFront."
+  type        = number
+  default     = 8000
+}
+
 variable "app_host_artifact_root_dir" {
   description = "Writable host path reserved for private runtime artifacts."
   type        = string

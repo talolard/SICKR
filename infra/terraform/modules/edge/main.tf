@@ -127,7 +127,7 @@ resource "aws_cloudfront_distribution" "main" {
     origin_id   = "app-origin-default"
 
     custom_origin_config {
-      http_port                = 80
+      http_port                = var.ui_origin_port
       https_port               = 443
       origin_protocol_policy   = "http-only"
       origin_ssl_protocols     = ["TLSv1.2"]
@@ -141,7 +141,7 @@ resource "aws_cloudfront_distribution" "main" {
     origin_id   = "app-origin-ag-ui"
 
     custom_origin_config {
-      http_port                = 80
+      http_port                = var.backend_origin_port
       https_port               = 443
       origin_protocol_policy   = "http-only"
       origin_ssl_protocols     = ["TLSv1.2"]

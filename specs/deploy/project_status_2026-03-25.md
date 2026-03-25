@@ -37,15 +37,19 @@ The deploy model is now explicitly simpler than the earlier review stack:
   steady-state deploy
 - deploy env examples no longer advertise bootstrap-only host variables as part
   of the normal runtime contract
+- the dead duplicate seeded-catalog readiness module has been removed
+- the unused Postgres URL-shape helper and its dedicated test have been removed
+- product-image URL helpers no longer carry dead run-id parameters now that the
+  public URL contract is `masters/<image-asset-key>`
+- Terraform now models direct UI/backend origin ports and no longer installs
+  `nginx` in host bootstrap
 
 ## Major Remaining Gaps
 
 - Terraform and CloudFront implementation still need to be fully aligned with
-  the no-`nginx` routing model
+  the no-`nginx` routing model in the live environment, not just in code
 - release/deploy automation still needs a clean separation between one-off
   environment bootstrap and steady-state image rollout
-- product-image seeding code still needs to align completely with the chosen
-  `masters/<image-asset-key>` URL contract
 - final public-path validation on `designagent.talperry.com` is still pending
 
 ## Near-Term Priority

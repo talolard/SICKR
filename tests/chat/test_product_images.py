@@ -65,8 +65,6 @@ def test_build_catalog_image_url_requires_seeded_public_url_in_direct_mode() -> 
             public_url=None,
             serving_strategy="direct_public_url",
             base_url="https://designagent.talperry.com/static/product-images",
-            image_asset_key="348326-primary.jpg",
-            crawl_run_id="catalog-run-1",
         )
 
 
@@ -92,7 +90,6 @@ def test_build_seeded_public_image_url_uses_masters_same_host_path() -> None:
     assert (
         build_seeded_public_image_url(
             base_url="https://designagent.talperry.com/static/product-images",
-            run_id="catalog-run-1",
             image_asset_key="90458891-primary.jpg",
         )
         == "https://designagent.talperry.com/static/product-images/masters/90458891-primary.jpg"

@@ -31,6 +31,16 @@ variable "availability_zones" {
   }
 }
 
+variable "app_ui_origin_port" {
+  description = "Host port exposed for the UI origin behind CloudFront."
+  type        = number
+}
+
+variable "app_backend_origin_port" {
+  description = "Host port exposed for the backend AG-UI origin behind CloudFront."
+  type        = number
+}
+
 variable "common_tags" {
   description = "Provider-level deployment tags to merge with resource-local tags."
   type        = map(string)

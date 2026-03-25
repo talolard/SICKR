@@ -278,8 +278,6 @@ class CatalogRepository:
                     public_url=record.public_url,
                     serving_strategy=serving_strategy,
                     base_url=base_url,
-                    image_asset_key=record.image_asset_key,
-                    crawl_run_id=record.crawl_run_id,
                 )
             )
         return {key: tuple(urls) for key, urls in image_urls.items()}

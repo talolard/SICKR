@@ -5,9 +5,6 @@ from scripts.docker_deps.seed_postgres import _resolve_seed_public_url
 
 def test_resolve_seed_public_url_prefers_same_host_deployment_path() -> None:
     public_url = _resolve_seed_public_url(
-        canonical_image_url="https://cdn.ikea.test/10018194-primary.jpg",
-        crawl_run_id="catalog-run-3",
-        default_run_id=None,
         image_asset_key="10018194-primary.jpg",
         product_image_base_url="https://designagent.talperry.com/static/product-images",
     )
@@ -20,9 +17,6 @@ def test_resolve_seed_public_url_prefers_same_host_deployment_path() -> None:
 
 def test_resolve_seed_public_url_requires_same_host_base_url() -> None:
     public_url = _resolve_seed_public_url(
-        canonical_image_url="https://cdn.ikea.test/10018194-primary.jpg",
-        crawl_run_id="catalog-run-3",
-        default_run_id=None,
         image_asset_key="10018194-primary.jpg",
         product_image_base_url=None,
     )

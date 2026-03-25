@@ -53,7 +53,8 @@ Critical-path emphasis:
 - `R1 -> R2 -> R3 -> R4 -> S1/S2 -> S3 -> S4 -> S5 -> P1 -> P2/P3 + I2/I3/I4 -> I5 -> L2 -> L3 -> L4`
 
 Biggest risks:
-- AG-UI stream cadence may be too weak for CloudFront and `nginx`
+- AG-UI stream cadence may be too weak for CloudFront and the direct backend
+  origin behavior
 - current DB pooling may prevent Aurora pause-to-zero
 - seed/bootstrap may be heavier than expected
 - generated artifacts may not all already fit the stable attachment contract
@@ -117,7 +118,7 @@ Core thesis:
 
 Main recommendations:
 - run early validation spikes for:
-  - AG-UI streaming through `CloudFront -> nginx -> backend`
+  - AG-UI streaming through `CloudFront -> backend`
   - Aurora Serverless v2 pause-to-zero and cold wake with the real app pattern
 - rehearse deploy-time commands manually before relying on CI/CD
 - add explicit health/readiness and deterministic migration/bootstrap entrypoints

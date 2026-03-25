@@ -2,10 +2,9 @@
 set -euxo pipefail
 
 dnf update -y
-dnf install -y docker docker-compose-plugin nginx
+dnf install -y docker docker-compose-plugin
 
 systemctl enable --now docker
-systemctl enable --now nginx
 systemctl enable --now amazon-ssm-agent || true
 
 mkdir -p /opt/ikea-agent ${artifact_root_dir}
