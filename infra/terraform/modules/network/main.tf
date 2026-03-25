@@ -203,8 +203,11 @@ resource "aws_security_group" "backend_service" {
 }
 
 resource "aws_security_group" "database" {
-  name        = "${var.name_prefix}-database"
-  description = "Private PostgreSQL access from backend ECS tasks only."
+  name = "${var.name_prefix}-database"
+  # Keep the legacy description stable so Terraform can update the ingress rule
+  # in place during the EC2 -> ECS runtime migration instead of replacing the SG
+  # that Aurora is already attached to.
+  description = "Private PostgreSQL access from the single app host only."
   vpc_id      = aws_vpc.main.id
 
   ingress {

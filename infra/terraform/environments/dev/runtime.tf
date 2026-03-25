@@ -2,6 +2,7 @@ module "runtime" {
   source = "../../modules/runtime"
 
   name_prefix                       = local.name_prefix
+  vpc_id                            = module.network.vpc_id
   public_subnet_ids                 = module.network.public_subnet_ids
   alb_security_group_id             = module.network.alb_security_group_id
   ui_service_security_group_id      = module.network.ui_service_security_group_id
