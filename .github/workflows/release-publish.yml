@@ -98,28 +98,28 @@ jobs:
             exit 1
           fi
 
-      - name: Require bootstrap metadata configuration
-        env:
-          IKEA_IMAGE_CATALOG_RUN_ID: ${{ vars.IKEA_IMAGE_CATALOG_RUN_ID }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${IKEA_IMAGE_CATALOG_RUN_ID}" ]]; then
-            echo "Repository variable IKEA_IMAGE_CATALOG_RUN_ID must be set before release publication can pin bootstrap inputs."
-            exit 1
-          fi
-
-      - name: Resolve bootstrap inputs
+      - name: Resolve release seed contract
         id: bootstrap_inputs
         env:
           IKEA_IMAGE_CATALOG_RUN_ID: ${{ vars.IKEA_IMAGE_CATALOG_RUN_ID }}
         run: |
           set -euo pipefail
-          bootstrap_json="$(
-            python scripts/deploy/read_bootstrap_inputs.py \
-              --image-catalog-run-id "${IKEA_IMAGE_CATALOG_RUN_ID}"
+          if [[ -z "${IKEA_IMAGE_CATALOG_RUN_ID}" ]]; then
+            echo "Repository variable IKEA_IMAGE_CATALOG_RUN_ID must be set before release publication can pin the release seed contract."
+            exit 1
+          fi
+
+          postgres_seed_version="$(
+            python - <<'PY'
+from pathlib import Path
+
+from scripts.deploy.seed_fingerprint import calculate_postgres_seed_version
+
+print(calculate_postgres_seed_version(repo_root=Path.cwd()))
+PY
           )"
-          echo "postgres_seed_version=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"postgres_seed_version\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
-          echo "image_catalog_run_id=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"image_catalog_run_id\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
+          echo "postgres_seed_version=${postgres_seed_version}" >> "${GITHUB_OUTPUT}"
+          echo "image_catalog_run_id=${IKEA_IMAGE_CATALOG_RUN_ID}" >> "${GITHUB_OUTPUT}"
 
       - name: Configure AWS release credentials
         uses: aws-actions/configure-aws-credentials@v4
