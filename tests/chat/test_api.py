@@ -268,7 +268,7 @@ def test_health_ready_route_reports_not_ready_when_seed_state_is_missing(tmp_pat
     assert payload["checks"]["catalog_data"]["status"] == "failed"
 
 
-def test_create_app_does_not_mutate_schema_on_startup(tmp_path: Path) -> None:
+def test_create_app_bootstraps_sqlite_schema_on_startup(tmp_path: Path) -> None:
     engine = create_sqlite_engine(tmp_path / "startup.sqlite3")
     runtime = _PersistenceRuntime(
         sqlalchemy_engine=engine,
@@ -278,7 +278,7 @@ def test_create_app_does_not_mutate_schema_on_startup(tmp_path: Path) -> None:
     create_app(runtime=cast("ChatRuntime", runtime), mount_web_ui=False, mount_ag_ui=False)
 
     inspector = inspect(engine)
-    assert not inspector.has_table("threads", schema="app")
+    assert inspector.has_table("threads", schema="app")
 
 
 def test_create_app_skips_postgres_schema_autobootstrap(

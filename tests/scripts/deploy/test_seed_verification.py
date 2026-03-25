@@ -28,6 +28,7 @@ def test_bootstrap_catalog_main_prints_seed_summary_json(
             log_json=True,
             database_url="sqlite:///ignored.sqlite3",
             database_pool_mode="nullpool",
+            image_service_base_url="https://designagent.talperry.com/static/product-images",
             ikea_image_catalog_root_dir=str(tmp_path),
             ikea_image_catalog_run_id="run-1",
             runtime_environment="test",
@@ -100,12 +101,12 @@ def test_verify_seed_state_main_requires_seeded_catalog_data(
     assert exc_info.value.code == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "not_ready"
-    assert payload["seeded_catalog"]["status"] == "failed"
+    assert payload["checks"]["catalog_data"]["status"] == "failed"
 
     insert_ready_seed_data(engine)
     get_settings.cache_clear()
     verify_seed_state_main()
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["seeded_catalog"]["status"] == "ok"
+    assert payload["checks"]["catalog_data"]["status"] == "ok"
     get_settings.cache_clear()
