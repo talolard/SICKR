@@ -237,8 +237,8 @@ Important planning context from the human owner:
 
 - release manifest generation/consumption
 - image build/publish workflow
-- deploy workflow via SSM
-- rollback-by-previous-manifest
+- deploy workflow via ECS task-definition revisions and service rollout
+- rollback-by-redeploying a previous immutable release manifest
 - consume the chosen `release-please` plus PR-title-enforcement contract and
   finish publication/deploy automation on top of it
 
