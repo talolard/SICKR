@@ -329,9 +329,70 @@ jobs:
             --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
             --desired-count "${BACKEND_DESIRED_COUNT}" \
             >/dev/null
-          aws ecs wait services-stable \
-            --cluster "${ECS_CLUSTER_NAME}" \
-            --services "${ECS_BACKEND_SERVICE_NAME}"
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+
+          cluster = os.environ["ECS_CLUSTER_NAME"]
+          service_name = os.environ["ECS_BACKEND_SERVICE_NAME"]
+          expected_task_definition = os.environ["BACKEND_TASK_DEFINITION_ARN"]
+          deadline = time.monotonic() + 900
+          last_payload: dict[str, object] | None = None
+
+          while time.monotonic() < deadline:
+              payload = json.loads(
+                  subprocess.check_output(
+                      [
+                          "aws",
+                          "ecs",
+                          "describe-services",
+                          "--cluster",
+                          cluster,
+                          "--services",
+                          service_name,
+                      ],
+                      text=True,
+                  )
+              )
+              service = payload["services"][0]
+              last_payload = service
+              deployments = service.get("deployments", [])
+              primary = next(
+                  (deployment for deployment in deployments if deployment.get("status") == "PRIMARY"),
+                  None,
+              )
+              service_running = int(service.get("runningCount", 0))
+              service_desired = int(service.get("desiredCount", 0))
+              if (
+                  primary
+                  and primary.get("taskDefinition") == expected_task_definition
+                  and int(primary.get("runningCount", 0)) >= int(primary.get("desiredCount", 0))
+                  and int(primary.get("pendingCount", 0)) == 0
+                  and service_running >= service_desired
+              ):
+                  print(
+                      json.dumps(
+                          {
+                              "detail": "Primary backend deployment is serving the desired task count.",
+                              "deployment_count": len(deployments),
+                              "primary_running": primary.get("runningCount", 0),
+                              "primary_desired": primary.get("desiredCount", 0),
+                              "service_running": service_running,
+                              "service_desired": service_desired,
+                              "task_definition": expected_task_definition,
+                          },
+                          sort_keys=True,
+                      )
+                  )
+                  sys.exit(0)
+              time.sleep(15)
+
+          print(json.dumps(last_payload, indent=2, sort_keys=True))
+          raise SystemExit("Backend ECS service did not make the new primary task healthy in time.")
+          PY
 
       - name: Update UI ECS service
         env:
