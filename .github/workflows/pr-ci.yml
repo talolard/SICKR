@@ -22,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Python + uv cache
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
           enable-cache: true
@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload backend coverage artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: |
@@ -70,7 +70,7 @@ jobs:
 
       - name: Publish backend test report
         if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: Backend Pytest
           path: artifacts/pytest-junit.xml
@@ -91,10 +91,10 @@ jobs:
         working-directory: ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.6.3
           run_install: false
@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload frontend coverage artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage
           path: |
@@ -203,7 +203,7 @@ jobs:
 
       - name: Publish frontend unit test report
         if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: Frontend Vitest
           path: artifacts/vitest-junit.xml
@@ -231,18 +231,18 @@ jobs:
       total_regressed: ${{ steps.export_report.outputs.total_regressed }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download backend coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-coverage
           path: artifacts/backend
 
       - name: Download frontend coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-coverage
           path: artifacts/frontend
@@ -259,7 +259,7 @@ jobs:
       - name: Find default-branch coverage baseline
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == github.event.repository.default_branch }}
         id: find_baseline
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const workflowId = 'pr-ci.yml';
@@ -295,7 +295,7 @@ jobs:
 
       - name: Download default-branch coverage baseline
         if: ${{ steps.find_baseline.outputs.found == 'true' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-baseline
           path: artifacts/baseline
@@ -355,7 +355,7 @@ jobs:
 
       - name: Upload coverage report artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage-report
@@ -363,7 +363,7 @@ jobs:
 
       - name: Upload default-branch coverage baseline
         if: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-baseline
           path: coverage-report/report.json
@@ -378,10 +378,10 @@ jobs:
         working-directory: ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.6.3
           run_install: false
@@ -397,7 +397,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('ui/pnpm-lock.yaml') }}
@@ -420,7 +420,7 @@ jobs:
 
       - name: Publish Playwright test report
         if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@v2
+        uses: dorny/test-reporter@v3
         with:
           name: E2E Playwright Mock
           path: artifacts/playwright-junit.xml
@@ -429,7 +429,7 @@ jobs:
 
       - name: Upload Playwright report artifact
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: ui/playwright-report

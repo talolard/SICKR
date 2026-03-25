@@ -47,12 +47,12 @@ jobs:
           fi
 
       - name: Checkout release commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ steps.release_ref.outputs.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -111,7 +111,7 @@ jobs:
           echo "image_catalog_run_id=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"image_catalog_run_id\"])' "${bootstrap_json}")" >> "${GITHUB_OUTPUT}"
 
       - name: Configure AWS release credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_RELEASE_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -121,7 +121,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push backend image
         id: backend_image
@@ -171,7 +171,7 @@ jobs:
             --output release-manifest.json
 
       - name: Upload release manifest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-manifest-${{ steps.version.outputs.tag }}
           path: release-manifest.json
@@ -198,7 +198,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout release commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.publish.outputs.release_git_sha }}
 
@@ -218,13 +218,13 @@ jobs:
           done
 
       - name: Download release manifest artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.publish.outputs.release_manifest_artifact_name }}
           path: release-assets
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -249,7 +249,7 @@ jobs:
           PY
 
       - name: Configure AWS deploy credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
