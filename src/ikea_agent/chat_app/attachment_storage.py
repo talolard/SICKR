@@ -125,7 +125,7 @@ def build_attachment_object_key(descriptor: StorageObjectDescriptor) -> PurePosi
 
     suffix = Path(descriptor.file_name).suffix
     filename = f"{descriptor.attachment_id}{suffix}"
-    thread_segment = descriptor.thread_id or "anonymous-thread"
+    thread_segment = descriptor.thread_id
     if descriptor.kind == "user_upload":
         return PurePosixPath("attachments") / "user-upload" / thread_segment / filename
     if descriptor.kind in {"floor_plan_png", "floor_plan_svg"}:

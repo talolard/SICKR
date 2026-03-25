@@ -47,6 +47,7 @@ def _store_attachment(
         content=_make_image_bytes(),
         mime_type="image/png",
         filename=filename,
+        thread_id="thread-room-detail",
     )
     return AttachmentRefPayload.from_ref(stored.ref)
 

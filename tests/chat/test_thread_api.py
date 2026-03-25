@@ -195,6 +195,7 @@ def test_thread_query_repository_returns_surviving_thread_scoped_records(tmp_pat
 
     assert len(assets) == 1
     assert assets[0].asset_id == "asset-api"
+    assert assets[0].uri == "/attachments/asset-api"
     assert assets[0].created_by_tool == "upload"
     assert assets[0].display_label == "Floor plan revision 1 (PNG preview)"
 

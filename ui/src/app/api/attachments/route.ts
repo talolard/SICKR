@@ -7,9 +7,16 @@ export const POST = async (request: NextRequest): Promise<Response> => {
   const body = await request.arrayBuffer();
   const contentType = request.headers.get("content-type") ?? "application/octet-stream";
   const fileName = request.headers.get("x-filename");
-  const threadId = request.headers.get("x-thread-id");
+  const threadId = request.headers.get("x-thread-id")?.trim() ?? "";
   const runId = request.headers.get("x-run-id");
   const useMockAgent = process.env.NEXT_PUBLIC_USE_MOCK_AGENT === "1";
+
+  if (!threadId) {
+    return new NextResponse(
+      "Attachments require a thread id before upload so private artifacts stay thread-scoped.",
+      { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } },
+    );
+  }
 
   if (useMockAgent) {
     await new Promise((resolve) => {
@@ -30,7 +37,7 @@ export const POST = async (request: NextRequest): Promise<Response> => {
     headers: {
       "content-type": contentType,
       ...(fileName ? { "x-filename": fileName } : {}),
-      ...(threadId ? { "x-thread-id": threadId } : {}),
+      "x-thread-id": threadId,
       ...(runId ? { "x-run-id": runId } : {}),
     },
     body,

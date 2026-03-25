@@ -158,7 +158,10 @@ def test_create_app_with_ag_ui_mount_exposes_ag_ui_route() -> None:
         )
     )
 
-    response = client.post("/ag-ui/agents/floor_plan_intake", json={"messages": []})
+    response = client.post(
+        "/ag-ui/agents/floor_plan_intake",
+        json={"threadId": "thread-1", "messages": []},
+    )
 
     assert response.status_code != 404
 
@@ -376,7 +379,11 @@ def test_attachment_upload_and_fetch_round_trip() -> None:
     upload_response = client.post(
         "/attachments",
         content=b"fake-image-bytes",
-        headers={"content-type": "image/png", "x-filename": "room.png"},
+        headers={
+            "content-type": "image/png",
+            "x-filename": "room.png",
+            "x-thread-id": "thread-1",
+        },
     )
 
     assert upload_response.status_code == 200
@@ -401,6 +408,19 @@ def test_attachment_upload_rejects_unsupported_type() -> None:
     )
 
     assert upload_response.status_code == 415
+
+
+def test_attachment_upload_rejects_missing_thread_id() -> None:
+    client = TestClient(create_app(runtime=cast("ChatRuntime", object()), mount_web_ui=False))
+
+    upload_response = client.post(
+        "/attachments",
+        content=b"fake-image-bytes",
+        headers={"content-type": "image/png", "x-filename": "room.png"},
+    )
+
+    assert upload_response.status_code == 400
+    assert "x-thread-id" in upload_response.text
 
 
 def _persistence_runtime(tmp_path: Path) -> _PersistenceRuntime:

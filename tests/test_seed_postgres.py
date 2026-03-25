@@ -18,7 +18,7 @@ def test_resolve_seed_public_url_prefers_same_host_deployment_path() -> None:
     )
 
 
-def test_resolve_seed_public_url_falls_back_to_canonical_url_without_base_url() -> None:
+def test_resolve_seed_public_url_requires_same_host_base_url() -> None:
     public_url = _resolve_seed_public_url(
         canonical_image_url="https://cdn.ikea.test/10018194-primary.jpg",
         crawl_run_id="catalog-run-3",
@@ -27,4 +27,4 @@ def test_resolve_seed_public_url_falls_back_to_canonical_url_without_base_url() 
         product_image_base_url=None,
     )
 
-    assert public_url == "https://cdn.ikea.test/10018194-primary.jpg"
+    assert public_url is None

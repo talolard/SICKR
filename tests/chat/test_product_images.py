@@ -54,8 +54,11 @@ def test_build_catalog_image_url_can_pass_through_public_urls() -> None:
     )
 
 
-def test_build_catalog_image_url_can_derive_seeded_public_url() -> None:
-    assert (
+def test_build_catalog_image_url_requires_seeded_public_url_in_direct_mode() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"requires seeded catalog\.product_images\.public_url",
+    ):
         build_catalog_image_url(
             product_id="348326",
             ordinal=1,
@@ -65,8 +68,17 @@ def test_build_catalog_image_url_can_derive_seeded_public_url() -> None:
             image_asset_key="348326-primary.jpg",
             crawl_run_id="catalog-run-1",
         )
-        == "https://designagent.talperry.com/static/product-images/catalog-run-1/348326-primary.jpg"
-    )
+
+
+def test_build_catalog_image_url_requires_same_host_seeded_url_in_direct_mode() -> None:
+    with pytest.raises(ValueError, match="requires seeded same-host product image URLs"):
+        build_catalog_image_url(
+            product_id="348326",
+            ordinal=1,
+            public_url="https://cdn.ikea.test/348326-primary.jpg",
+            serving_strategy="direct_public_url",
+            base_url="https://designagent.talperry.com/static/product-images",
+        )
 
 
 def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:

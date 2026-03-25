@@ -27,13 +27,13 @@ class AssetListItem(BaseModel):
     """One stored asset entry for thread inspection UIs."""
 
     asset_id: str
+    uri: str
     run_id: str | None
     created_by_tool: str | None
     kind: str
     display_label: str | None = None
     mime_type: str
     file_name: str | None
-    storage_path: str
     size_bytes: int
     created_at: str | None
 

@@ -97,6 +97,13 @@ def list_uploaded_images(ctx: RunContext[ImageAnalysisAgentDeps]) -> list[dict[s
     return [asdict(attachment) for attachment in ctx.deps.state.attachments]
 
 
+def _require_thread_id(thread_id: str | None) -> str:
+    if thread_id is None or not thread_id.strip():
+        msg = "Image-analysis persistence requires a non-empty thread id."
+        raise ValueError(msg)
+    return thread_id
+
+
 async def _detect_objects_in_image_with_services(
     ctx: RunContext[ImageAnalysisAgentDeps],
     request: ObjectDetectionRequest,
@@ -112,7 +119,7 @@ async def _detect_objects_in_image_with_services(
     if repository is not None:
         repository.record_analysis(
             tool_name="detect_objects_in_image",
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             input_asset_id=request.image.attachment_id,
             request_json=request.model_dump(mode="json"),
@@ -150,7 +157,7 @@ async def _estimate_depth_map_with_services(
     if repository is not None:
         repository.record_analysis(
             tool_name="estimate_depth_map",
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             input_asset_id=request.image.attachment_id,
             request_json=request.model_dump(mode="json"),
@@ -188,7 +195,7 @@ async def _segment_image_with_prompt_with_services(
     if repository is not None:
         analysis_id = repository.record_analysis(
             tool_name="segment_image_with_prompt",
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             input_asset_id=request.image.attachment_id,
             request_json=request.model_dump(mode="json"),
@@ -237,7 +244,7 @@ async def _analyze_room_photo_with_services(
         detections = result.object_detection.detections if result.object_detection else []
         repository.record_analysis(
             tool_name="analyze_room_photo",
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             input_asset_id=resolved_request.image.attachment_id,
             request_json=resolved_request.model_dump(mode="json"),
@@ -289,7 +296,7 @@ async def _get_room_detail_details_from_photo_with_services(
     if repository is not None:
         repository.record_analysis(
             tool_name="get_room_detail_details_from_photo",
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             input_asset_id=resolved_request.images[0].attachment_id,
             input_asset_ids=[image.attachment_id for image in resolved_request.images],

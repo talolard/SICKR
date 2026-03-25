@@ -28,10 +28,14 @@ class StoredAttachment:
     storage_locator: str
 
 
+class AttachmentContextError(ValueError):
+    """Raised when an attachment write is attempted without a durable thread context."""
+
+
 class AttachmentStore:
     """Attachment store keyed by stable ids with pluggable durable storage."""
 
-    _thread_id_var: ContextVar[str]
+    _thread_id_var: ContextVar[str | None]
     _run_id_var: ContextVar[str | None]
 
     def __init__(
@@ -50,14 +54,14 @@ class AttachmentStore:
             if storage_backend is None
             else storage_backend
         )
-        self._thread_id_var = ContextVar("attachment_store_thread_id", default="anonymous-thread")
+        self._thread_id_var = ContextVar("attachment_store_thread_id", default=None)
         self._run_id_var = ContextVar("attachment_store_run_id", default=None)
 
     @contextmanager
     def bind_context(self, *, thread_id: str, run_id: str | None) -> Generator[None]:
         """Bind thread/run context for async request-local artifact persistence."""
 
-        thread_token = self._thread_id_var.set(thread_id)
+        thread_token = self._thread_id_var.set(self._normalize_thread_id(thread_id))
         run_token = self._run_id_var.set(run_id)
         try:
             yield
@@ -115,7 +119,7 @@ class AttachmentStore:
             height=None,
             file_name=file_name,
         )
-        resolved_thread_id = thread_id or self._thread_id_var.get()
+        resolved_thread_id = self._resolve_thread_id(thread_id)
         resolved_run_id = run_id if run_id is not None else self._run_id_var.get()
         storage_object = self._storage_backend.save_attachment(
             descriptor=StorageObjectDescriptor(
@@ -189,6 +193,31 @@ class AttachmentStore:
             )
             return StoredAttachment(ref=ref, path=path, storage_locator=str(path))
         return None
+
+    def _resolve_thread_id(self, explicit_thread_id: str | None) -> str:
+        normalized_explicit = self._normalize_optional_thread_id(explicit_thread_id)
+        if normalized_explicit is not None:
+            return normalized_explicit
+        normalized_bound = self._normalize_optional_thread_id(self._thread_id_var.get())
+        if normalized_bound is not None:
+            return normalized_bound
+        msg = "Attachments require a real thread id; anonymous-thread fallback is not allowed."
+        raise AttachmentContextError(msg)
+
+    @staticmethod
+    def _normalize_optional_thread_id(thread_id: str | None) -> str | None:
+        if thread_id is None:
+            return None
+        normalized = thread_id.strip()
+        return normalized or None
+
+    @classmethod
+    def _normalize_thread_id(cls, thread_id: str) -> str:
+        normalized = cls._normalize_optional_thread_id(thread_id)
+        if normalized is None:
+            msg = "Attachments require a non-empty thread id."
+            raise AttachmentContextError(msg)
+        return normalized
 
     @staticmethod
     def _suffix_for_mime_type(mime_type: str) -> str:

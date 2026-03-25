@@ -22,7 +22,10 @@ def _png_bytes(width: int = 32, height: int = 24) -> bytes:
 
 def _attachment_payload(store: AttachmentStore) -> AttachmentRefPayload:
     stored = store.save_image_bytes(
-        content=_png_bytes(), mime_type="image/png", filename="room.png"
+        content=_png_bytes(),
+        mime_type="image/png",
+        filename="room.png",
+        thread_id="thread-image-analysis-core",
     )
     return AttachmentRefPayload.from_ref(stored.ref)
 

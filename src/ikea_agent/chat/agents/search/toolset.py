@@ -87,6 +87,13 @@ def _normalize_search_queries(queries: list[SearchQueryInput]) -> list[SearchQue
     ]
 
 
+def _require_thread_id(thread_id: str | None) -> str:
+    if thread_id is None or not thread_id.strip():
+        msg = "Search persistence requires a non-empty thread id."
+        raise ValueError(msg)
+    return thread_id
+
+
 async def _run_search_graph_with_services(
     ctx: RunContext[SearchAgentDeps],
     queries: list[SearchQueryInput],
@@ -111,7 +118,7 @@ async def _run_search_graph_with_services(
     if search_repo is not None:
         for query_input, query_output in zip(normalized_queries, output.queries, strict=True):
             search_repo.record_search_run(
-                thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+                thread_id=_require_thread_id(ctx.deps.state.thread_id),
                 run_id=ctx.deps.state.run_id,
                 query_text=query_input.semantic_query,
                 filters=query_input.filters,
@@ -352,7 +359,7 @@ def _propose_bundle_with_services(
     repository = services.get_search_repository(ctx.deps.runtime)
     if repository is not None:
         repository.record_bundle_proposal(
-            thread_id=ctx.deps.state.thread_id or "anonymous-thread",
+            thread_id=_require_thread_id(ctx.deps.state.thread_id),
             run_id=ctx.deps.state.run_id,
             proposal=result,
         )

@@ -33,7 +33,10 @@ def _make_image_bytes() -> bytes:
 
 def _store_attachment(store: AttachmentStore) -> AttachmentRefPayload:
     stored = store.save_image_bytes(
-        content=_make_image_bytes(), mime_type="image/png", filename="room.png"
+        content=_make_image_bytes(),
+        mime_type="image/png",
+        filename="room.png",
+        thread_id="thread-image-analysis-tool",
     )
     return AttachmentRefPayload.from_ref(stored.ref)
 
@@ -55,12 +58,13 @@ def test_detect_objects_in_image_wrapper(tmp_path: Path, monkeypatch: pytest.Mon
         _fake_call_model,
     )
 
-    result = asyncio.run(
-        detect_objects_in_image(
-            request=ObjectDetectionRequest(image=payload, include_overlay_image=True),
-            attachment_store=store,
+    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+        result = asyncio.run(
+            detect_objects_in_image(
+                request=ObjectDetectionRequest(image=payload, include_overlay_image=True),
+                attachment_store=store,
+            )
         )
-    )
 
     assert result.detections
     assert result.detections[0].label == "chair"
@@ -103,6 +107,7 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
             content=_make_image_bytes(),
             mime_type="image/png",
             filename=cast("str", kwargs["fallback_filename"]),
+            thread_id="thread-image-analysis-tool",
         )
         return AttachmentRefPayload.from_ref(stored.ref)
 
@@ -119,29 +124,31 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
         "ikea_agent.tools.image_analysis.core.FalImageAnalysisCore.call_model",
         _fake_call_depth,
     )
-    depth_result = asyncio.run(
-        estimate_depth_map(
-            request=DepthEstimationRequest(image=payload),
-            attachment_store=store,
+    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+        depth_result = asyncio.run(
+            estimate_depth_map(
+                request=DepthEstimationRequest(image=payload),
+                attachment_store=store,
+            )
         )
-    )
     assert depth_result.images
 
     monkeypatch.setattr(
         "ikea_agent.tools.image_analysis.core.FalImageAnalysisCore.call_model",
         _fake_call_segmentation,
     )
-    segmentation_result = asyncio.run(
-        segment_image_with_prompt(
-            request=SegmentationRequest(
-                image=payload,
-                queries=["clutter", "laundry"],
-                return_multiple_masks=True,
-                max_masks=32,
-            ),
-            attachment_store=store,
+    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+        segmentation_result = asyncio.run(
+            segment_image_with_prompt(
+                request=SegmentationRequest(
+                    image=payload,
+                    queries=["clutter", "laundry"],
+                    return_multiple_masks=True,
+                    max_masks=32,
+                ),
+                attachment_store=store,
+            )
         )
-    )
     assert segmentation_result.masks
     assert segmentation_result.overlay_image is not None
     assert segmentation_result.prompt == "clutter, laundry"
@@ -176,6 +183,7 @@ def test_analyze_room_photo_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPa
             content=_make_image_bytes(),
             mime_type="image/png",
             filename=cast("str", kwargs["fallback_filename"]),
+            thread_id="thread-image-analysis-tool",
         )
         return AttachmentRefPayload.from_ref(stored.ref)
 
@@ -192,12 +200,13 @@ def test_analyze_room_photo_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         _fake_download,
     )
 
-    result = asyncio.run(
-        analyze_room_photo(
-            request=RoomPhotoAnalysisRequest(image=payload),
-            attachment_store=store,
+    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+        result = asyncio.run(
+            analyze_room_photo(
+                request=RoomPhotoAnalysisRequest(image=payload),
+                attachment_store=store,
+            )
         )
-    )
 
     assert result.object_detection is not None
     assert result.depth is not None

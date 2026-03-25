@@ -345,6 +345,7 @@ def _resolve_seed_public_url(
     image_asset_key: str,
     product_image_base_url: str | None,
 ) -> str | None:
+    del canonical_image_url
     resolved_run_id = crawl_run_id or default_run_id
     if product_image_base_url and resolved_run_id:
         return build_seeded_public_image_url(
@@ -352,7 +353,7 @@ def _resolve_seed_public_url(
             run_id=resolved_run_id,
             image_asset_key=image_asset_key,
         )
-    return canonical_image_url
+    return None
 
 
 def _read_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:

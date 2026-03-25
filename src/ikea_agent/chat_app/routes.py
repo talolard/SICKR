@@ -18,7 +18,7 @@ from ikea_agent.chat_app.attachment_storage import (
     AttachmentStorageBackend,
     build_attachment_storage_backend,
 )
-from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.attachments import AttachmentContextError, AttachmentStore
 from ikea_agent.chat_app.thread_api_models import (
     RecentTraceReportItem,
     RecentTraceReportListResponse,
@@ -32,6 +32,36 @@ from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+
+def _validate_upload_mime_type(mime_type: str) -> None:
+    if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="Unsupported attachment type. Use png/jpeg/webp images.",
+        )
+
+
+def _require_attachment_thread_id(request: Request) -> str:
+    thread_id = request.headers.get("x-thread-id")
+    if thread_id is None or not thread_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Attachments require an x-thread-id header for durable thread scoping.",
+        )
+    return thread_id
+
+
+async def _read_upload_body(request: Request) -> bytes:
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="Attachment is empty.")
+    if len(body) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Attachment exceeds 10MB upload limit.",
+        )
+    return body
 
 
 def _build_attachment_store(
@@ -63,29 +93,21 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
         """Upload one image and return a typed attachment reference."""
 
         mime_type = request.headers.get("content-type", "")
-        if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
-            raise HTTPException(
-                status_code=415,
-                detail="Unsupported attachment type. Use png/jpeg/webp images.",
-            )
+        _validate_upload_mime_type(mime_type)
+        body = await _read_upload_body(request)
+        thread_id = _require_attachment_thread_id(request)
 
-        body = await request.body()
-        if not body:
-            raise HTTPException(status_code=400, detail="Attachment is empty.")
-        if len(body) > MAX_ATTACHMENT_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail="Attachment exceeds 10MB upload limit.",
+        try:
+            stored = attachment_store.save_image_bytes(
+                content=body,
+                mime_type=mime_type,
+                filename=request.headers.get("x-filename"),
+                thread_id=thread_id,
+                run_id=request.headers.get("x-run-id") or None,
+                kind="user_upload",
             )
-
-        stored = attachment_store.save_image_bytes(
-            content=body,
-            mime_type=mime_type,
-            filename=request.headers.get("x-filename"),
-            thread_id=request.headers.get("x-thread-id") or None,
-            run_id=request.headers.get("x-run-id") or None,
-            kind="user_upload",
-        )
+        except AttachmentContextError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return asdict(stored.ref)
 
     @app.get("/attachments/{attachment_id}")
