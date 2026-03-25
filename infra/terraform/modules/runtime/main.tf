@@ -303,6 +303,38 @@ resource "aws_lb_listener_rule" "ag_ui" {
   }
 }
 
+resource "aws_lb_listener_rule" "api_agents" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 90
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/agents*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "api_health" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 95
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/health*"]
+    }
+  }
+}
+
 resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.name_prefix}-backend"
   network_mode             = "awsvpc"

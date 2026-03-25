@@ -141,11 +141,16 @@ The UI task needs two different upstream contracts:
 
 - `PY_AG_UI_URL=http://<alb-dns>/ag-ui/` for AG-UI and CopilotKit agent traffic
 - `BACKEND_PROXY_BASE_URL=http://<alb-dns>:8000/` for Next server routes that
-  proxy backend-owned REST endpoints such as `/api/agents*`
+  still proxy backend-owned REST endpoints during local or internal runtime
+  flows
 
-That keeps the public browser contract stable while making the internal proxy
-hop explicit. The backend-only ALB listener is reachable from the UI ECS
-service security group, not from the public internet.
+In production, browser traffic for `/api/agents*` and `/api/health*` should
+route straight to the backend through ALB listener rules instead of depending
+on the UI task to reach the backend-only ALB listener.
+
+That keeps the public browser contract stable while making any residual
+internal proxy hop explicit. The backend-only ALB listener exists for
+ECS-internal helper traffic, not for browser-visible routes.
 
 ## One-Off Tasks
 

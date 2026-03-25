@@ -42,7 +42,8 @@ Required public-path ownership:
 | `/api/attachments` | ALB | Next.js UI proxy | upload entrypoint must stay same-origin |
 | `/attachments/*` | ALB | Next.js UI proxy | read/download entrypoint must stay same-origin |
 | `/api/thread-data/*` | ALB | Next.js UI proxy | thread data proxy |
-| `/api/agents*` | ALB | Next.js UI proxy | metadata proxy |
+| `/api/agents*` | ALB | FastAPI backend | direct backend-owned metadata and agent list endpoints |
+| `/api/health*` | ALB | FastAPI backend | direct backend health and readiness endpoints |
 | `/api/traces*` | ALB | Next.js UI proxy | keep disabled in public v1 unless explicitly enabled |
 | `/ag-ui/*` | ALB | FastAPI/AG-UI backend | direct SSE path after ALB path routing |
 | `/static/product-images/*` | S3 image origin | static asset path | defined separately |
@@ -50,8 +51,10 @@ Required public-path ownership:
 The rule is simple:
 
 - if the browser already talks to a Next.js route today, keep that public path
-  browser-stable and same-origin
-- only `/ag-ui/*` should land on the backend service
+  browser-stable and same-origin unless there is a clear simplification win in
+  routing a backend-owned API straight to the backend
+- `/ag-ui/*`, `/api/agents*`, and `/api/health*` should land on the backend
+  service
 
 ## CloudFront Behavior Split
 
@@ -107,6 +110,8 @@ The ALB is now the only application router behind CloudFront.
 Required ALB rules:
 
 - default listener action forwards to the UI target group
+- one listener rule forwards `/api/agents*` to the backend target group
+- one listener rule forwards `/api/health*` to the backend target group
 - one listener rule forwards `/ag-ui/*` to the backend target group
 - one backend-only listener on port `8000` forwards all paths to the backend
   target group for UI server-side proxy traffic
@@ -175,7 +180,8 @@ Recommended target-group checks:
 - UI target group -> `/api/health/live`
 - backend target group -> `/api/health/live`
 
-The public readiness surface remains `/api/health` through the UI proxy path.
+The public readiness surface is `/api/health` served directly by the backend
+through the ALB rule.
 
 ## Non-Goals
 

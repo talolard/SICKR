@@ -60,8 +60,8 @@ single-developer side project.
 The browser-visible contract remains:
 
 - `ui` owns `/`, `/_next/*`, `/api/copilotkit`, `/api/attachments`,
-  `/attachments/*`, `/api/thread-data/*`, `/api/agents*`, and `/api/traces*`
-- `backend` owns `/ag-ui/*`
+  `/attachments/*`, `/api/thread-data/*`, and `/api/traces*`
+- `backend` owns `/ag-ui/*`, `/api/agents*`, and `/api/health*`
 - product images live at `/static/product-images/*`
 
 The routing layers should enforce that split like this:

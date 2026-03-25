@@ -48,8 +48,9 @@ The current repo already has an important split:
 The important public-route reality is:
 
 - `ui` owns `/`, `/_next/*`, `/api/copilotkit`, `/api/attachments`,
-  `/attachments/*`, `/api/thread-data/*`, `/api/agents*`, and `/api/traces*`
-- `backend` owns `/ag-ui/*` directly
+  `/attachments/*`, `/api/thread-data/*`, and `/api/traces*`
+- `backend` owns `/ag-ui/*`, `/api/agents*`, and `/api/health*` directly at the
+  public edge
 - product images can be served either by backend proxy routes or by direct public
   URLs, depending on configuration
 

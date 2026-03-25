@@ -14,7 +14,8 @@ This project now deploys the application runtime as:
 
 - one `backend` ECS Fargate task definition and service
 - one `ui` ECS Fargate task definition and service
-- one ALB that routes `/ag-ui/*` to `backend` and everything else to `ui`
+- one ALB that routes `/ag-ui/*`, `/api/agents*`, and `/api/health*` to
+  `backend`, and everything else to `ui`
 - one CloudFront distribution in front of that ALB and the product-image bucket
 
 This contract keeps one important distinction explicit:
@@ -110,7 +111,7 @@ The UI ECS task definition should remain secret-free and should carry:
 | `APP_ENV` | `dev` | release/environment tag for server-side UI logs |
 | `APP_RELEASE_VERSION` | release version, patched by CI | release tag for server-side UI logs |
 | `PY_AG_UI_URL` | `http://<alb-dns>/ag-ui/` | CopilotKit and AG-UI client traffic target the public AG-UI listener path |
-| `BACKEND_PROXY_BASE_URL` | `http://<alb-dns>:8000/` | Next server route proxies call backend-owned REST endpoints through a backend-only ALB listener |
+| `BACKEND_PROXY_BASE_URL` | `http://<alb-dns>:8000/` | optional internal-only upstream for residual Next server route proxies; public `/api/agents*` and `/api/health*` should route straight to backend through ALB rules |
 | `NEXT_PUBLIC_USE_MOCK_AGENT` | `0` | deployed UI must use the real backend |
 | `NEXT_PUBLIC_TRACE_CAPTURE_ENABLED` | `0` | keep trace capture off unless explicitly enabled later |
 
