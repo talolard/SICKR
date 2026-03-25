@@ -80,7 +80,8 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
     assert row.mime_type == "image/png"
     assert row.file_name == "room.png"
     assert row.size_bytes == len(b"png-bytes")
-    assert Path(row.storage_path).exists()
+    assert row.storage_path.startswith("local://attachments/user-upload/thread-asset/")
+    assert stored.path.exists()
 
 
 def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> None:

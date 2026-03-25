@@ -48,7 +48,12 @@ def test_build_chat_runtime_uses_prepared_dependencies(
         "resolve_database_url",
         lambda *, database_url: database_url,
     )
-    monkeypatch.setattr(runtime_module, "create_database_engine", lambda _url: engine)
+
+    def _create_database_engine(_url: str, *, pool_mode: str = "queuepool") -> object:
+        assert pool_mode == settings.database_pool_mode
+        return engine
+
+    monkeypatch.setattr(runtime_module, "create_database_engine", _create_database_engine)
     monkeypatch.setattr(runtime_module, "create_session_factory", lambda _engine: session_factory)
     monkeypatch.setattr(
         runtime_module,

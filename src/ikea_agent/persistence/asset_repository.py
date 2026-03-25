@@ -35,6 +35,25 @@ class AssetSnapshot:
     created_at: str
 
 
+@dataclass(frozen=True, slots=True)
+class PersistedAsset:
+    """Durable asset metadata needed to resolve one attachment id."""
+
+    asset_id: str
+    room_id: str
+    thread_id: str
+    run_id: str | None
+    created_by_tool: str | None
+    kind: str
+    mime_type: str
+    file_name: str | None
+    storage_path: str
+    sha256: str
+    size_bytes: int
+    width: int | None
+    height: int | None
+
+
 class AssetRepository:
     """Repository that links filesystem artifacts to durable DB metadata."""
 
@@ -173,6 +192,51 @@ class AssetRepository:
             for snapshot in (_asset_snapshot_from_row(row) for row in rows)
         }
         return [snapshots_by_id[asset_id] for asset_id in asset_ids if asset_id in snapshots_by_id]
+
+    def get_asset(self, *, asset_id: str) -> PersistedAsset | None:
+        """Return one persisted asset row for attachment-resolution flows."""
+
+        with self._session_factory() as session:
+            row = (
+                session.execute(
+                    select(
+                        AssetRecord.asset_id,
+                        AssetRecord.room_id,
+                        AssetRecord.thread_id,
+                        AssetRecord.run_id,
+                        AssetRecord.created_by_tool,
+                        AssetRecord.kind,
+                        AssetRecord.mime_type,
+                        AssetRecord.file_name,
+                        AssetRecord.storage_path,
+                        AssetRecord.sha256,
+                        AssetRecord.size_bytes,
+                        AssetRecord.width,
+                        AssetRecord.height,
+                    ).where(AssetRecord.asset_id == asset_id)
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None:
+            return None
+        return PersistedAsset(
+            asset_id=str(row["asset_id"]),
+            room_id=str(row["room_id"]),
+            thread_id=str(row["thread_id"]),
+            run_id=str(row["run_id"]) if row["run_id"] is not None else None,
+            created_by_tool=(
+                str(row["created_by_tool"]) if row["created_by_tool"] is not None else None
+            ),
+            kind=str(row["kind"]),
+            mime_type=str(row["mime_type"]),
+            file_name=str(row["file_name"]) if row["file_name"] is not None else None,
+            storage_path=str(row["storage_path"]),
+            sha256=str(row["sha256"]),
+            size_bytes=int(row["size_bytes"]),
+            width=int(row["width"]) if row["width"] is not None else None,
+            height=int(row["height"]) if row["height"] is not None else None,
+        )
 
 
 def _asset_snapshot_from_row(row: RowMapping) -> AssetSnapshot:

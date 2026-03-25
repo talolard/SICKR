@@ -9,6 +9,7 @@ endif
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
+	deploy-migrate deploy-bootstrap deploy-verify-seed \
 	dev human dev-human dev-all dev-all-mock reset agent-start agent-start-docs merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
@@ -21,6 +22,7 @@ PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
 DATABASE_URL ?= postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent
 ARTIFACT_ROOT_DIR ?= data/artifacts
 FEEDBACK_ROOT_DIR ?= comments
+TRACE_ROOT_DIR ?= traces
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
 COVERAGE_DIR ?= .tmp_untracked/coverage
@@ -34,7 +36,7 @@ COVERAGE_REPORT_JSON ?= $(COVERAGE_DIR)/report.json
 SMOKE_ASSISTANT_TEXT ?= Deterministic smoke response from the local test model.
 
 export AGENT_SLOT BACKEND_PORT HOST PORT UI_PORT PY_AG_UI_URL
-export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
 
 deps:
 	$(UV) sync --all-groups
@@ -92,6 +94,15 @@ guard-full-bootstrap:
 		echo "Upgrade it first with: bash scripts/worktree/bootstrap.sh --mode full --slot <0-99>"; \
 		exit 1; \
 	fi
+
+deploy-migrate:
+	$(UV_RUN) python -m scripts.deploy.apply_migrations
+
+deploy-bootstrap:
+	$(UV_RUN) python -m scripts.deploy.bootstrap_catalog
+
+deploy-verify-seed:
+	$(UV_RUN) python -m scripts.deploy.verify_seed_state
 
 chat: guard-full-bootstrap
 	$(UV_RUN) uvicorn ikea_agent.chat_app.main:create_app --factory --host $(HOST) --port $(PORT) --reload

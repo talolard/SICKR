@@ -211,7 +211,6 @@ class ThreadQueryRepository:
                     AssetRecord.kind,
                     AssetRecord.mime_type,
                     AssetRecord.file_name,
-                    AssetRecord.storage_path,
                     AssetRecord.size_bytes,
                     cast(AssetRecord.created_at, String),
                 )
@@ -221,6 +220,7 @@ class ThreadQueryRepository:
         return [
             AssetListItem(
                 asset_id=str(item.asset_id),
+                uri=f"/attachments/{item.asset_id}",
                 run_id=str(item.run_id) if item.run_id is not None else None,
                 created_by_tool=(
                     str(item.created_by_tool) if item.created_by_tool is not None else None
@@ -229,7 +229,6 @@ class ThreadQueryRepository:
                 display_label=floor_plan_labels.get(str(item.asset_id)),
                 mime_type=str(item.mime_type),
                 file_name=str(item.file_name) if item.file_name is not None else None,
-                storage_path=str(item.storage_path),
                 size_bytes=int(item.size_bytes),
                 created_at=str(item.created_at) if item.created_at is not None else None,
             )

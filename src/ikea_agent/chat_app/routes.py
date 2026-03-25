@@ -14,7 +14,8 @@ from ikea_agent.chat.agents.index import (
     describe_agent,
     list_agent_catalog,
 )
-from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.attachment_storage import build_attachment_storage_backend
+from ikea_agent.chat_app.attachments import AttachmentContextError, AttachmentStore
 from ikea_agent.persistence.asset_repository import AssetRepository
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
@@ -25,8 +26,22 @@ def _build_attachment_store(
     *,
     root_dir: Path,
     asset_repository: AssetRepository | None,
+    storage_backend_kind: str,
+    s3_bucket: str | None,
+    s3_prefix: str | None,
+    s3_region: str | None,
 ) -> AttachmentStore:
-    return AttachmentStore(root_dir=root_dir, asset_repository=asset_repository)
+    return AttachmentStore(
+        root_dir=root_dir,
+        asset_repository=asset_repository,
+        storage_backend=build_attachment_storage_backend(
+            root_dir=root_dir,
+            backend_kind=storage_backend_kind,
+            s3_bucket=s3_bucket,
+            s3_prefix=s3_prefix,
+            s3_region=s3_region,
+        ),
+    )
 
 
 def _resolve_attachment_context(
@@ -80,7 +95,7 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
                 run_id=request.headers.get("x-run-id") or None,
                 kind="user_upload",
             )
-        except ValueError as exc:
+        except (AttachmentContextError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return asdict(stored.ref)
 

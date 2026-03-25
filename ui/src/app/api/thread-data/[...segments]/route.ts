@@ -1,13 +1,12 @@
 import { NextRequest } from "next/server";
 
+import { backendProxyLogFields, buildBackendProxyUrl } from "@/lib/backendProxy";
 import { mockBackendFallbacksEnabled } from "@/lib/mockBackendFallbacks";
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
 
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
-
-function buildUpstreamUrl(segments: string[], queryString: string): string {
+function buildUpstreamUrl(segments: string[], queryString: string): URL {
   const joined = segments.join("/");
-  const upstream = new URL(`../api/${joined}${queryString}`, agUiUrl);
-  return upstream.toString();
+  return buildBackendProxyUrl(`/api/${joined}`, queryString);
 }
 
 async function proxyRequest(
@@ -33,6 +32,13 @@ async function proxyRequest(
       },
     });
   } catch (error) {
+    logServerRouteEvent("error", "ui_thread_data_proxy_failed", {
+      detail: error instanceof Error ? error.message : "Unknown backend thread-data failure.",
+      route: "/api/thread-data/[...segments]",
+      segments: params.segments,
+      upstream_url: upstreamUrl.toString(),
+      ...backendProxyLogFields(),
+    });
     if (!mockBackendFallbacksEnabled()) {
       throw error;
     }

@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 
+import { backendProxyLogFields, buildBackendProxyUrl } from "@/lib/backendProxy";
 import { listMockAgentItems, mockBackendFallbacksEnabled } from "@/lib/mockBackendFallbacks";
+import { logServerRouteEvent } from "@/lib/serverRouteLogging";
 
 type AgentItem = {
   name: string;
@@ -13,20 +15,14 @@ type AgentListResponse = {
   agents: AgentItem[];
 };
 
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
-
-function buildUpstreamUrl(request: NextRequest): string {
-  const baseUrl = new URL("../", agUiUrl);
-  const upstream = new URL("api/agents", baseUrl);
-  if (request.nextUrl.search) {
-    upstream.search = request.nextUrl.search;
-  }
-  return upstream.toString();
+function buildUpstreamUrl(request: NextRequest): URL {
+  return buildBackendProxyUrl("/api/agents", request.nextUrl.search);
 }
 
 export async function GET(request: NextRequest): Promise<Response> {
+  const upstreamUrl = buildUpstreamUrl(request).toString();
   try {
-    const upstreamResponse = await fetch(buildUpstreamUrl(request), {
+    const upstreamResponse = await fetch(upstreamUrl, {
       method: "GET",
       headers: { accept: "application/json" },
     });
@@ -41,6 +37,12 @@ export async function GET(request: NextRequest): Promise<Response> {
       headers: { "content-type": "application/json" },
     });
   } catch (error) {
+    logServerRouteEvent("error", "ui_agents_proxy_failed", {
+      detail: error instanceof Error ? error.message : "Unknown backend agents failure.",
+      route: "/api/agents",
+      upstream_url: upstreamUrl,
+      ...backendProxyLogFields(),
+    });
     if (!mockBackendFallbacksEnabled()) {
       throw error;
     }

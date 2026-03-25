@@ -1,0 +1,30 @@
+aws_account_id = "046673074482"
+environment    = "dev"
+region         = "eu-central-1"
+
+hosted_zone_name  = "talperry.com"
+public_hostname   = "designagent.talperry.com"
+github_repository = "talolard/SICKR"
+release_branch    = "release"
+
+vpc_cidr              = "10.42.0.0/16"
+public_subnet_cidrs   = ["10.42.0.0/24", "10.42.1.0/24"]
+database_subnet_cidrs = ["10.42.10.0/24", "10.42.11.0/24"]
+
+ui_container_port      = 3000
+backend_container_port = 8000
+ui_task_cpu            = 256
+ui_task_memory         = 512
+backend_task_cpu       = 512
+backend_task_memory    = 1024
+
+database_name                    = "ikea_agent"
+database_master_username         = "ikea_agent_admin"
+database_engine_version          = "17.7"
+database_min_capacity            = 0
+database_max_capacity            = 2
+database_seconds_until_auto_pause = 900
+
+cloudfront_price_class                      = "PriceClass_100"
+cloudfront_app_origin_read_timeout_seconds = 120
+cloudfront_origin_keepalive_timeout_seconds = 60

@@ -61,3 +61,8 @@ tal_maria_ikea-gim/
 # Beads state is versioned on the orphan `beads` sync branch only.
 .beads/issues.jsonl
 .beads/interactions.jsonl
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json

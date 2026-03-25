@@ -28,7 +28,9 @@ def configure_logfire(settings: AppSettings) -> None:
 
     with _CONFIG_LOCK:
         if not _LOGFIRE_CONFIGURED:
-            _warn_if_logfire_export_disabled(settings)
+            export_enabled = _logfire_export_enabled(settings)
+            if not export_enabled:
+                _warn_if_logfire_export_disabled(settings)
             send_mode: Literal["if-token-present"] | bool
             if settings.logfire_send_mode == "if-token-present":
                 send_mode = "if-token-present"
@@ -39,7 +41,17 @@ def configure_logfire(settings: AppSettings) -> None:
                 send_to_logfire=send_mode,
                 service_name=settings.logfire_service_name,
                 service_version=settings.logfire_service_version,
-                environment=settings.logfire_environment or settings.app_env,
+                environment=settings.runtime_environment,
+            )
+            logger.info(
+                "logfire_configured",
+                extra={
+                    "environment": settings.runtime_environment,
+                    "export_enabled": export_enabled,
+                    "logfire_send_mode": settings.logfire_send_mode,
+                    "release_version": settings.release_version,
+                    "service_name": settings.logfire_service_name,
+                },
             )
             _LOGFIRE_CONFIGURED = True
         if not _PYDANTIC_AI_INSTRUMENTED:
@@ -53,15 +65,16 @@ def instrument_fastapi_app(app: FastAPI) -> None:
     logfire.instrument_fastapi(app)
 
 
-def _warn_if_logfire_export_disabled(settings: AppSettings) -> None:
-    has_token = bool(
+def _logfire_export_enabled(settings: AppSettings) -> bool:
+    return bool(
         settings.logfire_token
         or os.getenv("LOGFIRE_TOKEN")
         or os.getenv("APP_LOGFIRE_TOKEN")
         or _logfire_credentials_file().exists()
     )
-    if has_token:
-        return
+
+
+def _warn_if_logfire_export_disabled(settings: AppSettings) -> None:
     logger.warning(
         "logfire_export_disabled_no_token",
         extra={

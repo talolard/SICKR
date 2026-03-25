@@ -10,7 +10,11 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from psycopg import sql
+from scripts.deploy.alembic_config import set_sqlalchemy_url
+from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+
+from ikea_agent.persistence.models import ensure_persistence_schema
 
 
 def _postgres_test_urls() -> tuple[str, str, str] | None:
@@ -65,7 +69,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
         pytest.skip(f"Postgres is not reachable for migration validation: {exc}")
 
     cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", target_url)
+    set_sqlalchemy_url(cfg, target_url)
     cfg.set_main_option("script_location", "migrations")
 
     try:
@@ -101,6 +105,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             ("app", "project_facts"),
             ("app", "search_runs"),
             ("app", "search_results"),
+            ("app", "revealed_preferences"),
             ("app", "room_3d_assets"),
             ("app", "room_3d_snapshots"),
             ("catalog", "products_canonical"),
@@ -109,6 +114,67 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             ("catalog", "product_images"),
             ("ops", "seed_state"),
         }.issubset(table_names)
+    finally:
+        with (
+            closing(psycopg.connect(admin_url, autocommit=True)) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = %s
+                  AND pid <> pg_backend_pid()
+                """,
+                (database_name,),
+            )
+            cursor.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(database_name))
+            )
+
+
+def test_alembic_upgrade_succeeds_when_revealed_preferences_already_exists() -> None:
+    urls = _postgres_test_urls()
+    if urls is None:
+        pytest.skip("Postgres DATABASE_URL is not configured for migration validation.")
+    admin_url, target_url, psycopg_target_url = urls
+    database_name = make_url(target_url).database
+    assert database_name is not None
+
+    try:
+        with (
+            closing(psycopg.connect(admin_url, autocommit=True)) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database_name)))
+    except psycopg.OperationalError as exc:
+        pytest.skip(f"Postgres is not reachable for migration validation: {exc}")
+
+    cfg = Config("alembic.ini")
+    set_sqlalchemy_url(cfg, target_url)
+    cfg.set_main_option("script_location", "migrations")
+
+    try:
+        command.upgrade(cfg, "20260319_0007")
+        engine = create_engine(target_url, future=True)
+        ensure_persistence_schema(engine)
+        engine.dispose()
+
+        command.upgrade(cfg, "head")
+
+        with (
+            closing(psycopg.connect(psycopg_target_url)) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'app'
+                  AND table_name = 'revealed_preferences'
+                """
+            )
+            assert cursor.fetchone() == (1,)
     finally:
         with (
             closing(psycopg.connect(admin_url, autocommit=True)) as connection,

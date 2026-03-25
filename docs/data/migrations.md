@@ -78,6 +78,13 @@ Revision `20260319_0007` adds:
   - `catalog.product_images(product_id, is_og_image, image_rank, image_asset_key)`
   - `catalog.product_images(canonical_product_key, is_og_image, image_rank, image_asset_key)`
 
+Revision `20260325_0008` adds:
+
+- `app.revealed_preferences`
+  - durable thread-scoped preference memory captured from conversation
+  - explicit Postgres migration coverage for the runtime table that AG-UI and
+    repository paths already use in SQLite-backed tests
+
 ## Current Room 3D Tables
 
 Revision `20260306_0003` adds:

@@ -1,0 +1,30 @@
+name: Main PR Title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate-pr-title:
+    name: Validate conventional PR title for main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          regex='^(feat|fix|perf|revert|deps|docs|test|refactor|build|ci|chore|style)\([A-Za-z0-9._/-]+\)!?: .+'
+          if [[ "${PR_TITLE}" =~ ${regex} ]]; then
+            exit 0
+          fi
+          echo "PR title must be a conventional-commit header with a scope, for example:"
+          echo "  feat(search): add retailer fallback"
+          echo "  fix(ui): preserve trace state on refresh"
+          echo "Got: ${PR_TITLE}"
+          exit 1

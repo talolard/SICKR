@@ -19,6 +19,7 @@ from ikea_agent.chat.agents.index import (
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
 from ikea_agent.chat_app.agui import _register_ag_ui_routes
 from ikea_agent.chat_app.attachments import AttachmentStore
+from ikea_agent.chat_app.health_routes import register_health_routes
 from ikea_agent.chat_app.product_image_routes import _register_product_image_routes
 from ikea_agent.chat_app.routes import (
     _build_attachment_store,
@@ -27,6 +28,7 @@ from ikea_agent.chat_app.routes import (
 )
 from ikea_agent.chat_app.thread_routes import _register_thread_data_routes
 from ikea_agent.config import get_settings
+from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.context_fact_repository import ContextFactRepository
@@ -88,6 +90,7 @@ def create_app(
     """Create FastAPI app and mount the pydantic-ai web chat UI."""
 
     settings = get_settings()
+    configure_logging(level_name=settings.log_level, json_logs=settings.log_json)
     configure_logfire(settings)
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
@@ -102,6 +105,10 @@ def create_app(
     attachment_store = _build_attachment_store(
         root_dir=Path(settings.artifact_root_dir),
         asset_repository=asset_repository,
+        storage_backend_kind=settings.artifact_storage_backend,
+        s3_bucket=settings.artifact_s3_bucket,
+        s3_prefix=settings.artifact_s3_prefix,
+        s3_region=settings.artifact_s3_region,
     )
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
@@ -117,6 +124,11 @@ def create_app(
         ThreadQueryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
         else None
+    )
+    register_health_routes(
+        app,
+        engine=getattr(chat_runtime, "sqlalchemy_engine", None),
+        settings=settings,
     )
     _register_attachment_routes(app, attachment_store)
     _register_agent_catalog_routes(app)

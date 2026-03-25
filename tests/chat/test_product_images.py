@@ -11,6 +11,7 @@ from ikea_agent.chat.product_images import (
     build_catalog_image_url,
     build_primary_image_url,
     build_ranked_image_url,
+    build_seeded_public_image_url,
 )
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import create_app
@@ -52,10 +53,45 @@ def test_build_catalog_image_url_can_pass_through_public_urls() -> None:
     )
 
 
+def test_build_catalog_image_url_requires_seeded_public_url_in_direct_mode() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"requires seeded catalog\.product_images\.public_url",
+    ):
+        build_catalog_image_url(
+            product_id="348326",
+            ordinal=1,
+            public_url=None,
+            serving_strategy="direct_public_url",
+            base_url="https://designagent.talperry.com/static/product-images",
+        )
+
+
+def test_build_catalog_image_url_requires_same_host_seeded_url_in_direct_mode() -> None:
+    with pytest.raises(ValueError, match="requires seeded same-host product image URLs"):
+        build_catalog_image_url(
+            product_id="348326",
+            ordinal=1,
+            public_url="https://cdn.ikea.test/348326-primary.jpg",
+            serving_strategy="direct_public_url",
+            base_url="https://designagent.talperry.com/static/product-images",
+        )
+
+
 def test_build_primary_and_ranked_image_urls_use_stable_routes() -> None:
     assert build_primary_image_url(product_id="90458891") == "/static/product-images/90458891"
     assert build_ranked_image_url(product_id="90458891", ordinal=3) == (
         "/static/product-images/90458891/3"
+    )
+
+
+def test_build_seeded_public_image_url_uses_masters_same_host_path() -> None:
+    assert (
+        build_seeded_public_image_url(
+            base_url="https://designagent.talperry.com/static/product-images",
+            image_asset_key="90458891-primary.jpg",
+        )
+        == "https://designagent.talperry.com/static/product-images/masters/90458891-primary.jpg"
     )
 
 

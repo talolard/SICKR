@@ -18,6 +18,7 @@ from ikea_agent.chat.agents.state import (
     SearchAgentState,
 )
 from ikea_agent.chat.runtime import ChatRuntime, build_chat_runtime
+from ikea_agent.chat_app.attachment_storage import build_attachment_storage_backend
 from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
@@ -100,7 +101,16 @@ async def _run_once(
     configure_logfire(settings)
 
     runtime = build_chat_runtime()
-    attachment_store = AttachmentStore(Path(settings.artifact_root_dir))
+    attachment_store = AttachmentStore(
+        Path(settings.artifact_root_dir),
+        storage_backend=build_attachment_storage_backend(
+            root_dir=Path(settings.artifact_root_dir),
+            backend_kind=settings.artifact_storage_backend,
+            s3_bucket=settings.artifact_s3_bucket,
+            s3_prefix=settings.artifact_s3_prefix,
+            s3_region=settings.artifact_s3_region,
+        ),
+    )
     deps = _build_deps(
         agent_name=agent_name,
         runtime=runtime,

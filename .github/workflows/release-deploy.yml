@@ -1,0 +1,369 @@
+name: Release Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to deploy, for example v0.1.2."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-central-1
+  PUBLIC_APP_BASE_URL: https://designagent.talperry.com
+
+jobs:
+  deploy:
+    name: Deploy tagged release to ECS
+    runs-on: ubuntu-latest
+    concurrency:
+      group: designagent-dev-release-operations
+      cancel-in-progress: false
+    steps:
+      - name: Checkout tagged release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.release_tag }}
+
+      - name: Require deploy configuration
+        env:
+          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+          for required_name in AWS_DEPLOY_ROLE_ARN ECS_CLUSTER_NAME ECS_BACKEND_SERVICE_NAME ECS_UI_SERVICE_NAME; do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Repository variable ${required_name} must be set before ECS deploy automation can run."
+              exit 1
+            fi
+          done
+
+      - name: Download immutable release manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh release download "${RELEASE_TAG}" \
+            --pattern release-manifest.json \
+            --dir release-assets
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          set -euo pipefail
+          manifest_path="release-assets/release-manifest.json"
+          python - <<'PY' "${manifest_path}" >> "${GITHUB_OUTPUT}"
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print(f"app_version={payload['app_version']}")
+          print(f"git_tag={payload['git_tag']}")
+          print(f"git_sha={payload['git_sha']}")
+          print(f"backend_image_ref={payload['backend_image']['digest_ref']}")
+          print(f"ui_image_ref={payload['ui_image']['digest_ref']}")
+          print(f"postgres_seed_version={payload['bootstrap']['postgres_seed_version']}")
+          print(f"image_catalog_run_id={payload['bootstrap']['image_catalog_run_id']}")
+          PY
+
+      - name: Configure AWS deploy credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Describe backend ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_BACKEND_SERVICE_NAME}" \
+            --query 'services[0]' \
+            > backend-service.json
+
+      - name: Describe UI ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_UI_SERVICE_NAME}" \
+            --query 'services[0]' \
+            > ui-service.json
+
+      - name: Export ECS network and task-definition metadata
+        id: ecs
+        run: |
+          set -euo pipefail
+          python - <<'PY' backend-service.json ui-service.json
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          backend_service = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          ui_service = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          target_group_arn = backend_service["loadBalancers"][0]["targetGroupArn"]
+          target_group_payload = json.loads(
+              subprocess.check_output(
+                  [
+                      "aws",
+                      "elbv2",
+                      "describe-target-groups",
+                      "--target-group-arns",
+                      target_group_arn,
+                  ],
+                  text=True,
+              )
+          )
+          load_balancer_arn = target_group_payload["TargetGroups"][0]["LoadBalancerArns"][0]
+          load_balancer_payload = json.loads(
+              subprocess.check_output(
+                  [
+                      "aws",
+                      "elbv2",
+                      "describe-load-balancers",
+                      "--load-balancer-arns",
+                      load_balancer_arn,
+                  ],
+                  text=True,
+              )
+          )
+          alb_dns_name = load_balancer_payload["LoadBalancers"][0]["DNSName"]
+
+          backend_network = {"awsvpcConfiguration": backend_service["networkConfiguration"]["awsvpcConfiguration"]}
+          Path("backend-network-configuration.json").write_text(
+              json.dumps(backend_network, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          output_lines = [
+              f"backend_task_definition={backend_service['taskDefinition']}",
+              f"ui_task_definition={ui_service['taskDefinition']}",
+              f"backend_desired_count={backend_service.get('desiredCount', 0)}",
+              f"ui_desired_count={ui_service.get('desiredCount', 0)}",
+              f"alb_dns_name={alb_dns_name}",
+          ]
+          Path.home().joinpath("ecs-output.txt").write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+          PY
+          cat "${HOME}/ecs-output.txt" >> "${GITHUB_OUTPUT}"
+
+      - name: Download current backend task definition
+        env:
+          BACKEND_TASK_DEFINITION: ${{ steps.ecs.outputs.backend_task_definition }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${BACKEND_TASK_DEFINITION}" \
+            --query 'taskDefinition' \
+            > backend-task-definition.json
+
+      - name: Download current UI task definition
+        env:
+          UI_TASK_DEFINITION: ${{ steps.ecs.outputs.ui_task_definition }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${UI_TASK_DEFINITION}" \
+            --query 'taskDefinition' \
+            > ui-task-definition.json
+
+      - name: Render backend task definition
+        run: |
+          set -euo pipefail
+          python scripts/deploy/render_ecs_task_definition.py \
+            --input backend-task-definition.json \
+            --output backend-task-definition.rendered.json \
+            --container backend \
+            --image "${{ steps.release.outputs.backend_image_ref }}" \
+            --set-env "LOGFIRE_SERVICE_VERSION=${{ steps.release.outputs.app_version }}"
+
+      - name: Render UI task definition
+        run: |
+          set -euo pipefail
+          python scripts/deploy/render_ecs_task_definition.py \
+            --input ui-task-definition.json \
+            --output ui-task-definition.rendered.json \
+            --container ui \
+            --image "${{ steps.release.outputs.ui_image_ref }}" \
+            --set-env "APP_RELEASE_VERSION=${{ steps.release.outputs.app_version }}" \
+            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}:8000/"
+
+      - name: Register backend task definition revision
+        id: backend_taskdef
+        run: |
+          set -euo pipefail
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file://backend-task-definition.rendered.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text
+          )"
+          echo "arn=${task_definition_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: Run backend migrations on Fargate
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          cat > migration-overrides.json <<'EOF'
+          {
+            "containerOverrides": [
+              {
+                "name": "backend",
+                "command": ["python", "scripts/deploy/apply_migrations.py"]
+              }
+            ]
+          }
+          EOF
+          task_arn="$(
+            aws ecs run-task \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --launch-type FARGATE \
+              --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+              --network-configuration file://backend-network-configuration.json \
+              --overrides file://migration-overrides.json \
+              --query 'tasks[0].taskArn' \
+              --output text
+          )"
+          if [[ -z "${task_arn}" || "${task_arn}" == "None" ]]; then
+            echo "Failed to start migration task."
+            exit 1
+          fi
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+          exit_code="$(
+            aws ecs describe-tasks \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
+              --output text
+          )"
+          if [[ "${exit_code}" != "0" ]]; then
+            aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+            echo "Migration task failed with exit code ${exit_code}."
+            exit 1
+          fi
+
+      - name: Verify seed state on Fargate
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+          POSTGRES_SEED_VERSION: ${{ steps.release.outputs.postgres_seed_version }}
+        run: |
+          set -euo pipefail
+          cat > seed-verification-overrides.json <<EOF
+          {
+            "containerOverrides": [
+              {
+                "name": "backend",
+                "command": [
+                  "python",
+                  "scripts/deploy/verify_seed_state.py",
+                  "--expected-postgres-seed-version",
+                  "${POSTGRES_SEED_VERSION}"
+                ]
+              }
+            ]
+          }
+          EOF
+          task_arn="$(
+            aws ecs run-task \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --launch-type FARGATE \
+              --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+              --network-configuration file://backend-network-configuration.json \
+              --overrides file://seed-verification-overrides.json \
+              --query 'tasks[0].taskArn' \
+              --output text
+          )"
+          if [[ -z "${task_arn}" || "${task_arn}" == "None" ]]; then
+            echo "Failed to start seed verification task."
+            exit 1
+          fi
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+          exit_code="$(
+            aws ecs describe-tasks \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --tasks "${task_arn}" \
+              --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' \
+              --output text
+          )"
+          if [[ "${exit_code}" != "0" ]]; then
+            aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${task_arn}"
+            echo "Seed verification task failed with exit code ${exit_code}."
+            exit 1
+          fi
+
+      - name: Update backend ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
+          BACKEND_TASK_DEFINITION_ARN: ${{ steps.backend_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_BACKEND_SERVICE_NAME}" \
+            --task-definition "${BACKEND_TASK_DEFINITION_ARN}" \
+            --desired-count 1 \
+            --force-new-deployment \
+            >/dev/null
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_BACKEND_SERVICE_NAME}"
+
+      - name: Register UI task definition revision
+        id: ui_taskdef
+        run: |
+          set -euo pipefail
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file://ui-task-definition.rendered.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text
+          )"
+          echo "arn=${task_definition_arn}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update UI ECS service
+        env:
+          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
+          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+          UI_TASK_DEFINITION_ARN: ${{ steps.ui_taskdef.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_UI_SERVICE_NAME}" \
+            --task-definition "${UI_TASK_DEFINITION_ARN}" \
+            --desired-count 1 \
+            --force-new-deployment \
+            >/dev/null
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_UI_SERVICE_NAME}"
+
+      - name: Verify public deploy routes
+        run: |
+          set -euo pipefail
+          python scripts/deploy/check_public_deploy_endpoints.py \
+            --base-url "${PUBLIC_APP_BASE_URL}"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy.pool import NullPool
 
 from ikea_agent.shared.sqlalchemy_db import (
     create_database_engine,
@@ -51,6 +52,15 @@ def test_create_database_engine_enables_pool_pre_ping_for_psycopg(
             "pool_pre_ping": True,
         },
     }
+
+
+def test_create_database_engine_uses_nullpool_when_requested() -> None:
+    engine = create_database_engine(
+        "postgresql+psycopg://user:pw@localhost/db",
+        pool_mode="nullpool",
+    )
+
+    assert isinstance(engine.pool, NullPool)
 
 
 def test_create_session_factory_binds_engine(tmp_path: Path) -> None:
