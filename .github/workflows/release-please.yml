@@ -23,3 +23,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           skip-github-release: true
+          # GitHub intermittently fails the post-create label mutation for new
+          # release PRs; keep PR generation working without autorelease labels.
+          skip-labeling: true
