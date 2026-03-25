@@ -65,7 +65,7 @@ def test_alembic_upgrade_succeeds_when_revealed_preferences_already_exists() -> 
     try:
         with temporary_postgres_database(environment, prefix="alembic_test") as database:
             cfg = database.alembic_config()
-            command.upgrade(cfg, "20260319_0007")
+            command.upgrade(cfg, "20260320_0013")
             engine = create_engine(database.sqlalchemy_url, future=True)
             ensure_persistence_schema(engine)
             engine.dispose()
