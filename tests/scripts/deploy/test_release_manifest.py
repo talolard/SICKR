@@ -38,6 +38,10 @@ def test_write_release_manifest_writes_expected_shape(
             "v1.4.2",
             "--git-sha",
             "abc1234def5678",
+            "--postgres-seed-version",
+            "a" * 64,
+            "--image-catalog-run-id",
+            "pilot-1000-20260318b",
             "--ui-repository",
             "046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/ui",
             "--ui-digest",
@@ -57,6 +61,8 @@ def test_write_release_manifest_writes_expected_shape(
     assert manifest["app_version"] == "1.4.2"
     assert manifest["git_tag"] == "v1.4.2"
     assert manifest["git_sha"] == "abc1234def5678"
+    assert manifest["bootstrap"]["postgres_seed_version"] == "a" * 64
+    assert manifest["bootstrap"]["image_catalog_run_id"] == "pilot-1000-20260318b"
     assert manifest["ui_image"]["version_tag"] == "v1.4.2"
     assert manifest["ui_image"]["commit_tag"] == "sha-abc1234def5678"
     assert manifest["ui_image"]["digest_ref"].endswith("@" + "sha256:" + "1" * 64)
@@ -77,6 +83,10 @@ def test_read_release_manifest_round_trips_written_shape(
             "v1.4.2",
             "--git-sha",
             "abc1234def5678",
+            "--postgres-seed-version",
+            "a" * 64,
+            "--image-catalog-run-id",
+            "pilot-1000-20260318b",
             "--ui-repository",
             "repo/ui",
             "--ui-digest",
@@ -95,6 +105,8 @@ def test_read_release_manifest_round_trips_written_shape(
     manifest = read_release_manifest(output_path)
     assert manifest.app_version == "1.4.2"
     assert manifest.git_tag == "v1.4.2"
+    assert manifest.bootstrap.postgres_seed_version == "a" * 64
+    assert manifest.bootstrap.image_catalog_run_id == "pilot-1000-20260318b"
     assert manifest.ui_image.digest_ref == f"repo/ui@{'sha256:' + '1' * 64}"
     assert manifest.backend_image.digest_ref == f"repo/backend@{'sha256:' + '2' * 64}"
 
@@ -113,6 +125,10 @@ def test_write_release_manifest_rejects_mismatched_tag(
             "v1.4.3",
             "--git-sha",
             "abc1234def5678",
+            "--postgres-seed-version",
+            "a" * 64,
+            "--image-catalog-run-id",
+            "pilot-1000-20260318b",
             "--ui-repository",
             "repo/ui",
             "--ui-digest",
@@ -135,10 +151,14 @@ def test_read_release_manifest_rejects_unknown_schema(tmp_path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "app_version": "1.0.0",
                 "git_tag": "v1.0.0",
                 "git_sha": "abc1234",
+                "bootstrap": {
+                    "postgres_seed_version": "a" * 64,
+                    "image_catalog_run_id": "pilot-1000-20260318b",
+                },
                 "ui_image": {"repository": "repo/ui", "digest": "sha256:" + "1" * 64},
                 "backend_image": {
                     "repository": "repo/backend",
@@ -149,5 +169,40 @@ def test_read_release_manifest_rejects_unknown_schema(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="schema_version 1"):
+    with pytest.raises(ValueError, match="schema_version 2"):
         read_release_manifest(path)
+
+
+def test_write_release_manifest_rejects_invalid_image_catalog_run_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output_path = tmp_path / "release-manifest.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "write_release_manifest.py",
+            "--app-version",
+            "1.4.2",
+            "--git-tag",
+            "v1.4.2",
+            "--git-sha",
+            "abc1234def5678",
+            "--postgres-seed-version",
+            "a" * 64,
+            "--image-catalog-run-id",
+            "../escape",
+            "--ui-repository",
+            "repo/ui",
+            "--ui-digest",
+            "sha256:" + "1" * 64,
+            "--backend-repository",
+            "repo/backend",
+            "--backend-digest",
+            "sha256:" + "2" * 64,
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="run id"):
+        write_release_manifest_main()

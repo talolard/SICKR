@@ -22,7 +22,6 @@ _DEFAULT_UI_HOST_PORT = 3000
 _DEFAULT_DEPLOY_STATE_DIR = "/var/lib/ikea-agent/deploy"
 _DEFAULT_HOST_ARTIFACT_ROOT_DIR = "/var/lib/ikea-agent/artifacts"
 _DEFAULT_HOST_BOOTSTRAP_ROOT_DIR = "/var/lib/ikea-agent/bootstrap"
-_CONTAINER_BOOTSTRAP_ROOT_DIR = "/var/lib/ikea-agent/bootstrap/ikea_image_catalog"
 
 
 def _repo_root() -> Path:
@@ -84,6 +83,9 @@ def main() -> int:
         "BACKEND_HOST_PORT": str(args.backend_host_port),
         "UI_HOST_PORT": str(args.ui_host_port),
         "DEPLOY_STATE_DIR": args.deploy_state_dir,
+        "BACKEND_SECRETS_ENV_FILE": (
+            f"{args.deploy_state_dir.rstrip('/')}/runtime/backend.secrets.env"
+        ),
         "HOST_ARTIFACT_ROOT_DIR": args.host_artifact_root_dir,
         "HOST_BOOTSTRAP_ROOT_DIR": args.host_bootstrap_root_dir,
         "RELEASE_VERSION": manifest.app_version,
@@ -104,8 +106,6 @@ def main() -> int:
         "ARTIFACT_ROOT_DIR": "/var/lib/ikea-agent/artifacts",
         "FEEDBACK_CAPTURE_ENABLED": "0",
         "TRACE_CAPTURE_ENABLED": "0",
-        "IKEA_IMAGE_CATALOG_ROOT_DIR": _CONTAINER_BOOTSTRAP_ROOT_DIR,
-        "IKEA_IMAGE_CATALOG_RUN_ID": "",
     }
     ui_env = {
         "NODE_ENV": "production",
@@ -116,7 +116,6 @@ def main() -> int:
 
     _write_env_file(output_dir / "host.env", host_env)
     _write_env_file(output_dir / "backend.env", backend_env)
-    _write_env_file(output_dir / "backend.secrets.env", {})
     _write_env_file(output_dir / "ui.env", ui_env)
     write_release_manifest(output_dir / "release-manifest.json", manifest)
 

@@ -13,6 +13,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--app-version", required=True)
     parser.add_argument("--git-tag", required=True)
     parser.add_argument("--git-sha", required=True)
+    parser.add_argument("--postgres-seed-version", required=True)
+    parser.add_argument("--image-catalog-run-id", required=True)
     parser.add_argument("--ui-repository", required=True)
     parser.add_argument("--ui-digest", required=True)
     parser.add_argument("--backend-repository", required=True)
@@ -29,6 +31,8 @@ def main() -> int:
         app_version=args.app_version,
         git_tag=args.git_tag,
         git_sha=args.git_sha,
+        postgres_seed_version=args.postgres_seed_version,
+        image_catalog_run_id=args.image_catalog_run_id,
         ui_repository=args.ui_repository,
         ui_digest=args.ui_digest,
         backend_repository=args.backend_repository,

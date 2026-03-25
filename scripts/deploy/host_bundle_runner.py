@@ -10,10 +10,14 @@ runtime Secrets Manager values.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import subprocess
 import sys
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from urllib import request
 
@@ -22,6 +26,8 @@ _UI_HEALTH_TIMEOUT_SECONDS = 60
 _HEALTH_POLL_INTERVAL_SECONDS = 5
 _HTTP_SUCCESS_MIN = 200
 _HTTP_SUCCESS_MAX_EXCLUSIVE = 300
+_HOST_IMAGE_CATALOG_ROOT_SUFFIX = "ikea_image_catalog"
+_CONTAINER_IMAGE_CATALOG_ROOT = Path("/var/lib/ikea-agent/bootstrap/ikea_image_catalog")
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -42,6 +48,20 @@ def _write_env_file(path: Path, values: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{key}={value}" for key, value in sorted(values.items())]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+@contextmanager
+def _deployment_lock(state_dir: Path) -> Generator[None]:
+    """Serialize deploy and rollback actions on the host with one advisory lock."""
+
+    state_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = state_dir / "deploy.lock"
+    with lock_path.open("w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _run_command(
@@ -149,6 +169,113 @@ def _login_ecr(host_env: dict[str, str]) -> None:
         )
 
 
+def _read_release_manifest_payload(bundle_dir: Path) -> dict[str, object]:
+    payload = json.loads((bundle_dir / "release-manifest.json").read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        msg = f"Expected JSON object release manifest in {bundle_dir / 'release-manifest.json'}."
+        raise TypeError(msg)
+    return payload
+
+
+def _required_manifest_string(payload: dict[str, object], *path: str) -> str:
+    value: object = payload
+    for segment in path:
+        if not isinstance(value, dict) or segment not in value:
+            dotted = ".".join(path)
+            msg = f"Missing required manifest field {dotted!r}."
+            raise KeyError(msg)
+        value = value[segment]
+    if not isinstance(value, str) or not value:
+        dotted = ".".join(path)
+        msg = f"Expected non-empty string manifest field {dotted!r}."
+        raise TypeError(msg)
+    return value
+
+
+def _catalog_source_for_run_dir(run_dir: Path) -> Path:
+    parquet_path = run_dir / "catalog.parquet"
+    if parquet_path.exists():
+        return parquet_path
+    jsonl_path = run_dir / "catalog.jsonl"
+    if jsonl_path.exists():
+        return jsonl_path
+    msg = f"Configured image catalog run has no catalog file: {run_dir}"
+    raise FileNotFoundError(msg)
+
+
+def _fingerprint_virtual_file(*, virtual_path: Path, actual_path: Path) -> str:
+    digest = sha256()
+    resolved_actual_path = actual_path.expanduser().resolve()
+    stat = resolved_actual_path.stat()
+    digest.update(virtual_path.as_posix().encode())
+    digest.update(str(stat.st_size).encode())
+    digest.update(str(stat.st_mtime_ns).encode())
+    return digest.hexdigest()
+
+
+def _expected_image_catalog_seed_version(
+    *, host_env: dict[str, str], image_catalog_run_id: str
+) -> str:
+    host_bootstrap_root = Path(host_env["HOST_BOOTSTRAP_ROOT_DIR"])
+    host_run_dir = (
+        host_bootstrap_root / _HOST_IMAGE_CATALOG_ROOT_SUFFIX / "runs" / image_catalog_run_id
+    )
+    catalog_source = _catalog_source_for_run_dir(host_run_dir)
+    container_source = (
+        _CONTAINER_IMAGE_CATALOG_ROOT / "runs" / image_catalog_run_id / catalog_source.name
+    )
+    return _fingerprint_virtual_file(virtual_path=container_source, actual_path=catalog_source)
+
+
+def _validate_bundle_contract(
+    *, host_env: dict[str, str], manifest_payload: dict[str, object]
+) -> dict[str, str]:
+    release_tag = _required_manifest_string(manifest_payload, "git_tag")
+    release_sha = _required_manifest_string(manifest_payload, "git_sha")
+    if host_env["RELEASE_GIT_TAG"] != release_tag:
+        msg = (
+            "Host env release tag does not match the manifest. "
+            f"{host_env['RELEASE_GIT_TAG']!r} != {release_tag!r}"
+        )
+        raise ValueError(msg)
+    if host_env["RELEASE_GIT_SHA"] != release_sha:
+        msg = (
+            "Host env release SHA does not match the manifest. "
+            f"{host_env['RELEASE_GIT_SHA']!r} != {release_sha!r}"
+        )
+        raise ValueError(msg)
+    for env_key, manifest_path in (
+        ("BACKEND_IMAGE_REF", ("backend_image", "digest_ref")),
+        ("UI_IMAGE_REF", ("ui_image", "digest_ref")),
+    ):
+        manifest_value = _required_manifest_string(manifest_payload, *manifest_path)
+        if host_env[env_key] != manifest_value:
+            msg = (
+                f"Host env {env_key} does not match the manifest. "
+                f"{host_env[env_key]!r} != {manifest_value!r}"
+            )
+            raise ValueError(msg)
+    return {
+        "postgres_seed_version": _required_manifest_string(
+            manifest_payload, "bootstrap", "postgres_seed_version"
+        ),
+        "image_catalog_run_id": _required_manifest_string(
+            manifest_payload, "bootstrap", "image_catalog_run_id"
+        ),
+        "release_tag": release_tag,
+    }
+
+
+def _write_runtime_secret_env(*, host_env: dict[str, str], values: dict[str, str]) -> Path:
+    runtime_secret_path = Path(host_env["BACKEND_SECRETS_ENV_FILE"])
+    runtime_secret_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = runtime_secret_path.with_name(runtime_secret_path.name + ".tmp")
+    _write_env_file(temporary_path, values)
+    temporary_path.chmod(0o600)
+    temporary_path.replace(runtime_secret_path)
+    return runtime_secret_path
+
+
 def _wait_for_http_success(url: str, *, timeout_seconds: int) -> None:
     deadline = time.monotonic() + timeout_seconds
     last_error: Exception | None = None
@@ -198,9 +325,15 @@ def _deploy_bundle(
     run_bootstrap: bool,
 ) -> None:
     host_env = _read_env_file(bundle_dir / "host.env")
-    release_tag = host_env["RELEASE_GIT_TAG"]
-    backend_secrets_path = bundle_dir / "backend.secrets.env"
-    _write_env_file(backend_secrets_path, _merged_backend_secrets(host_env))
+    manifest_payload = _read_release_manifest_payload(bundle_dir)
+    bundle_contract = _validate_bundle_contract(
+        host_env=host_env, manifest_payload=manifest_payload
+    )
+    expected_image_catalog_seed_version = _expected_image_catalog_seed_version(
+        host_env=host_env,
+        image_catalog_run_id=bundle_contract["image_catalog_run_id"],
+    )
+    _write_runtime_secret_env(host_env=host_env, values=_merged_backend_secrets(host_env))
     _login_ecr(host_env)
 
     _run_command(_compose_command(bundle_dir, host_env, "pull", "backend", "ui"))
@@ -228,6 +361,10 @@ def _deploy_bundle(
                 "python",
                 "-m",
                 "scripts.deploy.bootstrap_catalog",
+                "--image-catalog-root",
+                _CONTAINER_IMAGE_CATALOG_ROOT.as_posix(),
+                "--image-catalog-run-id",
+                bundle_contract["image_catalog_run_id"],
             )
         )
     _run_command(
@@ -240,6 +377,10 @@ def _deploy_bundle(
             "python",
             "-m",
             "scripts.deploy.verify_seed_state",
+            "--expected-postgres-seed-version",
+            bundle_contract["postgres_seed_version"],
+            "--expected-image-catalog-seed-version",
+            expected_image_catalog_seed_version,
         )
     )
 
@@ -269,7 +410,11 @@ def _deploy_bundle(
         timeout_seconds=_UI_HEALTH_TIMEOUT_SECONDS,
     )
 
-    _record_release_state(bundle_dir=bundle_dir, state_dir=state_dir, release_tag=release_tag)
+    _record_release_state(
+        bundle_dir=bundle_dir,
+        state_dir=state_dir,
+        release_tag=bundle_contract["release_tag"],
+    )
 
 
 def _rollback_previous(*, state_dir: Path) -> None:
@@ -312,15 +457,19 @@ def main() -> int:
 
     args = _parse_args()
     if args.command == "deploy":
-        _deploy_bundle(
-            bundle_dir=args.bundle_dir.resolve(),
-            state_dir=args.state_dir.resolve(),
-            run_migrations=True,
-            run_bootstrap=True,
-        )
+        state_dir = args.state_dir.resolve()
+        with _deployment_lock(state_dir):
+            _deploy_bundle(
+                bundle_dir=args.bundle_dir.resolve(),
+                state_dir=state_dir,
+                run_migrations=True,
+                run_bootstrap=True,
+            )
         return 0
     if args.command == "rollback-previous":
-        _rollback_previous(state_dir=args.state_dir.resolve())
+        state_dir = args.state_dir.resolve()
+        with _deployment_lock(state_dir):
+            _rollback_previous(state_dir=state_dir)
         return 0
     raise AssertionError(f"Unhandled command: {args.command}")
 

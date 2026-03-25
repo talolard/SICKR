@@ -20,6 +20,10 @@ def _write_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             "v1.4.2",
             "--git-sha",
             "abc1234def5678",
+            "--postgres-seed-version",
+            "a" * 64,
+            "--image-catalog-run-id",
+            "pilot-1000-20260318b",
             "--ui-repository",
             "046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/ui",
             "--ui-digest",
@@ -64,10 +68,14 @@ def test_build_release_bundle_writes_expected_files(
 
     assert (output_dir / "docker-compose.yml").exists()
     assert (output_dir / "scripts" / "host_bundle_runner.py").exists()
-    assert (output_dir / "backend.secrets.env").read_text(encoding="utf-8") == "\n"
+    assert not (output_dir / "backend.secrets.env").exists()
 
     host_env = (output_dir / "host.env").read_text(encoding="utf-8")
     assert "RELEASE_GIT_TAG=v1.4.2" in host_env
+    assert (
+        "BACKEND_SECRETS_ENV_FILE=/var/lib/ikea-agent/deploy/runtime/backend.secrets.env"
+        in host_env
+    )
     assert (
         "BACKEND_IMAGE_REF=046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/backend@"
     ) in host_env
@@ -80,6 +88,8 @@ def test_build_release_bundle_writes_expected_files(
     assert (
         "IMAGE_SERVICE_BASE_URL=https://designagent.talperry.com/static/product-images"
     ) in backend_env
+    assert "IKEA_IMAGE_CATALOG_RUN_ID" not in backend_env
 
     manifest = json.loads((output_dir / "release-manifest.json").read_text(encoding="utf-8"))
     assert manifest["git_tag"] == "v1.4.2"
+    assert manifest["bootstrap"]["image_catalog_run_id"] == "pilot-1000-20260318b"

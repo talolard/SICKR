@@ -19,10 +19,6 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: release-deploy-${{ github.event.inputs.mode }}
-  cancel-in-progress: false
-
 env:
   AWS_REGION: eu-central-1
 
@@ -30,15 +26,10 @@ jobs:
   deploy:
     name: Manual deploy or rollback via SSM
     runs-on: ubuntu-latest
+    concurrency:
+      group: designagent-dev-release-operations
+      cancel-in-progress: false
     steps:
-      - name: Checkout deploy scripts
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Require workflow inputs
         if: ${{ github.event.inputs.mode == 'deploy_release' }}
         env:
@@ -55,11 +46,6 @@ jobs:
           AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           DEPLOY_TARGET_TAG_KEY: ${{ vars.DEPLOY_TARGET_TAG_KEY }}
           DEPLOY_TARGET_TAG_VALUE: ${{ vars.DEPLOY_TARGET_TAG_VALUE }}
-          BACKEND_APP_SECRET_ARN: ${{ vars.BACKEND_APP_SECRET_ARN }}
-          MODEL_PROVIDER_SECRET_ARN: ${{ vars.MODEL_PROVIDER_SECRET_ARN }}
-          OBSERVABILITY_SECRET_ARN: ${{ vars.OBSERVABILITY_SECRET_ARN }}
-          DATABASE_SECRET_ARN: ${{ vars.DATABASE_SECRET_ARN }}
-          MODE: ${{ github.event.inputs.mode }}
         run: |
           set -euo pipefail
           for required_name in AWS_DEPLOY_ROLE_ARN DEPLOY_TARGET_TAG_KEY DEPLOY_TARGET_TAG_VALUE; do
@@ -68,14 +54,34 @@ jobs:
               exit 1
             fi
           done
-          if [[ "${MODE}" == "deploy_release" ]]; then
-            for required_name in BACKEND_APP_SECRET_ARN MODEL_PROVIDER_SECRET_ARN OBSERVABILITY_SECRET_ARN DATABASE_SECRET_ARN; do
-              if [[ -z "${!required_name:-}" ]]; then
-                echo "Repository variable ${required_name} must be set before deploy_release can run."
-                exit 1
-              fi
-            done
-          fi
+
+      - name: Download immutable deploy payload asset
+        if: ${{ github.event.inputs.mode == 'deploy_release' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-command
+          gh release download "${RELEASE_TAG}" \
+            --pattern release-deploy-ssm-command.json \
+            --dir release-command
+
+      - name: Write rollback payload
+        if: ${{ github.event.inputs.mode == 'rollback_previous' }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-command
+          cat > release-command/release-deploy-ssm-command.json <<'EOF'
+          {
+            "commands": [
+              "set -euo pipefail",
+              "test -s /var/lib/ikea-agent/deploy/previous_release_tag.txt",
+              "PREVIOUS_RELEASE_TAG=$(cat /var/lib/ikea-agent/deploy/previous_release_tag.txt)",
+              "python3 /var/lib/ikea-agent/deploy/releases/${PREVIOUS_RELEASE_TAG}/scripts/host_bundle_runner.py rollback-previous --state-dir /var/lib/ikea-agent/deploy"
+            ]
+          }
+          EOF
 
       - name: Configure AWS deploy credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -105,44 +111,6 @@ jobs:
           fi
           echo "instance_id=${instance_ids}" >> "${GITHUB_OUTPUT}"
 
-      - name: Download release manifest asset
-        if: ${{ github.event.inputs.mode == 'deploy_release' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
-        run: |
-          set -euo pipefail
-          mkdir -p release-manifest
-          gh release download "${RELEASE_TAG}" \
-            --pattern release-manifest.json \
-            --dir release-manifest
-
-      - name: Render release bundle
-        if: ${{ github.event.inputs.mode == 'deploy_release' }}
-        run: |
-          set -euo pipefail
-          python scripts/deploy/build_release_bundle.py \
-            --release-manifest release-manifest/release-manifest.json \
-            --output-dir deploy-bundle \
-            --backend-app-secret-arn "${{ vars.BACKEND_APP_SECRET_ARN }}" \
-            --model-provider-secret-arn "${{ vars.MODEL_PROVIDER_SECRET_ARN }}" \
-            --observability-secret-arn "${{ vars.OBSERVABILITY_SECRET_ARN }}" \
-            --database-secret-arn "${{ vars.DATABASE_SECRET_ARN }}"
-
-      - name: Write SSM command payload
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event.inputs.mode }}" == "deploy_release" ]]; then
-            python scripts/deploy/write_ssm_command_payload.py \
-              --mode deploy \
-              --bundle-dir deploy-bundle \
-              --output ssm-parameters.json
-          else
-            python scripts/deploy/write_ssm_command_payload.py \
-              --mode rollback-previous \
-              --output ssm-parameters.json
-          fi
-
       - name: Send SSM command
         id: send_command
         env:
@@ -161,7 +129,7 @@ jobs:
               --instance-ids "${INSTANCE_ID}" \
               --document-name AWS-RunShellScript \
               --comment "${comment}" \
-              --parameters file://ssm-parameters.json \
+              --parameters file://release-command/release-deploy-ssm-command.json \
               --query 'Command.CommandId' \
               --output text
           )"

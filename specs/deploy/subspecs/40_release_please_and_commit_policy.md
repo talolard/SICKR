@@ -36,11 +36,11 @@ Current implementation honesty note:
 
 - the repo has the release-preparation and release-publication workflows
 - the repo does not yet prove the full target contract end to end
-- the current publication workflow accepts:
-  - a merged PR into `release` whose title starts with `chore(release):`
-  - a manual `workflow_dispatch` run for an explicit ref
-- the current publication workflow writes the release manifest before tag push,
-  but it still pushes the immutable Git tag before creating the GitHub release
+- the current publication workflow accepts only a merged PR into `release`
+  whose title starts with `chore(release):`
+- the current publication workflow writes the release manifest and renders the
+  immutable deploy bundle plus deploy payload before tag push, but it still
+  pushes the immutable Git tag before creating the GitHub release
 - that means a failure after tag push can leave the repo with a tag but no
   GitHub release, and reruns currently fail on the duplicate-tag guard
 - stronger provenance, failure-safe final publication, and promotion-boundary
@@ -250,6 +250,8 @@ Target publication invariant for this repo:
   - both images are pushed to `ECR`
   - both images are tagged with the exact release version
   - the release manifest exists and records the exact digests
+  - the immutable deploy bundle exists for that same release manifest
+  - the immutable deploy command payload exists for that same release bundle
   - the immutable Git tag is created for that same release commit
   - the GitHub release is created from that same immutable tag
 
@@ -260,31 +262,32 @@ What the current implementation actually enforces:
 
 - a merged PR into `release` with a `chore(release): ...` title can trigger the
   publish workflow
-- a manual `workflow_dispatch` run can also trigger the publish workflow for an
-  explicit ref
 - the workflow resolves the version from the checked-out ref
 - the workflow builds and pushes both images before writing the release manifest
 - the workflow writes the release manifest before creating the Git tag
+- the workflow renders the immutable deploy bundle and deploy SSM payload before
+  creating the Git tag
 - the workflow pushes the immutable Git tag before creating the GitHub release
 
 Current unresolved gap:
 
 - changelog preparation alone is not release publication
 - artifact publication currently happens before tag push
+- deploy bundle and payload generation currently happen before tag push
 - final GitHub release creation can still fail after tag push
 - reruns then fail on the duplicate-tag guard, so final publication is not yet
   failure-safe
 
 Current implemented publication order:
 
-1. merge a qualifying PR into `release`, or manually dispatch publication for an
-   explicit ref
+1. merge a qualifying `chore(release): ...` PR into `release`
 2. read the app version from the checked-out ref
 3. build and push both images
 4. capture the resulting digests
 5. write and upload the release manifest artifact
-6. create and push the immutable Git tag for that same commit
-7. attempt to create the GitHub release from that immutable tag
+6. render the immutable deploy bundle and deploy SSM payload
+7. create and push the immutable Git tag for that same commit
+8. attempt to create the GitHub release from that immutable tag
 
 Desired hardening still outstanding:
 
@@ -371,8 +374,10 @@ What is true today:
 - `release-please` is the chosen preparation tool and the repo contains the
   supporting config and workflows
 - PR-title enforcement exists for PRs targeting `main`
-- publication is currently keyed off a merged `chore(release): ...` PR or a
-  manual dispatch, not stronger `release-please` provenance
+- publication is currently keyed off a merged `chore(release): ...` PR, not
+  stronger `release-please` provenance
+- publication currently renders the manifest, immutable deploy bundle, and
+  deploy payload before pushing the immutable Git tag
 - final publication is not yet failure-safe after tag push
 - the `main -> release` promotion rule is still documented policy rather than
   enforced repository behavior

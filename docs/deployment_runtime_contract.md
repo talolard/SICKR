@@ -134,6 +134,7 @@ The host deploy layer should work from these inputs:
 | `BACKEND_HOST_PORT` | fixed deploy config: `8000` |
 | `UI_HOST_PORT` | fixed deploy config: `3000` |
 | `DEPLOY_STATE_DIR` | fixed deploy config: `/var/lib/ikea-agent/deploy` |
+| `BACKEND_SECRETS_ENV_FILE` | fixed deploy config: `/var/lib/ikea-agent/deploy/runtime/backend.secrets.env` |
 | `HOST_ARTIFACT_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/artifacts` |
 | `HOST_BOOTSTRAP_ROOT_DIR` | fixed deploy config: `/var/lib/ikea-agent/bootstrap` |
 
@@ -149,12 +150,14 @@ The host should also keep one deploy-state root:
 That deploy-state root stores:
 
 - extracted release bundles under `releases/<git_tag>/`
+- one non-versioned backend secret env file under `runtime/backend.secrets.env`
 - the current deployed release tag
 - the previous deployed release tag
 - current and previous manifest snapshots for rollback bookkeeping
 
 The deploy runner should consume release-manifest digests, fetch the required
 Secrets Manager values, and inject only the contract above into the containers.
+It should not persist secret values in versioned release directories.
 
 ## Deploy-Time Entry Points
 
@@ -185,24 +188,28 @@ SSM. That bundle is the host-side execution unit and contains:
 - `release-manifest.json`
 - `host.env`
 - `backend.env`
-- `backend.secrets.env` placeholder, populated on host from Secrets Manager
 - `ui.env`
 - `docker-compose.yml`
 - `scripts/host_bundle_runner.py`
+- one pre-rendered `release-deploy-ssm-command.json` payload distributed with the release assets
 
 The host runner is responsible for:
 
 1. reading the secret ARNs from `host.env`
-2. projecting secret JSON keys into `backend.secrets.env`
+2. projecting secret JSON keys into the non-versioned runtime secret env file
 3. pulling pinned image digests
 4. running migrations
-5. running bootstrap and seed verification
+5. running bootstrap and seed verification using the bootstrap inputs pinned in
+   `release-manifest.json`
 6. starting backend, then UI
 7. waiting for backend readiness, UI readiness, and one lightweight app check
 8. updating current and previous deploy state markers
 
 Rollback uses the previous recorded deploy bundle by exact image digests and
 skips schema migration by default, because DB rollback is not assumed safe.
+Both deploy and rollback operations are serialized by the workflow concurrency
+key and by a host-local deploy lock so two overlapping SSM commands cannot
+interleave state changes.
 
 ## Example Env Files
 

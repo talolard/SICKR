@@ -12,9 +12,13 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from scripts.deploy.bootstrap_inputs import validate_image_catalog_run_id
+
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_SEED_VERSION_RE = re.compile(r"^[0-9a-f]{64}$")
+_RELEASE_MANIFEST_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +34,14 @@ class ImageManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class BootstrapManifest:
+    """Pinned bootstrap metadata for one application release."""
+
+    postgres_seed_version: str
+    image_catalog_run_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ReleaseManifest:
     """Top-level release record shared between publish and deploy automation."""
 
@@ -37,6 +49,7 @@ class ReleaseManifest:
     app_version: str
     git_tag: str
     git_sha: str
+    bootstrap: BootstrapManifest
     ui_image: ImageManifest
     backend_image: ImageManifest
 
@@ -80,6 +93,16 @@ def validate_digest(digest: str) -> str:
     return normalized_digest
 
 
+def validate_seed_version(seed_version: str, *, field_name: str) -> str:
+    """Return one normalized bootstrap seed version."""
+
+    normalized = seed_version.lower()
+    if not _SEED_VERSION_RE.fullmatch(normalized):
+        msg = f"Expected 64 lowercase hex characters for {field_name}, found {seed_version!r}."
+        raise ValueError(msg)
+    return normalized
+
+
 def build_image_manifest(
     *,
     repository: str,
@@ -107,6 +130,8 @@ def create_release_manifest(
     app_version: str,
     git_tag: str,
     git_sha: str,
+    postgres_seed_version: str,
+    image_catalog_run_id: str,
     ui_repository: str,
     ui_digest: str,
     backend_repository: str,
@@ -118,10 +143,17 @@ def create_release_manifest(
     normalized_tag = validate_git_tag(normalized_version, git_tag)
     normalized_sha = validate_git_sha(git_sha)
     return ReleaseManifest(
-        schema_version=1,
+        schema_version=_RELEASE_MANIFEST_SCHEMA_VERSION,
         app_version=normalized_version,
         git_tag=normalized_tag,
         git_sha=normalized_sha,
+        bootstrap=BootstrapManifest(
+            postgres_seed_version=validate_seed_version(
+                postgres_seed_version,
+                field_name="bootstrap.postgres_seed_version",
+            ),
+            image_catalog_run_id=validate_image_catalog_run_id(image_catalog_run_id),
+        ),
         ui_image=build_image_manifest(
             repository=ui_repository,
             app_version=normalized_version,
@@ -141,14 +173,19 @@ def read_release_manifest(path: Path) -> ReleaseManifest:
     """Load and validate one release manifest from disk."""
 
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != 1:
-        msg = f"Expected schema_version 1 in {path}, found {payload.get('schema_version')!r}."
+    if payload.get("schema_version") != _RELEASE_MANIFEST_SCHEMA_VERSION:
+        msg = (
+            f"Expected schema_version {_RELEASE_MANIFEST_SCHEMA_VERSION} in {path}, "
+            f"found {payload.get('schema_version')!r}."
+        )
         raise ValueError(msg)
 
     return create_release_manifest(
         app_version=str(payload["app_version"]),
         git_tag=str(payload["git_tag"]),
         git_sha=str(payload["git_sha"]),
+        postgres_seed_version=str(payload["bootstrap"]["postgres_seed_version"]),
+        image_catalog_run_id=str(payload["bootstrap"]["image_catalog_run_id"]),
         ui_repository=str(payload["ui_image"]["repository"]),
         ui_digest=str(payload["ui_image"]["digest"]),
         backend_repository=str(payload["backend_image"]["repository"]),

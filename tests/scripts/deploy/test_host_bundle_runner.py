@@ -7,39 +7,79 @@ import pytest
 
 from scripts.deploy import host_bundle_runner
 
+_BACKEND_REPOSITORY = "046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/backend"
+_UI_REPOSITORY = "046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/ui"
+
 
 def _write_bundle(tmp_path: Path, *, release_tag: str = "v1.4.2") -> Path:
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()
     (bundle_dir / "scripts").mkdir()
+    host_bootstrap_root = tmp_path / "host-bootstrap"
+    run_id = "pilot-1000-20260318b"
+    catalog_path = host_bootstrap_root / "ikea_image_catalog" / "runs" / run_id / "catalog.parquet"
+    catalog_path.parent.mkdir(parents=True)
+    catalog_path.write_text("catalog-bytes\n", encoding="utf-8")
+    backend_digest = "sha256:" + "2" * 64
+    ui_digest = "sha256:" + "1" * 64
     (bundle_dir / "host.env").write_text(
         "\n".join(
             [
                 "AWS_REGION=eu-central-1",
                 "COMPOSE_PROJECT_NAME=ikea-agent-dev",
                 "PRODUCT_IMAGE_BASE_URL=https://designagent.talperry.com/static/product-images",
-                "BACKEND_IMAGE_REF=046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/backend@sha256:"
-                + "2" * 64,
-                "UI_IMAGE_REF=046673074482.dkr.ecr.eu-central-1.amazonaws.com/ikea-agent/ui@sha256:"
-                + "1" * 64,
+                "BACKEND_IMAGE_REF=" + _BACKEND_REPOSITORY + "@" + backend_digest,
+                "UI_IMAGE_REF=" + _UI_REPOSITORY + "@" + ui_digest,
                 "BACKEND_APP_SECRET_ARN=arn:aws:backend",
                 "MODEL_PROVIDER_SECRET_ARN=arn:aws:model",
                 "OBSERVABILITY_SECRET_ARN=arn:aws:obs",
                 "DATABASE_SECRET_ARN=arn:aws:db",
                 "BACKEND_HOST_PORT=8000",
                 "UI_HOST_PORT=3000",
+                "BACKEND_SECRETS_ENV_FILE="
+                + str(tmp_path / "state" / "runtime" / "backend.secrets.env"),
+                "HOST_BOOTSTRAP_ROOT_DIR=" + str(host_bootstrap_root),
                 "RELEASE_GIT_TAG=" + release_tag,
+                "RELEASE_GIT_SHA=abc1234def5678",
             ]
         )
         + "\n",
         encoding="utf-8",
     )
     (bundle_dir / "backend.env").write_text("APP_ENV=dev\n", encoding="utf-8")
-    (bundle_dir / "backend.secrets.env").write_text("\n", encoding="utf-8")
     (bundle_dir / "ui.env").write_text("NODE_ENV=production\n", encoding="utf-8")
     (bundle_dir / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
     (bundle_dir / "release-manifest.json").write_text(
-        json.dumps({"git_tag": release_tag}, indent=2) + "\n",
+        json.dumps(
+            {
+                "schema_version": 2,
+                "app_version": "1.4.2",
+                "git_tag": release_tag,
+                "git_sha": "abc1234def5678",
+                "bootstrap": {
+                    "postgres_seed_version": "a" * 64,
+                    "image_catalog_run_id": run_id,
+                },
+                "ui_image": {
+                    "repository": _UI_REPOSITORY,
+                    "version_tag": release_tag,
+                    "commit_tag": "sha-abc1234def5678",
+                    "digest": ui_digest,
+                    "image_ref": _UI_REPOSITORY + ":" + release_tag,
+                    "digest_ref": _UI_REPOSITORY + "@" + ui_digest,
+                },
+                "backend_image": {
+                    "repository": _BACKEND_REPOSITORY,
+                    "version_tag": release_tag,
+                    "commit_tag": "sha-abc1234def5678",
+                    "digest": backend_digest,
+                    "image_ref": _BACKEND_REPOSITORY + ":" + release_tag,
+                    "digest_ref": _BACKEND_REPOSITORY + "@" + backend_digest,
+                },
+            },
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return bundle_dir
@@ -83,14 +123,21 @@ def test_deploy_bundle_runs_expected_sequence(
         run_bootstrap=True,
     )
 
-    assert (bundle_dir / "backend.secrets.env").read_text(encoding="utf-8").splitlines() == [
+    assert (state_dir / "runtime" / "backend.secrets.env").read_text(
+        encoding="utf-8"
+    ).splitlines() == [
         "DATABASE_URL=postgres://example",
         "GEMINI_API_KEY=token",
     ]
     assert commands[0][-3:] == ["pull", "backend", "ui"]
     assert "scripts.deploy.apply_migrations" in commands[1]
     assert "scripts.deploy.bootstrap_catalog" in commands[2]
+    assert "--image-catalog-run-id" in commands[2]
+    assert "pilot-1000-20260318b" in commands[2]
     assert "scripts.deploy.verify_seed_state" in commands[3]
+    assert "--expected-postgres-seed-version" in commands[3]
+    assert "a" * 64 in commands[3]
+    assert "--expected-image-catalog-seed-version" in commands[3]
     assert commands[4][-2:] == ["-d", "backend"]
     assert commands[5][-2:] == ["-d", "ui"]
     assert waits == [
@@ -130,3 +177,24 @@ def test_rollback_previous_uses_previous_bundle(
         "run_migrations": False,
         "run_bootstrap": False,
     }
+
+
+def test_deploy_bundle_rejects_manifest_env_mismatch(tmp_path: Path) -> None:
+    bundle_dir = _write_bundle(tmp_path)
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    host_env_path = bundle_dir / "host.env"
+    host_env_path.write_text(
+        host_env_path.read_text(encoding="utf-8").replace(
+            "RELEASE_GIT_TAG=v1.4.2", "RELEASE_GIT_TAG=v9.9.9"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="release tag"):
+        host_bundle_runner._deploy_bundle(
+            bundle_dir=bundle_dir,
+            state_dir=state_dir,
+            run_migrations=False,
+            run_bootstrap=False,
+        )

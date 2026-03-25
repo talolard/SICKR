@@ -263,17 +263,26 @@ Release automation should:
   manifest can be attached to it
 - generate final GitHub release notes at GitHub-release publication time, not
   during release-PR preparation
+- render the deploy bundle and deploy-SSM payload from that same release commit
+- create the immutable Git tag only after artifact publication succeeds
+- create the GitHub release only after the immutable tag exists and the release
+  manifest, deploy bundle, and deploy payload can be attached to it
+- generate final GitHub release notes at GitHub-release publication time, not
+  during release-PR preparation
+- ensure manual tagged deploys consume the release-time deploy payload or
+  deploy bundle attached to the GitHub release rather than re-rendering deploy
+  artifacts from the current branch state
 - trigger deployment using those exact immutable references
 
 Current implemented workflow split:
 
 - `.github/workflows/release-please.yml` prepares and updates release PRs on
   `release`
-- `.github/workflows/release-publish.yml` runs after either:
-  - a merged `chore(release): ...` PR on `release`
-  - a manual `workflow_dispatch` run with an explicit `git_ref`
+- `.github/workflows/release-publish.yml` runs after a merged
+  `chore(release): ...` PR on `release`
 - that workflow currently builds images, pushes them, writes the manifest,
-  creates the immutable tag, and only then attempts the GitHub release
+  renders the deploy bundle and deploy payload, creates the immutable tag, and
+  only then attempts the GitHub release
 
 Current unresolved safety gaps:
 
