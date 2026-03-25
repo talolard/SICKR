@@ -11,6 +11,7 @@ Trigger behavior:
 
 Active jobs:
 - `backend`: Ruff + Pyrefly + Pytest (JUnit + coverage + annotations)
+- `migration-stairway`: fixture-seeded pgvector Postgres + Alembic migration validation
 - `frontend-unit`: ESLint + TypeScript + Vitest (JUnit + coverage + annotations)
 - `coverage`: four-surface coverage gate plus comparison against the latest default-branch baseline
 - `e2e-mock`: Playwright against mock route (JUnit + report artifact)
@@ -53,8 +54,27 @@ Useful local commands:
 - `make backend-coverage`
 - `make frontend-coverage`
 - `make coverage`
+- `bash scripts/ci/run_migration_validation.sh 0`
 
 `make tidy` does not run GitHub annotations or Playwright E2E lanes. The real-UI smoke is deferred to CI after `PR CI` and `Dependency Review` succeed for the PR SHA. Run `make ui-test-e2e-real-ui-smoke` locally only when you need to debug the live CopilotKit or AG-UI path directly.
+
+## Migration Validation
+
+The dedicated `migration-stairway` lane exists to catch downgrade and
+re-upgrade problems that a simple `alembic upgrade head` check can miss.
+
+- On pull requests, it runs only when migration-relevant files changed.
+- On release validation, the same suite runs before publish/deploy continues.
+- It uses `scripts/ci/run_migration_validation.sh`, which starts a clean local
+  pgvector Postgres instance, generates tiny fixture parquet inputs plus a
+  fixture image catalog, seeds that disposable database, and then
+  runs:
+  - `tests/shared/test_migrations.py`
+  - `tests/shared/test_migration_stairway.py`
+
+This keeps migration validation on the same pgvector-capable Postgres image and
+fixture catalog inputs used elsewhere in CI, while avoiding brittle dependence
+on a published snapshot artifact staying ahead of the migration graph.
 
 ## Coverage Reporting
 

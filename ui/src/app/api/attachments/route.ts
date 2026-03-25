@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { backendProxyLogFields, buildBackendProxyUrl } from "@/lib/backendProxy";
 import { logServerRouteEvent } from "@/lib/serverRouteLogging";
-
-const agUiUrl = process.env.PY_AG_UI_URL ?? "http://localhost:8000/ag-ui/";
-const uploadUrl = new URL("../attachments", agUiUrl).toString();
 
 export const POST = async (request: NextRequest): Promise<Response> => {
   const body = await request.arrayBuffer();
@@ -29,8 +27,9 @@ export const POST = async (request: NextRequest): Promise<Response> => {
   }
 
   let response: Response;
+  const upstreamUrl = buildBackendProxyUrl("/attachments");
   try {
-    response = await fetch(uploadUrl, {
+    response = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
         "content-type": contentType,
@@ -48,6 +47,8 @@ export const POST = async (request: NextRequest): Promise<Response> => {
       room_id: roomId || null,
       run_id: runId,
       thread_id: threadId || null,
+      upstream_url: upstreamUrl.toString(),
+      ...backendProxyLogFields(),
     });
     throw error;
   }
@@ -60,6 +61,8 @@ export const POST = async (request: NextRequest): Promise<Response> => {
       run_id: runId,
       status_code: response.status,
       thread_id: threadId || null,
+      upstream_url: upstreamUrl.toString(),
+      ...backendProxyLogFields(),
     });
   }
   return new Response(text, {

@@ -57,6 +57,11 @@ data "aws_iam_policy_document" "backend_task_access" {
   }
 }
 
+data "aws_subnet" "public" {
+  for_each = toset(var.public_subnet_ids)
+  id       = each.value
+}
+
 locals {
   placeholder_image      = "public.ecr.aws/docker/library/busybox:stable"
   backend_artifact_root  = "/var/lib/ikea-agent/artifacts"
@@ -64,6 +69,7 @@ locals {
   ui_log_group_name      = "/ecs/${var.name_prefix}/ui"
   backend_container_name = "backend"
   ui_container_name      = "ui"
+  vpc_id                 = one(distinct([for subnet in data.aws_subnet.public : subnet.vpc_id]))
   alb_dns_url            = "http://${aws_lb.main.dns_name}"
   backend_proxy_base_url = "http://${aws_lb.main.dns_name}:${var.backend_container_port}/"
   backend_environment = [
@@ -216,7 +222,7 @@ resource "aws_lb_target_group" "ui" {
   port        = var.ui_container_port
   protocol    = "HTTP"
   target_type = "ip"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 
   health_check {
     enabled             = true
@@ -243,7 +249,7 @@ resource "aws_lb_target_group" "backend" {
   port        = var.backend_container_port
   protocol    = "HTTP"
   target_type = "ip"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 
   health_check {
     enabled             = true

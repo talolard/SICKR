@@ -1,7 +1,7 @@
 """Add durable revealed preference storage to the runtime schema.
 
 Revision ID: 20260325_0008
-Revises: 20260319_0007
+Revises: 20260320_0013
 Create Date: 2026-03-25
 """
 
@@ -18,7 +18,7 @@ TABLE_NAME = "revealed_preferences"
 
 # revision identifiers, used by Alembic.
 revision: str = "20260325_0008"
-down_revision: str | Sequence[str] | None = "20260319_0007"
+down_revision: str | Sequence[str] | None = "20260320_0013"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
