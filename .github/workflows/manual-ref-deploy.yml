@@ -271,7 +271,7 @@ jobs:
             "containerOverrides": [
               {
                 "name": "backend",
-                "command": ["python", "scripts/deploy/apply_migrations.py"]
+                "command": ["python", "-m", "scripts.deploy.apply_migrations"]
               }
             ]
           }

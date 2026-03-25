@@ -171,7 +171,7 @@ PY
       - name: Write release manifest
         run: |
           set -euo pipefail
-          python scripts/deploy/write_release_manifest.py \
+          python -m scripts.deploy.write_release_manifest \
             --app-version "${{ steps.version.outputs.version }}" \
             --git-tag "${{ steps.version.outputs.tag }}" \
             --git-sha "${{ steps.version.outputs.git_sha }}" \
