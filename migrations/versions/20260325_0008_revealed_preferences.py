@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 APP_SCHEMA = "app"
 TABLE_NAME = "revealed_preferences"
@@ -27,6 +28,29 @@ def upgrade() -> None:
 
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
+        return
+    inspector = inspect(bind)
+    existing_tables = set(inspector.get_table_names(schema=APP_SCHEMA))
+    if TABLE_NAME in existing_tables:
+        existing_indexes = {
+            index["name"] for index in inspector.get_indexes(TABLE_NAME, schema=APP_SCHEMA)
+        }
+        if "ix_revealed_preferences_thread_id" not in existing_indexes:
+            op.create_index(
+                "ix_revealed_preferences_thread_id",
+                TABLE_NAME,
+                ["thread_id"],
+                unique=False,
+                schema=APP_SCHEMA,
+            )
+        if "ix_revealed_preferences_run_id" not in existing_indexes:
+            op.create_index(
+                "ix_revealed_preferences_run_id",
+                TABLE_NAME,
+                ["run_id"],
+                unique=False,
+                schema=APP_SCHEMA,
+            )
         return
 
     op.create_table(
@@ -79,6 +103,9 @@ def downgrade() -> None:
 
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
+        return
+    inspector = inspect(bind)
+    if TABLE_NAME not in set(inspector.get_table_names(schema=APP_SCHEMA)):
         return
 
     op.drop_index("ix_revealed_preferences_run_id", table_name=TABLE_NAME, schema=APP_SCHEMA)
