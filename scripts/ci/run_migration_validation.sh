@@ -16,6 +16,7 @@ POSTGRES_ENV_FILE="${POSTGRES_ENV_DIR}/compose.env"
 POSTGRES_COMPOSE_FILE="docker/compose.postgres.yml"
 DATABASE_URL="postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 PRODUCT_IMAGE_BASE_URL="https://designagent.talperry.com/static/product-images/"
+FIXTURE_REPO_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/migration-fixture.XXXXXX")"
 
 mkdir -p "${POSTGRES_ENV_DIR}"
 cat > "${POSTGRES_ENV_FILE}" <<EOF
@@ -90,6 +91,8 @@ PY
 
 trap cleanup EXIT
 
+env -u VIRTUAL_ENV uv run python scripts/ci/generate_migration_validation_fixture.py "${FIXTURE_REPO_ROOT}"
+
 compose_postgres down --volumes --remove-orphans >/dev/null 2>&1 || true
 compose_postgres up -d postgres
 wait_for_postgres
@@ -97,7 +100,7 @@ wait_for_postgres
 ALEMBIC_DATABASE_URL="${DATABASE_URL}" env -u VIRTUAL_ENV uv run alembic upgrade head
 env -u VIRTUAL_ENV uv run python -m scripts.docker_deps.seed_postgres \
   --database-url "${DATABASE_URL}" \
-  --repo-root "$PWD" \
+  --repo-root "${FIXTURE_REPO_ROOT}" \
   --image-catalog-root "$PWD/tests/fixtures/image_catalog" \
   --image-catalog-run-id "ci-fixture" \
   --product-image-base-url "${PRODUCT_IMAGE_BASE_URL}" \

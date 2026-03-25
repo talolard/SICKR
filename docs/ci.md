@@ -66,7 +66,8 @@ re-upgrade problems that a simple `alembic upgrade head` check can miss.
 - On pull requests, it runs only when migration-relevant files changed.
 - On release validation, the same suite runs before publish/deploy continues.
 - It uses `scripts/ci/run_migration_validation.sh`, which starts a clean local
-  pgvector Postgres instance, upgrades it, seeds fixture catalog data, and then
+  pgvector Postgres instance, generates tiny fixture parquet inputs plus a
+  fixture image catalog, seeds that disposable database, and then
   runs:
   - `tests/shared/test_migrations.py`
   - `tests/shared/test_migration_stairway.py`

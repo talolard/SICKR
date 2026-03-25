@@ -39,7 +39,6 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
     assert {
         ("app", "threads"),
         ("app", "agent_runs"),
-        ("app", "message_archives"),
         ("app", "assets"),
         ("app", "floor_plan_revisions"),
         ("app", "analysis_runs"),
@@ -56,6 +55,7 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
         ("catalog", "product_images"),
         ("ops", "seed_state"),
     }.issubset(table_names)
+    assert ("app", "message_archives") not in table_names
 
 
 def test_alembic_upgrade_succeeds_when_revealed_preferences_already_exists() -> None:
