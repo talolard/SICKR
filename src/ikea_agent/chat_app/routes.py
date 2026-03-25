@@ -14,54 +14,12 @@ from ikea_agent.chat.agents.index import (
     describe_agent,
     list_agent_catalog,
 )
-from ikea_agent.chat_app.attachment_storage import (
-    AttachmentStorageBackend,
-    build_attachment_storage_backend,
-)
+from ikea_agent.chat_app.attachment_storage import build_attachment_storage_backend
 from ikea_agent.chat_app.attachments import AttachmentContextError, AttachmentStore
-from ikea_agent.chat_app.thread_api_models import (
-    RecentTraceReportItem,
-    RecentTraceReportListResponse,
-    TraceReportCreateRequest,
-    TraceReportCreateResponse,
-)
-from ikea_agent.chat_app.trace_reports import TraceReportInput, TraceReportWriter
-from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
 from ikea_agent.persistence.asset_repository import AssetRepository
-from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 
 ALLOWED_IMAGE_MIME_TYPES: tuple[str, ...] = ("image/png", "image/jpeg", "image/webp")
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-
-
-def _validate_upload_mime_type(mime_type: str) -> None:
-    if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
-        raise HTTPException(
-            status_code=415,
-            detail="Unsupported attachment type. Use png/jpeg/webp images.",
-        )
-
-
-def _require_attachment_thread_id(request: Request) -> str:
-    thread_id = request.headers.get("x-thread-id")
-    if thread_id is None or not thread_id.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Attachments require an x-thread-id header for durable thread scoping.",
-        )
-    return thread_id
-
-
-async def _read_upload_body(request: Request) -> bytes:
-    body = await request.body()
-    if not body:
-        raise HTTPException(status_code=400, detail="Attachment is empty.")
-    if len(body) > MAX_ATTACHMENT_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="Attachment exceeds 10MB upload limit.",
-        )
-    return body
 
 
 def _build_attachment_store(
@@ -73,18 +31,32 @@ def _build_attachment_store(
     s3_prefix: str | None,
     s3_region: str | None,
 ) -> AttachmentStore:
-    storage_backend: AttachmentStorageBackend = build_attachment_storage_backend(
-        root_dir=root_dir,
-        backend_kind=storage_backend_kind,
-        s3_bucket=s3_bucket,
-        s3_prefix=s3_prefix,
-        s3_region=s3_region,
-    )
     return AttachmentStore(
         root_dir=root_dir,
         asset_repository=asset_repository,
-        storage_backend=storage_backend,
+        storage_backend=build_attachment_storage_backend(
+            root_dir=root_dir,
+            backend_kind=storage_backend_kind,
+            s3_bucket=s3_bucket,
+            s3_prefix=s3_prefix,
+            s3_region=s3_region,
+        ),
     )
+
+
+def _resolve_attachment_context(
+    request: Request,
+    *,
+    attachment_store: AttachmentStore,
+) -> tuple[str | None, str | None]:
+    room_id = request.headers.get("x-room-id") or None
+    thread_id = request.headers.get("x-thread-id") or None
+    if attachment_store.requires_persistence_context and (room_id is None or thread_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Attachment uploads require explicit x-room-id and x-thread-id headers.",
+        )
+    return room_id, thread_id
 
 
 def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore) -> None:
@@ -93,20 +65,37 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
         """Upload one image and return a typed attachment reference."""
 
         mime_type = request.headers.get("content-type", "")
-        _validate_upload_mime_type(mime_type)
-        body = await _read_upload_body(request)
-        thread_id = _require_attachment_thread_id(request)
+        if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+            raise HTTPException(
+                status_code=415,
+                detail="Unsupported attachment type. Use png/jpeg/webp images.",
+            )
+
+        body = await request.body()
+        if not body:
+            raise HTTPException(status_code=400, detail="Attachment is empty.")
+        if len(body) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Attachment exceeds 10MB upload limit.",
+            )
+
+        room_id, thread_id = _resolve_attachment_context(
+            request,
+            attachment_store=attachment_store,
+        )
 
         try:
             stored = attachment_store.save_image_bytes(
                 content=body,
                 mime_type=mime_type,
                 filename=request.headers.get("x-filename"),
+                room_id=room_id,
                 thread_id=thread_id,
                 run_id=request.headers.get("x-run-id") or None,
                 kind="user_upload",
             )
-        except AttachmentContextError as exc:
+        except (AttachmentContextError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return asdict(stored.ref)
 
@@ -121,94 +110,6 @@ def _register_attachment_routes(app: FastAPI, attachment_store: AttachmentStore)
             path=stored.path,
             media_type=stored.ref.mime_type,
             filename=stored.ref.file_name,
-            headers={"Cache-Control": "private, no-store"},
-        )
-
-
-def _register_trace_routes(
-    app: FastAPI,
-    *,
-    trace_writer: TraceReportWriter,
-    beads_creator: BeadsTraceIssueCreator,
-    run_history_repository: RunHistoryRepository,
-) -> None:
-    @app.get("/api/traces/recent", response_model=RecentTraceReportListResponse)
-    async def list_recent_trace_reports(limit: int = 5) -> RecentTraceReportListResponse:
-        """Return recent saved trace bundles for diagnostics surfaces."""
-
-        recent = trace_writer.list_recent(limit=min(max(limit, 1), 20))
-        return RecentTraceReportListResponse(
-            traces=[
-                RecentTraceReportItem(
-                    trace_id=item.trace_id,
-                    title=item.title,
-                    created_at=item.created_at,
-                    thread_id=item.thread_id,
-                    agent_name=item.agent_name,
-                    directory=item.directory,
-                    markdown_path=item.markdown_path,
-                )
-                for item in recent
-            ]
-        )
-
-    @app.post("/api/traces", response_model=TraceReportCreateResponse)
-    async def create_trace_report(payload: TraceReportCreateRequest) -> TraceReportCreateResponse:
-        """Persist one current-thread trace report and create Beads triage work."""
-
-        normalized_title = payload.title.strip()
-        if not normalized_title:
-            raise HTTPException(status_code=422, detail="Trace title must not be blank.")
-
-        history = run_history_repository.list_thread_run_history(
-            thread_id=payload.thread_id,
-            agent_name=payload.agent_name,
-        )
-        if not history:
-            raise HTTPException(
-                status_code=404,
-                detail="No archived runs found for that thread/agent.",
-            )
-
-        result = trace_writer.write_bundle(
-            TraceReportInput(
-                title=normalized_title,
-                description=payload.description.strip() if payload.description else None,
-                page_url=payload.page_url,
-                thread_id=payload.thread_id,
-                agent_name=payload.agent_name,
-                user_agent=payload.user_agent,
-                console_log_json=payload.console_log if payload.include_console_log else None,
-                run_history=history,
-            )
-        )
-
-        try:
-            beads_result = beads_creator.create_trace_epic_and_task(
-                title=normalized_title,
-                description=payload.description.strip() if payload.description else None,
-                trace_directory=result.directory,
-                trace_json_path=result.trace_json_path,
-                thread_id=payload.thread_id,
-                agent_name=payload.agent_name,
-            )
-        except Exception:
-            return TraceReportCreateResponse(
-                trace_id=result.trace_id,
-                directory=result.directory,
-                trace_json_path=result.trace_json_path,
-                markdown_path=result.markdown_path,
-                status="saved_without_beads",
-            )
-
-        return TraceReportCreateResponse(
-            trace_id=result.trace_id,
-            directory=result.directory,
-            trace_json_path=result.trace_json_path,
-            markdown_path=result.markdown_path,
-            beads_epic_id=beads_result.epic_id,
-            beads_task_id=beads_result.task_id,
-            status="saved_and_linked",
         )
 
 

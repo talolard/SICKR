@@ -7,6 +7,7 @@ import { AttachmentComposer } from "@/components/attachments/AttachmentComposer"
 import type { AttachmentRef, PendingAttachment } from "@/lib/attachments";
 
 type AgentImageAttachmentPanelProps = {
+  roomId: string;
   threadId: string | null;
   onReadyAttachmentsChange: (attachments: AttachmentRef[]) => void;
   helperText?: string;
@@ -20,6 +21,7 @@ function attachmentErrorMessage(status: number, body: string): string {
 }
 
 export function AgentImageAttachmentPanel({
+  roomId,
   threadId,
   onReadyAttachmentsChange,
   helperText = "Uploaded images are added to image-analysis tool context for this thread.",
@@ -40,24 +42,14 @@ export function AgentImageAttachmentPanel({
   }, [attachments, onReadyAttachmentsChange]);
 
   const uploadAttachment = async (localId: string, file: File): Promise<void> => {
-    if (!threadId) {
-      const message = "Create or select a thread before uploading images.";
-      setAttachments((current) =>
-        current.map((attachment) =>
-          attachment.localId === localId
-            ? { ...attachment, status: "error", errorMessage: message }
-            : attachment,
-        ),
-      );
-      return;
-    }
     try {
       const response = await fetch("/api/attachments", {
         method: "POST",
         headers: {
           "content-type": file.type || "application/octet-stream",
           "x-filename": file.name,
-          "x-thread-id": threadId,
+          "x-room-id": roomId,
+          ...(threadId ? { "x-thread-id": threadId } : {}),
         },
         body: file,
       });

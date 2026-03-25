@@ -6,6 +6,7 @@ behavior.
 
 ## Historical task logs
 
+- [CopilotKit Performance Research Notes (2026-03-20)](copilotkit_performance_research_2026-03-20.md)
 - [Conversation Persistence Handoff Log](conversation_persistence_handoff.md)
 - [Floor Plan SVG Migration Progress Handoff](floorplan_svg_migration_progress.md)
 - [CopilotKit + AG-UI Milestone Status](ui_copilotkit_milestone_status.md)

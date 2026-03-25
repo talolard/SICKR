@@ -3,7 +3,7 @@
 import { useRenderTool } from "@copilotkit/react-core/v2";
 import { z } from "zod";
 
-import { createAnalysisFeedback } from "@/lib/api/threadDataClient";
+import { createRoomThreadAnalysisFeedback } from "@/lib/api/threadDataClient";
 
 import { RoomDetailDetailsFromPhotoToolRenderer } from "@/components/tooling/RoomDetailDetailsFromPhotoToolRenderer";
 import {
@@ -21,10 +21,12 @@ import { SegmentationToolRenderer } from "@/components/tooling/SegmentationToolR
 import { parseResult } from "@/lib/toolResultParsing";
 
 type UseImageAnalysisToolRenderersOptions = {
+  roomId?: string | null | undefined;
   threadId?: string | null | undefined;
 };
 
 export function useImageAnalysisToolRenderers({
+  roomId,
   threadId,
 }: UseImageAnalysisToolRenderersOptions): void {
   useRenderTool({
@@ -82,14 +84,15 @@ export function useImageAnalysisToolRenderers({
       }
       const parsed = parseSegmentationResult(result);
       if (parsed) {
-        const canPersistFeedback = Boolean(threadId) && Boolean(parsed.analysis_id);
+        const canPersistFeedback = Boolean(roomId) && Boolean(threadId) && Boolean(parsed.analysis_id);
         return (
           <SegmentationToolRenderer
             result={parsed}
             {...(canPersistFeedback
               ? {
                   onSubmitFeedback: async (payload) => {
-                    await createAnalysisFeedback({
+                    await createRoomThreadAnalysisFeedback({
+                      roomId: roomId as string,
                       threadId: threadId as string,
                       analysisId: parsed.analysis_id as string,
                       payload: {

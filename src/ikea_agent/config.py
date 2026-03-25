@@ -84,8 +84,6 @@ class AppSettings(BaseSettings):
     ikea_image_catalog_run_id: str | None = Field(default=None)
     feedback_capture_enabled: bool = Field(default=False)
     feedback_root_dir: str = Field(default="comments")
-    trace_capture_enabled: bool = Field(default=False)
-    trace_root_dir: str = Field(default="traces")
     default_query_limit: int = Field(default=25, ge=1, le=200)
 
     embedding_dimensions: int = Field(

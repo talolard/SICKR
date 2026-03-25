@@ -1,10 +1,11 @@
-"""Thread-scoped query repository for UI-facing persistence APIs."""
+"""Room-aware query repository for UI-facing persistence APIs."""
 
 from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
 from typing import Literal
+from typing import cast as typing_cast
 from uuid import uuid4
 
 from sqlalchemy import String, cast, func, select
@@ -16,7 +17,11 @@ from ikea_agent.chat_app.thread_api_models import (
     AssetListItem,
     KnownFactItem,
     ThreadDetailItem,
+    ThreadListItem,
+    ThreadTranscriptResponse,
 )
+from ikea_agent.chat_app.transcript_codec import serialize_thread_transcript
+from ikea_agent.persistence.context_fact_repository import ContextFactRepository
 from ikea_agent.persistence.models import (
     AgentRunRecord,
     AnalysisFeedbackRecord,
@@ -24,30 +29,28 @@ from ikea_agent.persistence.models import (
     AssetRecord,
     BundleProposalRecord,
     FloorPlanRevisionRecord,
-    RevealedPreferenceRecord,
+    RoomRecord,
     SearchRunRecord,
     ThreadRecord,
 )
+from ikea_agent.persistence.ownership import create_thread_record, require_room_record
+from ikea_agent.persistence.repository_helpers import (
+    resolve_existing_run_id,
+    touch_thread_activity,
+)
+from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.shared.types import (
     BundleProposalLineItem,
     BundleProposalToolResult,
     BundleValidationResult,
-    RevealedPreferenceKind,
+    RoomType,
 )
 
 AnalysisFeedbackKind = Literal["confirm", "reject", "uncertain"]
 
 
-def _parse_revealed_preference_kind(raw_kind: str) -> RevealedPreferenceKind:
-    """Validate persisted revealed-preference kinds before building API payloads."""
-
-    if raw_kind in ("constraint", "fact", "preference"):
-        return raw_kind
-    raise ValueError(f"Unknown revealed preference kind: {raw_kind}")
-
-
-def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, str]:
-    """Return readable display labels for floor-plan revision assets in one thread."""
+def _floor_plan_asset_labels(session: Session, *, room_id: str) -> dict[str, str]:
+    """Return readable display labels for floor-plan revision assets in one room."""
 
     rows = session.execute(
         select(
@@ -55,7 +58,7 @@ def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, s
             FloorPlanRevisionRecord.svg_asset_id,
             FloorPlanRevisionRecord.png_asset_id,
         )
-        .where(FloorPlanRevisionRecord.thread_id == thread_id)
+        .where(FloorPlanRevisionRecord.room_id == room_id)
         .order_by(FloorPlanRevisionRecord.revision.desc())
     ).all()
     labels: dict[str, str] = {}
@@ -69,22 +72,79 @@ def _floor_plan_asset_labels(session: Session, *, thread_id: str) -> dict[str, s
 
 
 class ThreadQueryRepository:
-    """Query and mutation helpers for thread data API routes."""
+    """Query and mutation helpers for room/thread data API routes."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 
-    def get_thread(self, *, thread_id: str) -> ThreadDetailItem | None:
+    def list_threads(self, *, room_id: str) -> list[ThreadListItem]:
+        """Return explicit room threads ordered newest-first."""
+
+        with self._session_factory() as session:
+            require_room_record(session, room_id=room_id)
+            rows = session.execute(
+                select(
+                    ThreadRecord.thread_id,
+                    ThreadRecord.title,
+                    ThreadRecord.status,
+                    cast(ThreadRecord.last_activity_at, String),
+                )
+                .where(ThreadRecord.room_id == room_id)
+                .order_by(ThreadRecord.last_activity_at.desc(), ThreadRecord.updated_at.desc())
+            ).all()
+        return [
+            ThreadListItem(
+                thread_id=str(row.thread_id),
+                room_id=room_id,
+                title=str(row.title) if row.title is not None else None,
+                status=str(row.status),
+                last_activity_at=(
+                    str(row.last_activity_at) if row.last_activity_at is not None else None
+                ),
+            )
+            for row in rows
+        ]
+
+    def create_thread(self, *, room_id: str, title: str | None) -> ThreadListItem:
+        """Create one explicit thread row for a room and return the picker item."""
+
+        now = datetime.now(UTC)
+        normalized_title = title.strip() or None if title is not None else None
+        thread_id = f"thread-{uuid4().hex[:24]}"
+        with self._session_factory() as session:
+            create_thread_record(
+                session,
+                room_id=room_id,
+                thread_id=thread_id,
+                now=now,
+                title=normalized_title,
+            )
+            session.commit()
+        return ThreadListItem(
+            thread_id=thread_id,
+            room_id=room_id,
+            title=normalized_title,
+            status="active",
+            last_activity_at=now.isoformat(),
+        )
+
+    def get_thread(self, *, room_id: str, thread_id: str) -> ThreadDetailItem | None:
         """Return one thread detail with aggregate child counts."""
 
         with self._session_factory() as session:
             row = session.execute(
                 select(
                     ThreadRecord.thread_id,
-                    ThreadRecord.title,
+                    ThreadRecord.title.label("thread_title"),
+                    ThreadRecord.room_id,
+                    RoomRecord.title.label("room_title"),
+                    RoomRecord.room_type.label("room_type"),
                     ThreadRecord.status,
                     cast(ThreadRecord.last_activity_at, String),
-                ).where(ThreadRecord.thread_id == thread_id)
+                )
+                .join(RoomRecord, RoomRecord.room_id == ThreadRecord.room_id)
+                .where(ThreadRecord.thread_id == thread_id)
+                .where(ThreadRecord.room_id == room_id)
             ).one_or_none()
             if row is None:
                 return None
@@ -98,30 +158,33 @@ class ThreadQueryRepository:
                 session=session,
                 statement=select(func.count())
                 .select_from(AssetRecord)
-                .where(AssetRecord.thread_id == thread_id),
+                .where(AssetRecord.room_id == str(row.room_id)),
             )
             floor_plan_revision_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(FloorPlanRevisionRecord)
-                .where(FloorPlanRevisionRecord.thread_id == thread_id),
+                .where(FloorPlanRevisionRecord.room_id == str(row.room_id)),
             )
             analysis_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(AnalysisRunRecord)
-                .where(AnalysisRunRecord.thread_id == thread_id),
+                .where(AnalysisRunRecord.room_id == str(row.room_id)),
             )
             search_count = _count_rows(
                 session=session,
                 statement=select(func.count())
                 .select_from(SearchRunRecord)
-                .where(SearchRunRecord.thread_id == thread_id),
+                .where(SearchRunRecord.room_id == str(row.room_id)),
             )
 
         return ThreadDetailItem(
             thread_id=str(row.thread_id),
-            title=str(row.title) if row.title is not None else None,
+            title=str(row.thread_title) if row.thread_title is not None else None,
+            room_id=str(row.room_id),
+            room_title=str(row.room_title),
+            room_type=typing_cast("RoomType | None", row.room_type),
             status=str(row.status),
             last_activity_at=(
                 str(row.last_activity_at) if row.last_activity_at is not None else None
@@ -133,11 +196,13 @@ class ThreadQueryRepository:
             search_count=search_count,
         )
 
-    def list_assets(self, *, thread_id: str) -> list[AssetListItem]:
-        """Return thread-linked assets ordered by creation time descending."""
+    def list_assets(self, *, room_id: str, thread_id: str) -> list[AssetListItem] | None:
+        """Return room-linked assets visible from one thread."""
 
         with self._session_factory() as session:
-            floor_plan_labels = _floor_plan_asset_labels(session, thread_id=thread_id)
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
+            floor_plan_labels = _floor_plan_asset_labels(session, room_id=room_id)
             rows = session.execute(
                 select(
                     AssetRecord.asset_id,
@@ -149,7 +214,7 @@ class ThreadQueryRepository:
                     AssetRecord.size_bytes,
                     cast(AssetRecord.created_at, String),
                 )
-                .where(AssetRecord.thread_id == thread_id)
+                .where(AssetRecord.room_id == room_id)
                 .order_by(AssetRecord.created_at.desc())
             ).all()
         return [
@@ -170,10 +235,17 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
-    def list_bundle_proposals(self, *, thread_id: str) -> list[BundleProposalToolResult]:
-        """Return persisted bundle proposals for one thread."""
+    def list_bundle_proposals(
+        self,
+        *,
+        room_id: str,
+        thread_id: str,
+    ) -> list[BundleProposalToolResult] | None:
+        """Return persisted bundle proposals visible from one thread."""
 
         with self._session_factory() as session:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
             rows = session.execute(
                 select(
                     BundleProposalRecord.bundle_id,
@@ -186,7 +258,7 @@ class ThreadQueryRepository:
                     BundleProposalRecord.validations_json,
                     cast(BundleProposalRecord.created_at, String),
                 )
-                .where(BundleProposalRecord.thread_id == thread_id)
+                .where(BundleProposalRecord.room_id == room_id)
                 .order_by(BundleProposalRecord.created_at.desc())
             ).all()
         return [
@@ -208,37 +280,54 @@ class ThreadQueryRepository:
             for item in rows
         ]
 
-    def list_known_facts(self, *, thread_id: str) -> list[KnownFactItem]:
-        """Return durable revealed facts/preferences for one thread."""
+    def list_known_facts(self, *, room_id: str, thread_id: str) -> list[KnownFactItem] | None:
+        """Return room/project facts visible from one thread."""
 
         with self._session_factory() as session:
-            rows = session.execute(
-                select(
-                    RevealedPreferenceRecord.revealed_preference_id,
-                    RevealedPreferenceRecord.kind,
-                    RevealedPreferenceRecord.summary,
-                    RevealedPreferenceRecord.source_message_text,
-                    cast(RevealedPreferenceRecord.updated_at, String),
-                    RevealedPreferenceRecord.run_id,
-                )
-                .where(RevealedPreferenceRecord.thread_id == thread_id)
-                .order_by(RevealedPreferenceRecord.updated_at.desc())
-            ).all()
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
+
+        rows = ContextFactRepository(self._session_factory).list_known_facts_for_thread(
+            thread_id=thread_id
+        )
         return [
             KnownFactItem(
-                memory_id=str(item.revealed_preference_id),
-                kind=_parse_revealed_preference_kind(str(item.kind)),
-                summary=str(item.summary),
-                source_message_text=str(item.source_message_text),
-                updated_at=str(item.updated_at) if item.updated_at is not None else "",
-                run_id=str(item.run_id) if item.run_id is not None else None,
+                fact_id=item.fact_id,
+                scope=item.scope,
+                kind=item.kind,
+                summary=item.summary,
+                source_message_text=item.source_message_text,
+                updated_at=item.updated_at,
+                run_id=item.run_id,
             )
             for item in rows
         ]
 
+    def get_transcript(
+        self,
+        *,
+        room_id: str,
+        thread_id: str,
+    ) -> ThreadTranscriptResponse | None:
+        """Return the canonical transcript payload for one room/thread pair."""
+
+        with self._session_factory() as session:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
+
+        messages = RunHistoryRepository(self._session_factory).load_message_history(
+            thread_id=thread_id
+        )
+        return ThreadTranscriptResponse(
+            room_id=room_id,
+            thread_id=thread_id,
+            messages=serialize_thread_transcript(messages),
+        )
+
     def create_analysis_feedback(
         self,
         *,
+        room_id: str,
         thread_id: str,
         analysis_id: str,
         feedback_kind: AnalysisFeedbackKind,
@@ -248,23 +337,26 @@ class ThreadQueryRepository:
         note: str | None,
         run_id: str | None,
     ) -> AnalysisFeedbackItem | None:
-        """Persist one analysis feedback row when the analysis exists for thread."""
+        """Persist one analysis feedback row when the analysis exists for the room."""
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
+            if not _thread_exists_in_room(session=session, room_id=room_id, thread_id=thread_id):
+                return None
             analysis_exists = session.execute(
                 select(AnalysisRunRecord.analysis_id)
-                .where(AnalysisRunRecord.thread_id == thread_id)
+                .where(AnalysisRunRecord.room_id == room_id)
                 .where(AnalysisRunRecord.analysis_id == analysis_id)
             ).scalar_one_or_none()
             if analysis_exists is None:
                 return None
-            persisted_run_id = _resolve_existing_run_id(session=session, run_id=run_id)
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             feedback_id = f"analysis-fbk-{uuid4().hex[:24]}"
             session.add(
                 AnalysisFeedbackRecord(
                     analysis_feedback_id=feedback_id,
                     analysis_id=analysis_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     run_id=persisted_run_id,
                     feedback_kind=feedback_kind,
@@ -275,6 +367,7 @@ class ThreadQueryRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
             return AnalysisFeedbackItem(
                 analysis_feedback_id=feedback_id,
@@ -295,19 +388,15 @@ def _count_rows(*, session: Session, statement: Select[tuple[int]]) -> int:
     return int(count_value)
 
 
-def _run_exists(*, session: Session, run_id: str) -> bool:
+def _thread_exists_in_room(*, session: Session, room_id: str, thread_id: str) -> bool:
     return (
         session.execute(
-            select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
+            select(ThreadRecord.thread_id)
+            .where(ThreadRecord.thread_id == thread_id)
+            .where(ThreadRecord.room_id == room_id)
         ).scalar_one_or_none()
         is not None
     )
-
-
-def _resolve_existing_run_id(*, session: Session, run_id: str | None) -> str | None:
-    if run_id is None:
-        return None
-    return run_id if _run_exists(session=session, run_id=run_id) else None
 
 
 def _as_bundle_items(value: object) -> list[BundleProposalLineItem]:

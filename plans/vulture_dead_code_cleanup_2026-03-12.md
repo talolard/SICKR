@@ -30,5 +30,4 @@ Reduce the repo's real dead-code surface without teaching Vulture the wrong less
 ## Keepers For This Task
 
 - `legacy/` support helpers still imported by reference-only scripts
-- `load_archived_all_messages_json`, which is documented as staged-but-not-exposed resume plumbing
 - Framework-defined model, ORM, and response-schema fields

@@ -6,11 +6,12 @@ usage() {
 Bootstrap a worktree with Dockerized dependencies and environment variables.
 
 Usage:
-  scripts/worktree/bootstrap.sh --slot <0-99> [--canonical-root <path>] [--skip-ui-install]
+  scripts/worktree/bootstrap.sh [--mode <full|docs>] [--slot <0-99>] [--canonical-root <path>] [--skip-ui-install]
 EOF
 }
 
 SLOT=""
+MODE="full"
 CANONICAL_ROOT=""
 SKIP_UI_INSTALL=0
 
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       SLOT="$2"
       shift 2
       ;;
+    --mode)
+      MODE="$2"
+      shift 2
+      ;;
     --canonical-root)
       CANONICAL_ROOT="$2"
       shift 2
@@ -55,13 +60,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${SLOT}" ]]; then
-  usage
+if [[ "${MODE}" != "full" && "${MODE}" != "docs" ]]; then
+  printf 'Mode must be one of: full, docs. Got: %s\n' "${MODE}" >&2
   exit 1
 fi
 
-if ! [[ "${SLOT}" =~ ^[0-9]+$ ]] || (( SLOT < 0 || SLOT > 99 )); then
-  printf 'Slot must be an integer between 0 and 99. Got: %s\n' "${SLOT}" >&2
+if [[ "${MODE}" == "full" ]]; then
+  if [[ -z "${SLOT}" ]]; then
+    usage
+    exit 1
+  fi
+  if ! [[ "${SLOT}" =~ ^[0-9]+$ ]] || (( SLOT < 0 || SLOT > 99 )); then
+    printf 'Slot must be an integer between 0 and 99. Got: %s\n' "${SLOT}" >&2
+    exit 1
+  fi
+fi
+
+if [[ "${MODE}" == "docs" && -n "${SLOT}" ]]; then
+  printf 'Docs mode does not use slots. Omit --slot.\n' >&2
   exit 1
 fi
 
@@ -73,12 +89,33 @@ if [[ -z "${WORKTREE_ROOT}" ]]; then
 fi
 
 if [[ -z "${CANONICAL_ROOT}" ]]; then
-  CANONICAL_ROOT="$(resolve_canonical_root "${WORKTREE_ROOT}")"
+  CANONICAL_ROOT="${WORKTREE_ROOT}"
 fi
+CANONICAL_ROOT="$(resolve_canonical_root "${CANONICAL_ROOT}")"
 
 cd "${WORKTREE_ROOT}"
 
 mkdir -p .tmp_untracked/runtime .tmp_untracked/artifacts .tmp_untracked/comments .tmp_untracked/traces
+
+WORKTREE_ENV="${WORKTREE_ROOT}/.tmp_untracked/worktree.env"
+
+if [[ "${MODE}" == "docs" ]]; then
+  cat > "${WORKTREE_ENV}" <<EOF
+export WORKTREE_BOOTSTRAP_MODE=docs
+export CANONICAL_ROOT=${CANONICAL_ROOT}
+export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
+export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
+export TRACE_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/traces
+EOF
+
+  cat <<EOF
+Bootstrapped worktree: ${WORKTREE_ROOT}
+Bootstrap mode: docs
+Environment file: ${WORKTREE_ENV}
+Runtime dependencies prepared: no
+EOF
+  exit 0
+fi
 
 if [[ ! -f ".env" ]]; then
   if [[ -f "${CANONICAL_ROOT}/.env" ]]; then
@@ -98,24 +135,33 @@ bash "${WORKTREE_ROOT}/scripts/worktree/deps.sh" up \
 
 BACKEND_PORT=$((8100 + SLOT))
 UI_PORT=$((3100 + SLOT))
-POSTGRES_PORT=$((15432 + SLOT))
-WORKTREE_ENV="${WORKTREE_ROOT}/.tmp_untracked/worktree.env"
+POSTGRES_RUNTIME_ENV="${WORKTREE_ROOT}/.tmp_untracked/docker-deps/postgres/runtime.env"
+if [[ ! -f "${POSTGRES_RUNTIME_ENV}" ]]; then
+  printf 'Shared Postgres runtime env was not written by deps bootstrap: %s\n' "${POSTGRES_RUNTIME_ENV}" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "${POSTGRES_RUNTIME_ENV}"
 
 cat > "${WORKTREE_ENV}" <<EOF
+export WORKTREE_BOOTSTRAP_MODE=full
 export AGENT_SLOT=${SLOT}
 export CANONICAL_ROOT=${CANONICAL_ROOT}
 export BACKEND_PORT=${BACKEND_PORT}
 export PORT=${BACKEND_PORT}
 export UI_PORT=${UI_PORT}
-export POSTGRES_HOST=127.0.0.1
+export POSTGRES_HOST=${POSTGRES_HOST}
 export POSTGRES_PORT=${POSTGRES_PORT}
-export POSTGRES_DB=ikea_agent
-export POSTGRES_USER=ikea
-export POSTGRES_PASSWORD=ikea
-export DATABASE_URL=postgresql+psycopg://ikea:ikea@127.0.0.1:${POSTGRES_PORT}/ikea_agent
+export POSTGRES_DB=${POSTGRES_DB}
+export POSTGRES_DB_NAME=${POSTGRES_DB_NAME}
+export POSTGRES_USER=${POSTGRES_USER}
+export POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+export DATABASE_URL=${DATABASE_URL}
+export SHARED_POSTGRES_ROOT=${SHARED_POSTGRES_ROOT}
+export SHARED_POSTGRES_TEMPLATE_DB=${SHARED_POSTGRES_TEMPLATE_DB}
 export ARTIFACT_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/artifacts
 export FEEDBACK_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/comments
-export TRACE_ROOT_DIR=${WORKTREE_ROOT}/.tmp_untracked/traces
 export PY_AG_UI_URL=http://127.0.0.1:${BACKEND_PORT}/ag-ui/
 EOF
 
@@ -127,9 +173,11 @@ fi
 
 cat <<EOF
 Bootstrapped worktree: ${WORKTREE_ROOT}
+Bootstrap mode: full
 Environment file: ${WORKTREE_ENV}
 Backend port: ${BACKEND_PORT}
 UI port: ${UI_PORT}
 Postgres port: ${POSTGRES_PORT}
+Postgres database: ${POSTGRES_DB}
 UI deps installed: $([[ "${SKIP_UI_INSTALL}" == "0" ]] && printf 'yes' || printf 'no (skipped)')
 EOF

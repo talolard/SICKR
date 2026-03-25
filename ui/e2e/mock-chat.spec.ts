@@ -238,93 +238,32 @@ test("keeps the home launcher coherent at narrower desktop widths", async ({ pag
   await expect(page.getByTestId("studio-showcase-left-rail")).toBeVisible();
   await expect(page.getByTestId("studio-showcase-right-rail")).toBeHidden();
 });
-
-test("opens save-trace dialog on the agent page and saves with recent traces", async ({ page }) => {
-  await page.route("**/api/traces/recent?limit=5", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        traces: [
-          {
-            trace_id: "trace-old",
-            title: "Earlier trace",
-            created_at: "2026-03-11T10:00:00Z",
-            directory: "/tmp/traces/trace-old",
-            markdown_path: "/tmp/traces/trace-old/report.md",
-          },
-        ],
-      }),
-    });
-  });
-  await page.route("**/api/traces", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        trace_id: "trace-new",
-        directory: "/tmp/traces/trace-new",
-        trace_json_path: "/tmp/traces/trace-new/trace.json",
-        markdown_path: "/tmp/traces/trace-new/report.md",
-        beads_epic_id: "epic-1",
-        beads_task_id: "epic-1.1",
-        status: "saved_and_linked",
-      }),
-    });
-  });
-
-  await page.goto("/agents/search");
-  await expect(page.getByLabel("Save current trace")).toBeVisible();
-  await page.getByLabel("Save current trace").click();
-  await expect(page.getByRole("heading", { name: "Recent traces" })).toBeVisible();
-  await expect(page.getByText("Earlier trace")).toBeVisible();
-  await page.getByLabel("Title").fill("Regression trace");
-  await page.getByRole("button", { name: "Save trace" }).click();
-  await expect(page.getByText(/Saved trace trace-new and created epic-1/)).toBeVisible();
-  await expect(page.getByText("/tmp/traces/trace-new")).toBeVisible();
-});
-
-test("shows partial-success save-trace messaging when Beads creation fails", async ({ page }) => {
-  await page.route("**/api/traces/recent?limit=5", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ traces: [] }),
-    });
-  });
-  await page.route("**/api/traces", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        trace_id: "trace-partial",
-        directory: "/tmp/traces/trace-partial",
-        trace_json_path: "/tmp/traces/trace-partial/trace.json",
-        markdown_path: "/tmp/traces/trace-partial/report.md",
-        status: "saved_without_beads",
-      }),
-    });
-  });
-
-  await page.goto("/agents/search");
-  await page.getByLabel("Save current trace").click();
-  await page.getByLabel("Title").fill("Regression partial trace");
-  await page.getByRole("button", { name: "Save trace" }).click();
-
-  await expect(
-    page.getByText(/Saved trace trace-partial at \/tmp\/traces\/trace-partial, but Beads creation did not complete\./),
-  ).toBeVisible();
-});
-
 test("keeps active-thread search pages compact and hides pass-state validations", async ({
   page,
 }) => {
   await page.addInitScript(seedSearchBundleStateScript());
-  await page.goto(`/agents/search?thread=${SEEDED_SEARCH_THREAD_ID}`);
+  await page.route("**/api/thread-data/rooms/room-dev-default/threads", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          thread_id: SEEDED_SEARCH_THREAD_ID,
+          room_id: "room-dev-default",
+          title: "Seeded search thread",
+          status: "active",
+          last_activity_at: SEEDED_BUNDLE_PROPOSAL.created_at,
+        },
+      ]),
+    });
+  });
+  await page.goto(`/agents/search?room=room-dev-default&thread=${SEEDED_SEARCH_THREAD_ID}`);
 
   await expect(page.getByRole("heading", { name: "Search" })).toBeVisible();
   await expect(page.getByText("Desk setup")).toBeVisible();
-  await expect(page.getByText("Find products that fit your style, budget, and room needs.")).toHaveCount(0);
+  await expect(
+    page.getByText("Find products that fit your style, budget, and room needs."),
+  ).toHaveCount(0);
 
   const threadDataDisclosure = page.locator("details", {
     has: page.getByText("Thread data"),

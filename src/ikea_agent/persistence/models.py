@@ -25,18 +25,82 @@ class Base(DeclarativeBase):
     """Declarative base for persistence models."""
 
 
+class UserRecord(Base):
+    """Application user/account owner."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("external_key", name="uq_users_external_key"),
+        {"schema": APP_SCHEMA},
+    )
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    external_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectRecord(Base):
+    """Top-level design project owned by one user."""
+
+    __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_user_id", "user_id"),
+        UniqueConstraint("user_id", "title", name="uq_projects_user_title"),
+        {"schema": APP_SCHEMA},
+    )
+
+    project_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.users.user_id"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RoomRecord(Base):
+    """One room within a project."""
+
+    __tablename__ = "rooms"
+    __table_args__ = (
+        Index("ix_rooms_project_id", "project_id"),
+        UniqueConstraint("project_id", "title", name="uq_rooms_project_title"),
+        {"schema": APP_SCHEMA},
+    )
+
+    room_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.projects.project_id"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    room_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ThreadRecord(Base):
-    """Top-level thread metadata, including user-facing title."""
+    """Conversation thread metadata bound to one room."""
 
     __tablename__ = "threads"
     __table_args__ = (
-        Index("ix_threads_owner_id", "owner_id"),
-        Index("ix_threads_last_activity_at", "last_activity_at"),
+        Index("ix_threads_room_activity", "room_id", "last_activity_at", "updated_at"),
         {"schema": APP_SCHEMA},
     )
 
     thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -69,22 +133,34 @@ class AgentRunRecord(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class MessageArchiveRecord(Base):
-    """Raw AG-UI/PydanticAI message archive blobs for optional exact replay."""
+class ThreadMessageSegmentRecord(Base):
+    """Canonical PydanticAI message batches appended to one thread."""
 
-    __tablename__ = "message_archives"
-    __table_args__ = ({"schema": APP_SCHEMA},)
+    __tablename__ = "thread_message_segments"
+    __table_args__ = (
+        Index("ix_thread_message_segments_thread_id", "thread_id"),
+        UniqueConstraint("run_id", name="uq_thread_message_segments_run_id"),
+        UniqueConstraint(
+            "thread_id",
+            "sequence_no",
+            name="uq_thread_message_segments_thread_sequence",
+        ),
+        {"schema": APP_SCHEMA},
+    )
 
+    thread_message_segment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        nullable=False,
+    )
     run_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
-        primary_key=True,
+        nullable=False,
     )
-    archive_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    agui_input_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    agui_event_trace_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pydantic_all_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pydantic_new_messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sequence_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    messages_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -93,6 +169,7 @@ class AssetRecord(Base):
 
     __tablename__ = "assets"
     __table_args__ = (
+        Index("ix_assets_room_id", "room_id"),
         Index("ix_assets_thread_id", "thread_id"),
         Index("ix_assets_run_id", "run_id"),
         Index("ix_assets_sha256", "sha256"),
@@ -100,6 +177,11 @@ class AssetRecord(Base):
     )
 
     asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -127,11 +209,21 @@ class FloorPlanRevisionRecord(Base):
 
     __tablename__ = "floor_plan_revisions"
     __table_args__ = (
+        UniqueConstraint(
+            "room_id",
+            "revision",
+            name="uq_floor_plan_revisions_room_revision",
+        ),
         Index("ix_floor_plan_revisions_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
 
     floor_plan_revision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -162,16 +254,22 @@ class FloorPlanRevisionRecord(Base):
 
 
 class Room3DAssetRecord(Base):
-    """Thread-scoped OpenUSD asset bindings for room-scene workflows."""
+    """Room-owned OpenUSD asset bindings for room-scene workflows."""
 
     __tablename__ = "room_3d_assets"
     __table_args__ = (
+        Index("ix_room_3d_assets_room_id", "room_id"),
         Index("ix_room_3d_assets_thread_id", "thread_id"),
         Index("ix_room_3d_assets_source_asset_id", "source_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     room_3d_asset_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -193,16 +291,22 @@ class Room3DAssetRecord(Base):
 
 
 class Room3DSnapshotRecord(Base):
-    """Persisted 3D camera snapshots and linked metadata for one thread."""
+    """Persisted 3D camera snapshots and linked metadata for one room."""
 
     __tablename__ = "room_3d_snapshots"
     __table_args__ = (
+        Index("ix_room_3d_snapshots_room_id", "room_id"),
         Index("ix_room_3d_snapshots_thread_id", "thread_id"),
         Index("ix_room_3d_snapshots_snapshot_asset_id", "snapshot_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     room_3d_snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -234,12 +338,18 @@ class AnalysisRunRecord(Base):
 
     __tablename__ = "analysis_runs"
     __table_args__ = (
+        Index("ix_analysis_runs_room_id", "room_id"),
         Index("ix_analysis_runs_thread_id", "thread_id"),
         Index("ix_analysis_runs_input_asset_id", "input_asset_id"),
         {"schema": APP_SCHEMA},
     )
 
     analysis_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -320,6 +430,7 @@ class AnalysisFeedbackRecord(Base):
     __tablename__ = "analysis_feedback"
     __table_args__ = (
         Index("ix_analysis_feedback_analysis_id", "analysis_id"),
+        Index("ix_analysis_feedback_room_id", "room_id"),
         Index("ix_analysis_feedback_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
@@ -328,6 +439,11 @@ class AnalysisFeedbackRecord(Base):
     analysis_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.analysis_runs.analysis_id"),
+        nullable=False,
+    )
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
         nullable=False,
     )
     thread_id: Mapped[str] = mapped_column(
@@ -353,11 +469,17 @@ class SearchRunRecord(Base):
 
     __tablename__ = "search_runs"
     __table_args__ = (
+        Index("ix_search_runs_room_id", "room_id"),
         Index("ix_search_runs_thread_id", "thread_id"),
         {"schema": APP_SCHEMA},
     )
 
     search_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -404,16 +526,22 @@ class SearchResultRecord(Base):
 
 
 class BundleProposalRecord(Base):
-    """Persisted search bundle proposal payloads keyed by thread and run."""
+    """Persisted room-scoped search bundle proposal payloads with provenance."""
 
     __tablename__ = "bundle_proposals"
     __table_args__ = (
+        Index("ix_bundle_proposals_room_id", "room_id"),
         Index("ix_bundle_proposals_thread_id", "thread_id"),
         Index("ix_bundle_proposals_run_id", "run_id"),
         {"schema": APP_SCHEMA},
     )
 
     bundle_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
     thread_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
@@ -433,26 +561,62 @@ class BundleProposalRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class RevealedPreferenceRecord(Base):
-    """Thread-scoped durable preference memory captured from conversation."""
+class RoomFactRecord(Base):
+    """Room-scoped durable fact memory captured from conversation."""
 
-    __tablename__ = "revealed_preferences"
+    __tablename__ = "room_facts"
     __table_args__ = (
-        Index("ix_revealed_preferences_thread_id", "thread_id"),
-        Index("ix_revealed_preferences_run_id", "run_id"),
+        Index("ix_room_facts_room_id", "room_id"),
+        Index("ix_room_facts_run_id", "run_id"),
         UniqueConstraint(
-            "thread_id",
+            "room_id",
             "signal_key",
             "value",
-            name="uq_revealed_preferences_thread_signal_value",
+            name="uq_room_facts_room_signal_value",
         ),
         {"schema": APP_SCHEMA},
     )
 
-    revealed_preference_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    thread_id: Mapped[str] = mapped_column(
+    room_fact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    room_id: Mapped[str] = mapped_column(
         String(64),
-        ForeignKey(f"{APP_SCHEMA}.threads.thread_id"),
+        ForeignKey(f"{APP_SCHEMA}.rooms.room_id"),
+        nullable=False,
+    )
+    run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.agent_runs.run_id"),
+        nullable=True,
+    )
+    signal_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[str] = mapped_column(String(128), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_message_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectFactRecord(Base):
+    """Project-scoped durable fact memory captured from conversation."""
+
+    __tablename__ = "project_facts"
+    __table_args__ = (
+        Index("ix_project_facts_project_id", "project_id"),
+        Index("ix_project_facts_run_id", "run_id"),
+        UniqueConstraint(
+            "project_id",
+            "signal_key",
+            "value",
+            name="uq_project_facts_project_signal_value",
+        ),
+        {"schema": APP_SCHEMA},
+    )
+
+    project_fact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey(f"{APP_SCHEMA}.projects.project_id"),
         nullable=False,
     )
     run_id: Mapped[str | None] = mapped_column(
@@ -489,12 +653,6 @@ def _ensure_optional_columns(engine: Engine) -> None:
         table_name="agent_runs",
         column_name="agent_name",
         column_sql="VARCHAR",
-    )
-    _ensure_column(
-        engine,
-        table_name="message_archives",
-        column_name="agui_event_trace_json",
-        column_sql="TEXT",
     )
 
 

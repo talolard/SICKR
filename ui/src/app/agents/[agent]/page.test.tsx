@@ -16,10 +16,9 @@ const {
   useCopilotMessagesContextMock,
   fetchAgentsMock,
   fetchAgentMetadataMock,
-  listThreadKnownFactsMock,
-  listThreadBundleProposalsMock,
-  loadThreadSnapshotMock,
-  saveThreadSnapshotMock,
+  listRoomThreadKnownFactsMock,
+  listRoomThreadBundleProposalsMock,
+  listRoomThreadMessagesMock,
   loadFloorPlanPreviewMock,
   saveFloorPlanPreviewMock,
   setAgentStateMock,
@@ -34,10 +33,9 @@ const {
   useCopilotMessagesContextMock: vi.fn(),
   fetchAgentsMock: vi.fn<() => Promise<AgentItem[]>>(),
   fetchAgentMetadataMock: vi.fn<(agent: string) => Promise<AgentMetadata>>(),
-  listThreadKnownFactsMock: vi.fn<() => Promise<unknown[]>>(async () => []),
-  listThreadBundleProposalsMock: vi.fn<() => Promise<unknown[]>>(async () => []),
-  loadThreadSnapshotMock: vi.fn(),
-  saveThreadSnapshotMock: vi.fn(),
+  listRoomThreadKnownFactsMock: vi.fn<() => Promise<unknown[]>>(async () => []),
+  listRoomThreadBundleProposalsMock: vi.fn<() => Promise<unknown[]>>(async () => []),
+  listRoomThreadMessagesMock: vi.fn<() => Promise<unknown[]>>(async () => []),
   loadFloorPlanPreviewMock: vi.fn(() => null),
   saveFloorPlanPreviewMock: vi.fn(),
   setAgentStateMock: vi.fn(),
@@ -83,8 +81,9 @@ vi.mock("@/lib/agents", () => ({
 }));
 
 vi.mock("@/lib/api/threadDataClient", () => ({
-  listThreadKnownFacts: listThreadKnownFactsMock,
-  listThreadBundleProposals: listThreadBundleProposalsMock,
+  listRoomThreadKnownFacts: listRoomThreadKnownFactsMock,
+  listRoomThreadBundleProposals: listRoomThreadBundleProposalsMock,
+  listRoomThreadMessages: listRoomThreadMessagesMock,
   ThreadDataRequestError: class ThreadDataRequestError extends Error {
     status: number;
 
@@ -93,11 +92,6 @@ vi.mock("@/lib/api/threadDataClient", () => ({
       this.status = status;
     }
   },
-}));
-
-vi.mock("@/lib/threadStore", () => ({
-  loadThreadSnapshot: loadThreadSnapshotMock,
-  saveThreadSnapshot: saveThreadSnapshotMock,
 }));
 
 vi.mock("@/lib/floorPlanPreviewStore", () => ({
@@ -114,8 +108,14 @@ vi.mock("@/components/navigation/AppNavBanner", () => ({
 }));
 
 vi.mock("@/components/thread/ThreadDataPanel", () => ({
-  ThreadDataPanel: ({ threadId }: { threadId: string }): ReactElement => (
-    <div data-testid="thread-data-panel">{threadId}</div>
+  ThreadDataPanel: ({
+    roomId,
+    threadId,
+  }: {
+    roomId: string;
+    threadId: string;
+  }): ReactElement => (
+    <div data-testid="thread-data-panel">{`${roomId}:${threadId}`}</div>
   ),
 }));
 
@@ -125,14 +125,6 @@ vi.mock("@/components/search/SearchBundlePanel", () => ({
 
 vi.mock("@/components/copilotkit/AgentChatSidebar", () => ({
   AgentChatSidebar: (): ReactElement => <div data-testid="agent-chat-sidebar" />,
-}));
-
-vi.mock("@/components/trace/SaveTraceButton", () => ({
-  SaveTraceButton: (): ReactElement => <button type="button">Save trace</button>,
-}));
-
-vi.mock("@/components/trace/SaveTraceDialog", () => ({
-  SaveTraceDialog: (): ReactElement => <div data-testid="save-trace-dialog" />,
 }));
 
 vi.mock("@/components/attachments/AgentImageAttachmentPanel", () => ({
@@ -161,9 +153,11 @@ vi.mock("@/components/attachments/AgentImageAttachmentPanel", () => ({
 
 vi.mock("@/components/copilotkit/CopilotToolRenderers", () => ({
   CopilotToolRenderers: ({
+    roomId,
     threadId,
     onFloorPlanRendered,
   }: {
+    roomId?: string | null;
     threadId?: string | null;
     onFloorPlanRendered?: (snapshot: {
       caption: string;
@@ -177,7 +171,7 @@ vi.mock("@/components/copilotkit/CopilotToolRenderers", () => ({
     }) => void;
   }): ReactElement => {
     const didPublishRef = useRef(false);
-    copilotToolRendererPropsMock({ threadId });
+    copilotToolRendererPropsMock({ roomId, threadId });
 
     useEffect(() => {
       if (didPublishRef.current) {
@@ -230,11 +224,14 @@ describe("AgentChatPage", () => {
       tools: [],
       notes: "",
     }));
-    listThreadKnownFactsMock.mockResolvedValue([]);
-    listThreadBundleProposalsMock.mockResolvedValue([]);
+    listRoomThreadKnownFactsMock.mockResolvedValue([]);
+    listRoomThreadBundleProposalsMock.mockResolvedValue([]);
+    listRoomThreadMessagesMock.mockResolvedValue([{ id: "persisted-message" }]);
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-1",
       threadIds: ["thread-1"],
       warning: null,
@@ -252,28 +249,21 @@ describe("AgentChatPage", () => {
       messages: [{ id: "live-message" }],
       setMessages: setMessagesMock,
     });
-    loadThreadSnapshotMock.mockReturnValue({
-      threadId: "thread-1",
-      prompt: "prompt",
-      assistantText: "assistant",
-      toolCallsById: {},
-      attachments: [],
-      copilotMessages: [{ id: "snapshot-message" }],
-    });
     loadFloorPlanPreviewMock.mockReturnValue(null);
     setAgentStateMock.mockReset();
     setMessagesMock.mockReset();
-    saveThreadSnapshotMock.mockReset();
     saveFloorPlanPreviewMock.mockReset();
     copilotToolRendererPropsMock.mockReset();
     routerPushMock.mockReset();
   });
 
-  it("rehydrates thread messages and renders the search-specific shell without attachment panels", async () => {
+  it("hydrates thread messages from the backend and renders the search-specific shell without attachment panels", async () => {
     useParamsMock.mockReturnValue({ agent: "search" });
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-1",
       threadIds: ["thread-1"],
       warning: null,
@@ -290,20 +280,27 @@ describe("AgentChatPage", () => {
     expect(screen.queryByTestId("floor-plan-preview")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(setMessagesMock).toHaveBeenCalledWith([{ id: "snapshot-message" }]);
+      expect(listRoomThreadMessagesMock).toHaveBeenCalledWith("room-dev-default", "thread-1");
+    });
+    await waitFor(() => {
+      expect(setMessagesMock).toHaveBeenCalledWith([{ id: "persisted-message" }]);
     });
     await waitFor(() => {
       expect(setAgentStateMock).toHaveBeenCalledWith(
         expect.objectContaining({
           existing: true,
-          session_id: "thread-1",
+          session_id: "session-browser",
+          room_id: "room-dev-default",
           thread_id: "thread-1",
           attachments: [],
           bundle_proposals: [],
         }),
       );
     });
-    expect(copilotToolRendererPropsMock).toHaveBeenCalledWith({ threadId: "thread-1" });
+    expect(copilotToolRendererPropsMock).toHaveBeenCalledWith({
+      roomId: "room-dev-default",
+      threadId: "thread-1",
+    });
   });
 
   it("renders the floor-plan shell and wires uploaded attachments into the agent state", async () => {
@@ -311,6 +308,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_floor_plan_intake",
       agentName: "floor_plan_intake",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-floor-plan",
       threadIds: ["thread-floor-plan"],
       warning: null,
@@ -329,6 +328,8 @@ describe("AgentChatPage", () => {
     await waitFor(() => {
       expect(setAgentStateMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          session_id: "session-browser",
+          room_id: "room-dev-default",
           thread_id: "thread-floor-plan",
           attachments: [
             expect.objectContaining({
@@ -352,6 +353,7 @@ describe("AgentChatPage", () => {
       }),
     );
     expect(copilotToolRendererPropsMock).toHaveBeenCalledWith({
+      roomId: "room-dev-default",
       threadId: "thread-floor-plan",
     });
   });
@@ -376,6 +378,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: null,
       threadIds: [],
       warning: null,
@@ -400,6 +404,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_image_analysis",
       agentName: "image_analysis",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-image",
       threadIds: ["thread-image"],
       warning: null,
@@ -422,6 +428,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_search",
       agentName: "search",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-warning",
       threadIds: ["thread-warning"],
       warning: "archived-thread is not available",
@@ -441,6 +449,8 @@ describe("AgentChatPage", () => {
     useThreadSessionMock.mockReturnValue({
       agentKey: "agent_not_real",
       agentName: "not_real",
+      roomId: "room-dev-default",
+      sessionId: "session-browser",
       threadId: "thread-unknown",
       threadIds: ["thread-unknown"],
       warning: null,

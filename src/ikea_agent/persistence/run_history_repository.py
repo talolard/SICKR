@@ -1,16 +1,21 @@
-"""Persistence helpers for AG-UI run lifecycle and message archives."""
+"""Persistence helpers for AG-UI run lifecycle state."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import Text, select, update
-from sqlalchemy import cast as sa_cast
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from ikea_agent.persistence.models import AgentRunRecord, MessageArchiveRecord, ThreadRecord
+from ikea_agent.persistence.models import AgentRunRecord, ThreadMessageSegmentRecord
+from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    lock_thread_row,
+    touch_thread_activity,
+)
 
 
 def _utcnow() -> datetime:
@@ -18,7 +23,7 @@ def _utcnow() -> datetime:
 
 
 class RunHistoryRepository:
-    """Repository for persisting run lifecycle and archived messages."""
+    """Repository for canonical thread transcript and run lifecycle state."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -26,37 +31,22 @@ class RunHistoryRepository:
     def record_run_start(
         self,
         *,
+        room_id: str,
         thread_id: str,
         run_id: str,
         agent_name: str | None,
         parent_run_id: str | None,
         user_prompt_text: str | None,
-        agui_input_messages_json: str | None,
     ) -> None:
         """Create/update thread and run rows at AG-UI request start."""
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_thread_id = session.execute(
-                select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-            ).scalar_one_or_none()
-            if existing_thread_id is None:
-                thread = ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-                session.add(thread)
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
 
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            existing_run = session.get(AgentRunRecord, run_id)
+            if existing_run is None:
                 run = AgentRunRecord(
                     run_id=run_id,
                     thread_id=thread_id,
@@ -70,134 +60,46 @@ class RunHistoryRepository:
                 )
                 session.add(run)
             else:
-                session.execute(
-                    update(AgentRunRecord)
-                    .where(AgentRunRecord.run_id == run_id)
-                    .values(
-                        thread_id=thread_id,
-                        parent_run_id=parent_run_id,
-                        agent_name=agent_name,
-                        status="started",
-                        user_prompt_text=user_prompt_text,
-                        error_message=None,
-                        started_at=now,
-                        ended_at=None,
-                    )
-                )
+                existing_run.thread_id = thread_id
+                existing_run.parent_run_id = parent_run_id
+                existing_run.agent_name = agent_name
+                existing_run.status = "started"
+                existing_run.user_prompt_text = user_prompt_text
+                existing_run.error_message = None
+                existing_run.started_at = now
+                existing_run.ended_at = None
 
-            if agui_input_messages_json is not None:
-                existing_archive_run_id = session.execute(
-                    select(MessageArchiveRecord.run_id).where(MessageArchiveRecord.run_id == run_id)
-                ).scalar_one_or_none()
-                if existing_archive_run_id is None:
-                    archive = MessageArchiveRecord(
-                        run_id=run_id,
-                        archive_version=1,
-                        agui_input_messages_json=agui_input_messages_json,
-                        agui_event_trace_json=None,
-                        pydantic_all_messages_json=None,
-                        pydantic_new_messages_json=None,
-                        created_at=now,
-                    )
-                    session.add(archive)
-                else:
-                    session.execute(
-                        update(MessageArchiveRecord)
-                        .where(MessageArchiveRecord.run_id == run_id)
-                        .values(agui_input_messages_json=agui_input_messages_json)
-                    )
-
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
     def record_run_complete(
         self,
         *,
         run_id: str,
-        pydantic_all_messages_json: bytes | None,
-        pydantic_new_messages_json: bytes | None,
+        new_messages_json: bytes | None = None,
     ) -> None:
-        """Mark run completed and persist message archive payloads."""
+        """Mark one run as completed."""
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            run = session.get(AgentRunRecord, run_id)
+            if run is None:
                 session.commit()
                 return
+            lock_thread_row(session, thread_id=run.thread_id)
+            self._upsert_thread_message_segment(
+                session,
+                run_id=run_id,
+                thread_id=run.thread_id,
+                new_messages_json=new_messages_json,
+                now=now,
+            )
             session.execute(
                 update(AgentRunRecord)
                 .where(AgentRunRecord.run_id == run_id)
                 .values(status="completed", ended_at=now, error_message=None)
             )
-
-            existing_archive_run_id = session.execute(
-                select(MessageArchiveRecord.run_id).where(MessageArchiveRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_archive_run_id is None:
-                archive = MessageArchiveRecord(
-                    run_id=run_id,
-                    archive_version=1,
-                    agui_input_messages_json=None,
-                    agui_event_trace_json=None,
-                    pydantic_all_messages_json=(
-                        pydantic_all_messages_json.decode("utf-8")
-                        if pydantic_all_messages_json is not None
-                        else None
-                    ),
-                    pydantic_new_messages_json=(
-                        pydantic_new_messages_json.decode("utf-8")
-                        if pydantic_new_messages_json is not None
-                        else None
-                    ),
-                    created_at=now,
-                )
-                session.add(archive)
-            else:
-                update_values: dict[str, str] = {}
-                if pydantic_all_messages_json is not None:
-                    update_values["pydantic_all_messages_json"] = pydantic_all_messages_json.decode(
-                        "utf-8"
-                    )
-                if pydantic_new_messages_json is not None:
-                    update_values["pydantic_new_messages_json"] = pydantic_new_messages_json.decode(
-                        "utf-8"
-                    )
-                if update_values:
-                    session.execute(
-                        update(MessageArchiveRecord)
-                        .where(MessageArchiveRecord.run_id == run_id)
-                        .values(**update_values)
-                    )
-
-            session.commit()
-
-    def record_run_event_trace(self, *, run_id: str, agui_event_trace_json: str) -> None:
-        """Persist canonical outbound AG-UI event trace for one run."""
-
-        now = _utcnow()
-        with self._session_factory() as session:
-            existing_archive_run_id = session.execute(
-                select(MessageArchiveRecord.run_id).where(MessageArchiveRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_archive_run_id is None:
-                archive = MessageArchiveRecord(
-                    run_id=run_id,
-                    archive_version=1,
-                    agui_input_messages_json=None,
-                    agui_event_trace_json=agui_event_trace_json,
-                    pydantic_all_messages_json=None,
-                    pydantic_new_messages_json=None,
-                    created_at=now,
-                )
-                session.add(archive)
-            else:
-                session.execute(
-                    update(MessageArchiveRecord)
-                    .where(MessageArchiveRecord.run_id == run_id)
-                    .values(agui_event_trace_json=agui_event_trace_json)
-                )
+            touch_thread_activity(session, thread_id=run.thread_id, now=now)
             session.commit()
 
     def record_run_failed(self, *, run_id: str, error_message: str) -> None:
@@ -205,10 +107,8 @@ class RunHistoryRepository:
 
         now = _utcnow()
         with self._session_factory() as session:
-            existing_run_id = session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-            if existing_run_id is None:
+            run = session.get(AgentRunRecord, run_id)
+            if run is None:
                 session.commit()
                 return
             session.execute(
@@ -216,85 +116,80 @@ class RunHistoryRepository:
                 .where(AgentRunRecord.run_id == run_id)
                 .values(status="failed", ended_at=now, error_message=error_message)
             )
+            touch_thread_activity(session, thread_id=run.thread_id, now=now)
             session.commit()
 
-    def load_archived_all_messages_json(self, *, run_id: str) -> str | None:
-        """Return persisted full-message archive json for one run."""
+    def load_message_history(self, *, thread_id: str) -> list[ModelMessage]:
+        """Load the canonical ordered PydanticAI history for one thread."""
 
         with self._session_factory() as session:
-            return session.execute(
-                select(MessageArchiveRecord.pydantic_all_messages_json).where(
-                    MessageArchiveRecord.run_id == run_id
-                )
-            ).scalar_one_or_none()
+            encoded_segments = session.execute(
+                select(ThreadMessageSegmentRecord.messages_json)
+                .where(ThreadMessageSegmentRecord.thread_id == thread_id)
+                .order_by(ThreadMessageSegmentRecord.sequence_no)
+            ).scalars()
+            history: list[ModelMessage] = []
+            for encoded_segment in encoded_segments:
+                history.extend(self._decode_messages_json(encoded_segment))
+            return history
 
-    def list_thread_run_history(
+    def _upsert_thread_message_segment(
         self,
+        session: Session,
         *,
+        run_id: str,
         thread_id: str,
-        agent_name: str | None = None,
-        limit: int = 200,
-    ) -> list[ThreadRunHistoryEntry]:
-        """Return run/message-archive history rows for one thread ordered by start time."""
+        new_messages_json: bytes | None,
+        now: datetime,
+    ) -> None:
+        if new_messages_json is None:
+            return
 
-        with self._session_factory() as session:
-            query = (
-                select(
-                    AgentRunRecord.run_id,
-                    AgentRunRecord.parent_run_id,
-                    AgentRunRecord.agent_name,
-                    AgentRunRecord.status,
-                    AgentRunRecord.user_prompt_text,
-                    sa_cast(AgentRunRecord.started_at, Text),
-                    sa_cast(AgentRunRecord.ended_at, Text),
-                    MessageArchiveRecord.agui_input_messages_json,
-                    MessageArchiveRecord.agui_event_trace_json,
-                    MessageArchiveRecord.pydantic_all_messages_json,
-                    MessageArchiveRecord.pydantic_new_messages_json,
+        messages = self._decode_messages_json(new_messages_json)
+        if not messages:
+            return
+
+        serialized_messages = new_messages_json.decode("utf-8")
+        existing_segment = session.execute(
+            select(
+                ThreadMessageSegmentRecord.thread_message_segment_id,
+                ThreadMessageSegmentRecord.sequence_no,
+            ).where(ThreadMessageSegmentRecord.run_id == run_id)
+        ).one_or_none()
+        if existing_segment is None:
+            next_sequence = self._next_thread_sequence(session, thread_id=thread_id)
+            session.add(
+                ThreadMessageSegmentRecord(
+                    thread_message_segment_id=f"msgseg-{uuid4().hex[:20]}",
+                    thread_id=thread_id,
+                    run_id=run_id,
+                    sequence_no=next_sequence,
+                    messages_json=serialized_messages,
+                    created_at=now,
                 )
-                .outerjoin(
-                    MessageArchiveRecord, MessageArchiveRecord.run_id == AgentRunRecord.run_id
-                )
-                .where(AgentRunRecord.thread_id == thread_id)
             )
-            if agent_name is not None:
-                query = query.where(AgentRunRecord.agent_name == agent_name)
-            rows = session.execute(
-                query.order_by(AgentRunRecord.started_at.asc()).limit(limit)
-            ).all()
-        return [
-            ThreadRunHistoryEntry(
-                run_id=row.run_id,
-                parent_run_id=row.parent_run_id,
-                agent_name=row.agent_name,
-                status=row.status,
-                user_prompt_text=row.user_prompt_text,
-                started_at=row.started_at,
-                ended_at=row.ended_at,
-                agui_input_messages_json=row.agui_input_messages_json,
-                agui_event_trace_json=row.agui_event_trace_json,
-                pydantic_all_messages_json=row.pydantic_all_messages_json,
-                pydantic_new_messages_json=row.pydantic_new_messages_json,
+            return
+
+        session.execute(
+            update(ThreadMessageSegmentRecord)
+            .where(
+                ThreadMessageSegmentRecord.thread_message_segment_id
+                == existing_segment.thread_message_segment_id
             )
-            for row in rows
-        ]
+            .values(messages_json=serialized_messages)
+        )
 
+    def _next_thread_sequence(self, session: Session, *, thread_id: str) -> int:
+        current_max = session.execute(
+            select(func.max(ThreadMessageSegmentRecord.sequence_no)).where(
+                ThreadMessageSegmentRecord.thread_id == thread_id
+            )
+        ).scalar_one_or_none()
+        return int(current_max or 0) + 1
 
-@dataclass(frozen=True, slots=True)
-class ThreadRunHistoryEntry:
-    """One thread-scoped run row with optional message archives."""
-
-    run_id: str
-    parent_run_id: str | None
-    agent_name: str | None
-    status: str
-    user_prompt_text: str | None
-    started_at: str
-    ended_at: str | None
-    agui_input_messages_json: str | None
-    agui_event_trace_json: str | None
-    pydantic_all_messages_json: str | None
-    pydantic_new_messages_json: str | None
+    def _decode_messages_json(self, messages_json: bytes | str) -> list[ModelMessage]:
+        decoded_messages = ModelMessagesTypeAdapter.validate_json(messages_json)
+        return list(decoded_messages)
 
 
 def extract_last_user_prompt(messages: list[dict[str, Any]]) -> str | None:

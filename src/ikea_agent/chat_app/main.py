@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from logging import getLogger
 from pathlib import Path
 from typing import cast
 
@@ -26,21 +25,16 @@ from ikea_agent.chat_app.routes import (
     _build_attachment_store,
     _register_agent_catalog_routes,
     _register_attachment_routes,
-    _register_trace_routes,
 )
 from ikea_agent.chat_app.thread_routes import _register_thread_data_routes
-from ikea_agent.chat_app.trace_reports import TraceReportWriter
-from ikea_agent.config import AppSettings, get_settings
-from ikea_agent.integrations.beads_cli import BeadsTraceIssueCreator
+from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire, instrument_fastapi_app
 from ikea_agent.persistence.asset_repository import AssetRepository
-from ikea_agent.persistence.models import ensure_persistence_schema
-from ikea_agent.persistence.revealed_preference_repository import RevealedPreferenceRepository
+from ikea_agent.persistence.context_fact_repository import ContextFactRepository
+from ikea_agent.persistence.ownership import ensure_default_dev_hierarchy_for_session_factory
 from ikea_agent.persistence.run_history_repository import RunHistoryRepository
 from ikea_agent.persistence.thread_query_repository import ThreadQueryRepository
-
-logger = getLogger(__name__)
 
 
 def _build_agents(catalog: list[AgentCatalogItem]) -> dict[str, Agent[object, str]]:
@@ -87,54 +81,6 @@ def _build_web_apps(
     }
 
 
-def _initialize_runtime_schema(
-    *,
-    chat_runtime: ChatRuntime,
-    settings: AppSettings,
-) -> None:
-    """Apply local-only schema bootstrap helpers without masking deploy drift."""
-
-    if not hasattr(chat_runtime, "sqlalchemy_engine"):
-        return
-    engine = chat_runtime.sqlalchemy_engine
-    if engine.dialect.name == "sqlite":
-        ensure_persistence_schema(engine)
-        return
-    logger.info(
-        "postgres_schema_autobootstrap_disabled",
-        extra={
-            "database_dialect": engine.dialect.name,
-            "environment": settings.runtime_environment,
-            "release_version": settings.release_version,
-        },
-    )
-
-
-def _log_backend_startup(
-    *,
-    settings: AppSettings,
-    catalog: list[AgentCatalogItem],
-    mount_ag_ui: bool,
-    mount_web_ui: bool,
-) -> None:
-    """Emit the deploy-relevant startup summary once the app graph is wired."""
-
-    logger.info(
-        "backend_app_startup_configured",
-        extra={
-            "agent_count": len(catalog),
-            "database_pool_mode": settings.database_pool_mode,
-            "environment": settings.runtime_environment,
-            "feedback_capture_enabled": settings.feedback_capture_enabled,
-            "image_serving_strategy": settings.image_serving_strategy,
-            "mount_ag_ui": mount_ag_ui,
-            "mount_web_ui": mount_web_ui,
-            "release_version": settings.release_version,
-            "trace_capture_enabled": settings.trace_capture_enabled,
-        },
-    )
-
-
 def create_app(
     runtime: ChatRuntime | None = None,
     *,
@@ -149,7 +95,8 @@ def create_app(
     app = FastAPI(title="ikea_agent chat runtime", version="0.1.0")
     instrument_fastapi_app(app)
     chat_runtime = build_chat_runtime() if runtime is None else runtime
-    _initialize_runtime_schema(chat_runtime=chat_runtime, settings=settings)
+    if hasattr(chat_runtime, "session_factory"):
+        ensure_default_dev_hierarchy_for_session_factory(chat_runtime.session_factory)
     asset_repository = (
         AssetRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
@@ -163,15 +110,13 @@ def create_app(
         s3_prefix=settings.artifact_s3_prefix,
         s3_region=settings.artifact_s3_region,
     )
-    trace_writer = TraceReportWriter(root_dir=Path(settings.trace_root_dir))
-    beads_creator = BeadsTraceIssueCreator(repo_root=Path.cwd())
     run_history_repository = (
         RunHistoryRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
         else None
     )
-    revealed_preference_repository = (
-        RevealedPreferenceRepository(chat_runtime.session_factory)
+    context_fact_repository = (
+        ContextFactRepository(chat_runtime.session_factory)
         if hasattr(chat_runtime, "session_factory")
         else None
     )
@@ -186,13 +131,6 @@ def create_app(
         settings=settings,
     )
     _register_attachment_routes(app, attachment_store)
-    if settings.trace_capture_enabled and run_history_repository is not None:
-        _register_trace_routes(
-            app,
-            trace_writer=trace_writer,
-            beads_creator=beads_creator,
-            run_history_repository=run_history_repository,
-        )
     _register_agent_catalog_routes(app)
     if thread_query_repository is not None:
         _register_thread_data_routes(
@@ -226,20 +164,13 @@ def create_app(
             agents=agents,
             deps_by_agent=deps_by_agent,
             run_history_repository=run_history_repository,
-            revealed_preference_repository=revealed_preference_repository,
+            context_fact_repository=context_fact_repository,
         )
 
     if mount_web_ui:
         for item in catalog:
             agent_mount_path = item["web_path"].rstrip("/")
             app.mount(agent_mount_path, web_apps[item["name"]])
-
-    _log_backend_startup(
-        settings=settings,
-        catalog=catalog,
-        mount_ag_ui=mount_ag_ui,
-        mount_web_ui=mount_web_ui,
-    )
 
     return app
 

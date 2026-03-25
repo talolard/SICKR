@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
-from ikea_agent.chat_app.attachments import AttachmentContextError, AttachmentStore
+from ikea_agent.chat_app.attachments import AttachmentStore
 from ikea_agent.persistence.asset_repository import AssetRepository
 from ikea_agent.persistence.models import AssetRecord, ensure_persistence_schema
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 
 
 def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
@@ -18,14 +23,32 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
+
+
 def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-asset")
     store = AttachmentStore(
         tmp_path / "artifacts",
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="thread-asset", run_id="run-missing"):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-asset",
+        run_id="run-missing",
+    ):
         stored = store.save_image_bytes(
             content=b"png-bytes",
             mime_type="image/png",
@@ -38,6 +61,7 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
         row = session.execute(
             select(
                 AssetRecord.asset_id,
+                AssetRecord.room_id,
                 AssetRecord.thread_id,
                 AssetRecord.run_id,
                 AssetRecord.kind,
@@ -49,6 +73,7 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
         ).one()
 
     assert row.asset_id == stored.ref.attachment_id
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
     assert row.thread_id == "thread-asset"
     assert row.run_id is None
     assert row.kind == "user_upload"
@@ -61,38 +86,53 @@ def test_save_image_bytes_persists_asset_metadata_with_context(tmp_path: Path) -
 
 def test_save_image_bytes_allows_explicit_thread_override(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-context")
+    _seed_thread(session_factory, thread_id="thread-explicit")
     store = AttachmentStore(
         tmp_path / "artifacts",
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="thread-context", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-context",
+        run_id=None,
+    ):
         stored = store.save_image_bytes(
             content=b"svg-bytes",
             mime_type="image/svg+xml",
             filename="plan.svg",
+            room_id=DEFAULT_DEV_ROOM_ID,
             thread_id="thread-explicit",
             kind="generated_preview",
         )
 
     with session_factory() as session:
-        thread_id = session.execute(
-            select(AssetRecord.thread_id).where(AssetRecord.asset_id == stored.ref.attachment_id)
-        ).scalar_one()
+        row = session.execute(
+            select(AssetRecord.room_id, AssetRecord.thread_id).where(
+                AssetRecord.asset_id == stored.ref.attachment_id
+            )
+        ).one()
 
-    assert thread_id == "thread-explicit"
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
+    assert row.thread_id == "thread-explicit"
 
 
 def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
     tmp_path: Path,
 ) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-repeat")
     store = AttachmentStore(
         tmp_path / "artifacts",
         asset_repository=AssetRepository(session_factory),
     )
 
-    with store.bind_context(thread_id="thread-repeated", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-repeat",
+        run_id=None,
+    ):
         first = store.save_image_bytes(
             content=b"png-1",
             mime_type="image/png",
@@ -108,49 +148,52 @@ def test_save_image_bytes_repeated_writes_same_thread_are_sqlite_fk_safe(
 
     with session_factory() as session:
         thread_count = session.execute(
-            select(AssetRecord.thread_id).where(AssetRecord.thread_id == "thread-repeated")
+            select(AssetRecord.thread_id).where(AssetRecord.thread_id == "thread-repeat")
         ).all()
 
     assert first.ref.attachment_id != second.ref.attachment_id
     assert len(thread_count) == 2
 
 
-def test_save_image_bytes_requires_real_thread_context(tmp_path: Path) -> None:
+def test_asset_repository_lists_room_images_only_for_user_uploads(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-images")
+    repository = AssetRepository(session_factory)
     store = AttachmentStore(
         tmp_path / "artifacts",
-        asset_repository=AssetRepository(session_factory),
+        asset_repository=repository,
     )
 
-    with pytest.raises(AttachmentContextError, match="real thread id"):
-        store.save_image_bytes(
-            content=b"png-1",
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-images",
+        run_id=None,
+    ):
+        first = store.save_image_bytes(
+            content=b"room-image-1",
             mime_type="image/png",
-            filename="first.png",
+            filename="room-1.png",
+            kind="user_upload",
+        )
+        _generated = store.save_image_bytes(
+            content=b"floor-plan-preview",
+            mime_type="image/png",
+            filename="floor-plan.png",
+            created_by_tool="render_floor_plan",
+            kind="floor_plan_png",
+        )
+        second = store.save_image_bytes(
+            content=b"room-image-2",
+            mime_type="image/jpeg",
+            filename="room-2.jpg",
             kind="user_upload",
         )
 
+    listed = repository.list_room_images(room_id=DEFAULT_DEV_ROOM_ID)
 
-def test_resolve_uses_persisted_storage_locator(tmp_path: Path) -> None:
-    session_factory = _session_factory(tmp_path)
-    asset_repository = AssetRepository(session_factory)
-    store = AttachmentStore(
-        tmp_path / "artifacts",
-        asset_repository=asset_repository,
-    )
-
-    with store.bind_context(thread_id="thread-locator", run_id="run-1"):
-        stored = store.save_image_bytes(
-            content=b"resolved-png",
-            mime_type="image/png",
-            filename="resolved.png",
-            kind="analysis_output",
-        )
-
-    resolved = store.resolve(stored.ref.attachment_id)
-
-    assert resolved is not None
-    assert resolved.storage_locator.startswith(
-        "local://attachments/generated/thread-locator/run-1/"
-    )
-    assert resolved.path.read_bytes() == b"resolved-png"
+    assert [item.asset_id for item in listed] == [
+        second.ref.attachment_id,
+        first.ref.attachment_id,
+    ]
+    assert [item.kind for item in listed] == ["user_upload", "user_upload"]
+    assert [item.file_name for item in listed] == ["room-2.jpg", "room-1.png"]

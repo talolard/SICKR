@@ -58,7 +58,7 @@ def test_detect_objects_in_image_wrapper(tmp_path: Path, monkeypatch: pytest.Mon
         _fake_call_model,
     )
 
-    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+    with store.bind_context(room_id=None, thread_id="thread-image-analysis-tool", run_id=None):
         result = asyncio.run(
             detect_objects_in_image(
                 request=ObjectDetectionRequest(image=payload, include_overlay_image=True),
@@ -124,7 +124,7 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
         "ikea_agent.tools.image_analysis.core.FalImageAnalysisCore.call_model",
         _fake_call_depth,
     )
-    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+    with store.bind_context(room_id=None, thread_id="thread-image-analysis-tool", run_id=None):
         depth_result = asyncio.run(
             estimate_depth_map(
                 request=DepthEstimationRequest(image=payload),
@@ -137,7 +137,7 @@ def test_depth_and_segmentation_wrappers(tmp_path: Path, monkeypatch: pytest.Mon
         "ikea_agent.tools.image_analysis.core.FalImageAnalysisCore.call_model",
         _fake_call_segmentation,
     )
-    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+    with store.bind_context(room_id=None, thread_id="thread-image-analysis-tool", run_id=None):
         segmentation_result = asyncio.run(
             segment_image_with_prompt(
                 request=SegmentationRequest(
@@ -200,7 +200,7 @@ def test_analyze_room_photo_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         _fake_download,
     )
 
-    with store.bind_context(thread_id="thread-image-analysis-tool", run_id=None):
+    with store.bind_context(room_id=None, thread_id="thread-image-analysis-tool", run_id=None):
         result = asyncio.run(
             analyze_room_photo(
                 request=RoomPhotoAnalysisRequest(image=payload),

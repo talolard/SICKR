@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -15,6 +16,11 @@ from ikea_agent.persistence.models import (
     AnalysisRunRecord,
     ensure_persistence_schema,
 )
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
+)
 from ikea_agent.tools.image_analysis.models import DetectedObject
 
 
@@ -24,12 +30,30 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
+
+
 def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         source = store.save_image_bytes(
             content=b"source-image",
             mime_type="image/png",
@@ -40,6 +64,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=source.ref.attachment_id,
@@ -60,6 +85,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
         analysis_row = session.execute(
             select(
                 AnalysisRunRecord.analysis_id,
+                AnalysisRunRecord.room_id,
                 AnalysisRunRecord.thread_id,
                 AnalysisRunRecord.input_asset_id,
                 AnalysisRunRecord.tool_name,
@@ -83,6 +109,7 @@ def test_record_analysis_persists_run_and_detection_rows(tmp_path: Path) -> None
             ).where(AnalysisInputAssetRecord.analysis_id == analysis_id)
         ).all()
 
+    assert analysis_row.room_id == DEFAULT_DEV_ROOM_ID
     assert analysis_row.thread_id == "thread-analysis"
     assert analysis_row.input_asset_id == source.ref.attachment_id
     assert analysis_row.tool_name == "detect_objects_in_image"
@@ -105,6 +132,7 @@ def test_record_analysis_returns_none_for_missing_input_asset(tmp_path: Path) ->
 
     analysis_id = repository.record_analysis(
         tool_name="estimate_depth_map",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id="missing-asset",
@@ -118,10 +146,15 @@ def test_record_analysis_returns_none_for_missing_input_asset(tmp_path: Path) ->
 
 def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         first = store.save_image_bytes(
             content=b"first-image",
             mime_type="image/png",
@@ -138,6 +171,7 @@ def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path)
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=first.ref.attachment_id,
@@ -167,10 +201,15 @@ def test_record_analysis_persists_multiple_input_assets_in_order(tmp_path: Path)
 
 def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis")
     asset_repository = AssetRepository(session_factory)
     store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
 
-    with store.bind_context(thread_id="thread-analysis", run_id=None):
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis",
+        run_id=None,
+    ):
         source = store.save_image_bytes(
             content=b"source-image",
             mime_type="image/png",
@@ -181,6 +220,7 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
     repository = AnalysisRepository(session_factory)
     analysis_id = repository.record_analysis(
         tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-analysis",
         run_id=None,
         input_asset_id=source.ref.attachment_id,
@@ -198,3 +238,109 @@ def test_record_analysis_is_atomic_when_one_input_asset_is_missing(tmp_path: Pat
 
     assert analysis_rows == []
     assert input_rows == []
+
+
+def test_record_analysis_accepts_new_thread_for_same_room_assets(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis-source")
+    _seed_thread(session_factory, thread_id="thread-analysis-followup")
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+    ):
+        source = store.save_image_bytes(
+            content=b"source-image",
+            mime_type="image/png",
+            filename="source.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    analysis_id = repository.record_analysis(
+        tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-followup",
+        run_id=None,
+        input_asset_id=source.ref.attachment_id,
+        request_json={"image": {"attachment_id": source.ref.attachment_id}},
+        result_json={"detections": []},
+        detections=[],
+    )
+
+    assert analysis_id is not None
+
+    with session_factory() as session:
+        row = session.execute(
+            select(AnalysisRunRecord.room_id, AnalysisRunRecord.thread_id).where(
+                AnalysisRunRecord.analysis_id == analysis_id
+            )
+        ).one()
+
+    assert row.room_id == DEFAULT_DEV_ROOM_ID
+
+
+def test_list_room_analyses_returns_room_wide_history(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-analysis-source")
+    _seed_thread(session_factory, thread_id="thread-analysis-followup")
+    asset_repository = AssetRepository(session_factory)
+    store = AttachmentStore(tmp_path / "artifacts", asset_repository=asset_repository)
+
+    with store.bind_context(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+    ):
+        first = store.save_image_bytes(
+            content=b"first-image",
+            mime_type="image/png",
+            filename="first.png",
+            kind="user_upload",
+        )
+        second = store.save_image_bytes(
+            content=b"second-image",
+            mime_type="image/png",
+            filename="second.png",
+            kind="user_upload",
+        )
+
+    repository = AnalysisRepository(session_factory)
+    repository.record_analysis(
+        tool_name="detect_objects_in_image",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-source",
+        run_id=None,
+        input_asset_id=first.ref.attachment_id,
+        request_json={"image": {"attachment_id": first.ref.attachment_id}},
+        result_json={"detections": [{"label": "chair"}]},
+        detections=[],
+    )
+    repository.record_analysis(
+        tool_name="get_room_detail_details_from_photo",
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-analysis-followup",
+        run_id=None,
+        input_asset_id=first.ref.attachment_id,
+        input_asset_ids=[first.ref.attachment_id, second.ref.attachment_id],
+        request_json={"images": [first.ref.attachment_id, second.ref.attachment_id]},
+        result_json={"room_type": "bedroom"},
+        detections=[],
+    )
+
+    listed = repository.list_room_analyses(room_id=DEFAULT_DEV_ROOM_ID)
+
+    assert [item.tool_name for item in listed] == [
+        "get_room_detail_details_from_photo",
+        "detect_objects_in_image",
+    ]
+    assert listed[0].thread_id == "thread-analysis-followup"
+    assert listed[0].input_asset_ids == (
+        first.ref.attachment_id,
+        second.ref.attachment_id,
+    )
+    assert listed[0].request["images"] == [first.ref.attachment_id, second.ref.attachment_id]
+    assert listed[1].thread_id == "thread-analysis-source"

@@ -13,11 +13,12 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
-from ikea_agent.persistence.models import (
-    AgentRunRecord,
-    AssetRecord,
-    FloorPlanRevisionRecord,
-    ThreadRecord,
+from ikea_agent.persistence.models import AssetRecord, FloorPlanRevisionRecord
+from ikea_agent.persistence.ownership import require_thread_record
+from ikea_agent.persistence.repository_helpers import (
+    lock_room_row,
+    resolve_existing_run_id,
+    touch_thread_activity,
 )
 from ikea_agent.tools.floorplanner.models import FloorPlanScene
 
@@ -29,6 +30,7 @@ class FloorPlanRevisionSnapshot:
     """Typed projection of one persisted floor-plan revision row."""
 
     floor_plan_revision_id: str
+    room_id: str
     thread_id: str
     revision: int
     scene_level: str
@@ -51,6 +53,7 @@ class FloorPlanRepository:
     def save_revision(
         self,
         *,
+        room_id: str,
         thread_id: str,
         scene: FloorPlanScene,
         summary: dict[str, Any],
@@ -61,19 +64,21 @@ class FloorPlanRepository:
 
         now = datetime.now(UTC)
         with self._session_factory() as session:
-            self._ensure_thread(session=session, thread_id=thread_id, now=now)
+            require_thread_record(session, room_id=room_id, thread_id=thread_id)
             session.flush()
-            next_revision = self._next_revision(session=session, thread_id=thread_id)
-            revision_id = f"fprev-{thread_id[:20]}-{next_revision:06d}"
+            lock_room_row(session, room_id=room_id)
+            next_revision = self._next_revision(session=session, room_id=room_id)
+            revision_id = f"fprev-{room_id[:20]}-{next_revision:06d}"
             persisted_svg_asset_id = self._resolve_existing_asset_id(
-                session=session, asset_id=svg_asset_id
+                session=session, room_id=room_id, asset_id=svg_asset_id
             )
             persisted_png_asset_id = self._resolve_existing_asset_id(
-                session=session, asset_id=png_asset_id
+                session=session, room_id=room_id, asset_id=png_asset_id
             )
             session.add(
                 FloorPlanRevisionRecord(
                     floor_plan_revision_id=revision_id,
+                    room_id=room_id,
                     thread_id=thread_id,
                     revision=next_revision,
                     scene_level=scene.scene_level,
@@ -87,22 +92,23 @@ class FloorPlanRepository:
                     created_at=now,
                 )
             )
+            touch_thread_activity(session, thread_id=thread_id, now=now)
             session.commit()
 
-        snapshot = self.get_revision(thread_id=thread_id, revision=next_revision)
+        snapshot = self.get_revision(room_id=room_id, revision=next_revision)
         if snapshot is None:  # pragma: no cover - defensive guard
             msg = "Saved floor-plan revision could not be reloaded"
             raise RuntimeError(msg)
         return snapshot
 
-    def get_latest_revision(self, *, thread_id: str) -> FloorPlanRevisionSnapshot | None:
-        """Load the highest revision for one thread."""
+    def get_latest_revision(self, *, room_id: str) -> FloorPlanRevisionSnapshot | None:
+        """Load the highest revision for one room."""
 
         with self._session_factory() as session:
             row = (
                 session.execute(
                     _snapshot_select_statement()
-                    .where(FloorPlanRevisionRecord.thread_id == thread_id)
+                    .where(FloorPlanRevisionRecord.room_id == room_id)
                     .order_by(FloorPlanRevisionRecord.revision.desc())
                     .limit(1)
                 )
@@ -113,14 +119,29 @@ class FloorPlanRepository:
             return None
         return _snapshot_from_row(row)
 
-    def get_revision(self, *, thread_id: str, revision: int) -> FloorPlanRevisionSnapshot | None:
-        """Load a specific revision for one thread."""
+    def list_revisions(self, *, room_id: str) -> list[FloorPlanRevisionSnapshot]:
+        """Return all persisted revisions for one room ordered newest-first."""
+
+        with self._session_factory() as session:
+            rows = (
+                session.execute(
+                    _snapshot_select_statement()
+                    .where(FloorPlanRevisionRecord.room_id == room_id)
+                    .order_by(FloorPlanRevisionRecord.revision.desc())
+                )
+                .mappings()
+                .all()
+            )
+        return [_snapshot_from_row(row) for row in rows]
+
+    def get_revision(self, *, room_id: str, revision: int) -> FloorPlanRevisionSnapshot | None:
+        """Load a specific revision for one room."""
 
         with self._session_factory() as session:
             row = (
                 session.execute(
                     _snapshot_select_statement()
-                    .where(FloorPlanRevisionRecord.thread_id == thread_id)
+                    .where(FloorPlanRevisionRecord.room_id == room_id)
                     .where(FloorPlanRevisionRecord.revision == revision)
                     .limit(1)
                 )
@@ -134,7 +155,7 @@ class FloorPlanRepository:
     def confirm_revision(
         self,
         *,
-        thread_id: str,
+        room_id: str,
         revision: int | None,
         run_id: str | None,
         confirmation_note: str | None,
@@ -142,16 +163,16 @@ class FloorPlanRepository:
         """Mark a revision as accepted by the user and return the updated snapshot."""
 
         target = (
-            self.get_revision(thread_id=thread_id, revision=revision)
+            self.get_revision(room_id=room_id, revision=revision)
             if revision is not None
-            else self.get_latest_revision(thread_id=thread_id)
+            else self.get_latest_revision(room_id=room_id)
         )
         if target is None:
             return None
 
         now = datetime.now(UTC)
-        persisted_run_id = self._resolve_existing_run_id(run_id=run_id)
         with self._session_factory() as session:
+            persisted_run_id = resolve_existing_run_id(session, run_id=run_id)
             session.execute(
                 update(FloorPlanRevisionRecord)
                 .where(
@@ -163,58 +184,40 @@ class FloorPlanRepository:
                     confirmation_note=confirmation_note,
                 )
             )
+            touch_thread_activity(session, thread_id=target.thread_id, now=now)
             session.commit()
 
-        return self.get_revision(thread_id=thread_id, revision=target.revision)
+        return self.get_revision(room_id=room_id, revision=target.revision)
 
     @staticmethod
-    def _next_revision(*, session: Session, thread_id: str) -> int:
+    def _next_revision(*, session: Session, room_id: str) -> int:
         current_max = session.execute(
             select(func.max(FloorPlanRevisionRecord.revision)).where(
-                FloorPlanRevisionRecord.thread_id == thread_id
+                FloorPlanRevisionRecord.room_id == room_id
             )
         ).scalar_one_or_none()
         return int(current_max or 0) + 1
 
     @staticmethod
-    def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:
-        existing_thread_id = session.execute(
-            select(ThreadRecord.thread_id).where(ThreadRecord.thread_id == thread_id)
-        ).scalar_one_or_none()
-        if existing_thread_id is None:
-            session.add(
-                ThreadRecord(
-                    thread_id=thread_id,
-                    owner_id=None,
-                    title=None,
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                    last_activity_at=now,
-                )
-            )
-            return
-
-    def _resolve_existing_run_id(self, *, run_id: str | None) -> str | None:
-        if run_id is None:
-            return None
-        with self._session_factory() as session:
-            return session.execute(
-                select(AgentRunRecord.run_id).where(AgentRunRecord.run_id == run_id)
-            ).scalar_one_or_none()
-
-    @staticmethod
-    def _resolve_existing_asset_id(*, session: Session, asset_id: str | None) -> str | None:
+    def _resolve_existing_asset_id(
+        *,
+        session: Session,
+        room_id: str,
+        asset_id: str | None,
+    ) -> str | None:
         if asset_id is None:
             return None
         return session.execute(
-            select(AssetRecord.asset_id).where(AssetRecord.asset_id == asset_id)
+            select(AssetRecord.asset_id)
+            .where(AssetRecord.asset_id == asset_id)
+            .where(AssetRecord.room_id == room_id)
         ).scalar_one_or_none()
 
 
 def _snapshot_select_statement() -> Select[tuple[object, ...]]:
     return select(
         FloorPlanRevisionRecord.floor_plan_revision_id,
+        FloorPlanRevisionRecord.room_id,
         FloorPlanRevisionRecord.thread_id,
         FloorPlanRevisionRecord.revision,
         FloorPlanRevisionRecord.scene_level,
@@ -232,6 +235,7 @@ def _snapshot_select_statement() -> Select[tuple[object, ...]]:
 def _snapshot_from_row(row: RowMapping) -> FloorPlanRevisionSnapshot:
     return FloorPlanRevisionSnapshot(
         floor_plan_revision_id=str(row["floor_plan_revision_id"]),
+        room_id=str(row["room_id"]),
         thread_id=str(row["thread_id"]),
         revision=int(row["revision"]),
         scene_level=str(row["scene_level"]),

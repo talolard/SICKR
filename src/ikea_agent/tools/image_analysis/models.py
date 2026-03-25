@@ -6,31 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ikea_agent.shared.types import AttachmentRef, RoomType
-
-
-class AttachmentRefPayload(BaseModel):
-    """JSON-serializable attachment reference used by tool inputs and outputs."""
-
-    attachment_id: str
-    mime_type: str
-    uri: str
-    width: int | None = None
-    height: int | None = None
-    file_name: str | None = None
-
-    @classmethod
-    def from_ref(cls, ref: AttachmentRef) -> AttachmentRefPayload:
-        """Build payload model from the runtime dataclass variant."""
-
-        return cls(
-            attachment_id=ref.attachment_id,
-            mime_type=ref.mime_type,
-            uri=ref.uri,
-            width=ref.width,
-            height=ref.height,
-            file_name=ref.file_name,
-        )
+from ikea_agent.shared.types import AttachmentRefPayload, RoomType
 
 
 class ImageToolEnvelope(BaseModel):

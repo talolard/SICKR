@@ -24,15 +24,20 @@ Runtime config is defined in `src/ikea_agent/config.py` and loaded from `.env`.
 - `catalog.*` holds seeded product metadata, embeddings, image metadata, and optional precomputed
   embedding neighbors; `app.*` remains the runtime schema for conversation and analysis tables.
 - `ops.seed_state` records the current local Postgres and image-catalog seed versions.
-- Worktree bootstrap writes `DATABASE_URL` into `.tmp_untracked/worktree.env` and uses
-  `scripts/worktree/deps.sh` to ensure the slot-local Postgres service.
-- Normal `ensure-postgres` and bootstrap flows restore the latest versioned snapshot from the
-  worktree-local cache at `.tmp_untracked/docker-deps/snapshots/latest.json`.
-- When the worktree-local cache is empty or incomplete, `scripts/worktree/deps.sh` now attempts
-  to fetch a published snapshot artifact from the repo's `Postgres Snapshot` GitHub Actions
-  workflow before failing.
-- `scripts/worktree/deps.sh fetch-snapshot --slot <n>` can be used explicitly when you want to
-  refresh the local snapshot cache without starting Postgres.
+- Full worktree bootstrap writes a worktree-specific `DATABASE_URL` into
+  `.tmp_untracked/worktree.env` and uses `scripts/worktree/deps.sh` to ensure
+  the repo-shared Postgres service plus the isolated worktree database cloned
+  from the shared snapshot template.
+- Lightweight docs-mode bootstrap writes only a minimal `.tmp_untracked/worktree.env` and does
+  not prepare runtime dependencies.
+- Normal `ensure-postgres` and full bootstrap flows restore the latest
+  versioned snapshot into the shared template database from the canonical
+  shared cache at `<canonical-root>/.tmp_untracked/shared-postgres/snapshots/latest.json`.
+- When the shared cache is empty or incomplete, `scripts/worktree/deps.sh` now
+  attempts to fetch a published snapshot artifact from the repo's `Postgres
+  Snapshot` GitHub Actions workflow before failing.
+- `scripts/worktree/deps.sh fetch-snapshot` can be used explicitly when you
+  want to refresh the shared local snapshot cache without starting Postgres.
 - `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit rebuild-from-source
   maintenance path.
 - Operational dependency-prep tooling now lives under `scripts/docker_deps/`, not under the

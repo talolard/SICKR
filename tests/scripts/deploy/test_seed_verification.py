@@ -9,11 +9,11 @@ from scripts.deploy.bootstrap_catalog import main as bootstrap_catalog_main
 from scripts.deploy.verify_seed_state import main as verify_seed_state_main
 from scripts.docker_deps.seed_postgres import SeedSummary
 from tests.shared.deployment_readiness import insert_ready_seed_data
+from tests.shared.runtime_schema import ensure_runtime_schema
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.config import get_settings
 from ikea_agent.persistence.models import ensure_persistence_schema
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
 
 
 def test_bootstrap_catalog_main_prints_seed_summary_json(

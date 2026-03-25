@@ -29,12 +29,14 @@ class StoredAttachment:
 
 
 class AttachmentContextError(ValueError):
-    """Raised when an attachment write is attempted without a durable thread context."""
+    """Raised when attachment persistence is attempted without durable identity."""
 
 
 class AttachmentStore:
     """Attachment store keyed by stable ids with pluggable durable storage."""
 
+    _anonymous_thread_id = "anonymous-thread"
+    _room_id_var: ContextVar[str | None]
     _thread_id_var: ContextVar[str | None]
     _run_id_var: ContextVar[str | None]
 
@@ -54,18 +56,33 @@ class AttachmentStore:
             if storage_backend is None
             else storage_backend
         )
+        self._room_id_var = ContextVar("attachment_store_room_id", default=None)
         self._thread_id_var = ContextVar("attachment_store_thread_id", default=None)
         self._run_id_var = ContextVar("attachment_store_run_id", default=None)
 
+    @property
+    def requires_persistence_context(self) -> bool:
+        """Return whether uploads must carry explicit durable room/thread identity."""
+
+        return self._asset_repository is not None
+
     @contextmanager
-    def bind_context(self, *, thread_id: str, run_id: str | None) -> Generator[None]:
+    def bind_context(
+        self,
+        *,
+        room_id: str | None = None,
+        thread_id: str,
+        run_id: str | None,
+    ) -> Generator[None]:
         """Bind thread/run context for async request-local artifact persistence."""
 
+        room_token = self._room_id_var.set(self._normalize_optional_room_id(room_id))
         thread_token = self._thread_id_var.set(self._normalize_thread_id(thread_id))
         run_token = self._run_id_var.set(run_id)
         try:
             yield
         finally:
+            self._room_id_var.reset(room_token)
             self._thread_id_var.reset(thread_token)
             self._run_id_var.reset(run_token)
 
@@ -75,6 +92,7 @@ class AttachmentStore:
         content: bytes,
         mime_type: str,
         filename: str | None,
+        room_id: str | None = None,
         thread_id: str | None = None,
         run_id: str | None = None,
         created_by_tool: str | None = None,
@@ -86,6 +104,7 @@ class AttachmentStore:
             content=content,
             mime_type=mime_type,
             filename=filename,
+            room_id=room_id,
             thread_id=thread_id,
             run_id=run_id,
             created_by_tool=created_by_tool,
@@ -98,6 +117,7 @@ class AttachmentStore:
         content: bytes,
         mime_type: str,
         filename: str | None,
+        room_id: str | None = None,
         thread_id: str | None = None,
         run_id: str | None = None,
         created_by_tool: str | None = None,
@@ -119,6 +139,7 @@ class AttachmentStore:
             height=None,
             file_name=file_name,
         )
+        resolved_room_id = self._resolve_room_id(room_id)
         resolved_thread_id = self._resolve_thread_id(thread_id)
         resolved_run_id = run_id if run_id is not None else self._run_id_var.get()
         storage_object = self._storage_backend.save_attachment(
@@ -133,8 +154,12 @@ class AttachmentStore:
             content=content,
         )
         if self._asset_repository is not None:
+            if resolved_room_id is None:
+                msg = "Attachment persistence requires explicit room_id and thread_id."
+                raise AttachmentContextError(msg)
             self._asset_repository.record_asset(
                 asset_id=attachment_id,
+                room_id=resolved_room_id,
                 thread_id=resolved_thread_id,
                 run_id=resolved_run_id,
                 created_by_tool=created_by_tool,
@@ -171,15 +196,20 @@ class AttachmentStore:
                 return None
             if not path.exists():
                 return None
+            mime_type = self._mime_type_for_suffix(path.suffix)
             ref = AttachmentRef(
                 attachment_id=attachment_id,
-                mime_type=persisted.mime_type,
+                mime_type=persisted.mime_type or mime_type,
                 uri=f"/attachments/{attachment_id}",
                 width=persisted.width,
                 height=persisted.height,
                 file_name=persisted.file_name or path.name,
             )
-            return StoredAttachment(ref=ref, path=path, storage_locator=persisted.storage_path)
+            return StoredAttachment(
+                ref=ref,
+                path=path,
+                storage_locator=persisted.storage_path,
+            )
         path = self._storage_backend.find_local_path(attachment_id=attachment_id)
         if path is not None:
             mime_type = self._mime_type_for_suffix(path.suffix)
@@ -194,6 +224,12 @@ class AttachmentStore:
             return StoredAttachment(ref=ref, path=path, storage_locator=str(path))
         return None
 
+    def _resolve_room_id(self, explicit_room_id: str | None) -> str | None:
+        normalized_explicit = self._normalize_optional_room_id(explicit_room_id)
+        if normalized_explicit is not None:
+            return normalized_explicit
+        return self._normalize_optional_room_id(self._room_id_var.get())
+
     def _resolve_thread_id(self, explicit_thread_id: str | None) -> str:
         normalized_explicit = self._normalize_optional_thread_id(explicit_thread_id)
         if normalized_explicit is not None:
@@ -201,8 +237,17 @@ class AttachmentStore:
         normalized_bound = self._normalize_optional_thread_id(self._thread_id_var.get())
         if normalized_bound is not None:
             return normalized_bound
+        if self._asset_repository is None:
+            return self._anonymous_thread_id
         msg = "Attachments require a real thread id; anonymous-thread fallback is not allowed."
         raise AttachmentContextError(msg)
+
+    @staticmethod
+    def _normalize_optional_room_id(room_id: str | None) -> str | None:
+        if room_id is None:
+            return None
+        normalized = room_id.strip()
+        return normalized or None
 
     @staticmethod
     def _normalize_optional_thread_id(thread_id: str | None) -> str | None:

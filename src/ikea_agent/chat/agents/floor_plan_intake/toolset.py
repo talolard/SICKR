@@ -14,8 +14,11 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from ikea_agent.chat.agents.floor_plan_intake.deps import FloorPlanIntakeDeps
 from ikea_agent.chat.agents.shared import (
-    build_remember_preference_tool,
+    SHARED_CONTEXT_TOOL_NAMES,
+    build_first_class_agent_toolset,
     floor_plan_repository,
+    require_room_id,
+    require_thread_id,
     telemetry_context,
 )
 from ikea_agent.chat.runtime import ChatRuntime
@@ -33,7 +36,7 @@ from ikea_agent.tools.floorplanner.yaml_codec import dump_scene_yaml, parse_scen
 logger = getLogger(__name__)
 
 TOOL_NAMES: tuple[str, ...] = (
-    "remember_preference",
+    *SHARED_CONTEXT_TOOL_NAMES,
     "render_floor_plan",
     "load_floor_plan_scene_yaml",
     "export_floor_plan_scene_yaml",
@@ -69,8 +72,10 @@ def _render_floor_plan_with_services(
 ) -> dict[str, object] | ToolReturn:
     repository = services.get_floor_plan_repository(ctx.deps.runtime)
     snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
-    if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
-        persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
+    room_id = require_room_id(ctx.deps.state)
+    thread_id = require_thread_id(ctx.deps.state)
+    if snapshot is None and repository is not None:
+        persisted_snapshot = repository.get_latest_revision(room_id=room_id)
         if persisted_snapshot is not None:
             snapshot = ctx.deps.floor_plan_scene_store.set_with_revision(
                 ctx.deps.state.session_id,
@@ -106,7 +111,8 @@ def _render_floor_plan_with_services(
         content=output_png_path.read_bytes(),
         mime_type="image/png",
         filename="floor-plan.png",
-        thread_id=ctx.deps.state.thread_id,
+        room_id=room_id,
+        thread_id=thread_id,
         run_id=ctx.deps.state.run_id,
         created_by_tool="render_floor_plan",
         kind="floor_plan_png",
@@ -115,7 +121,8 @@ def _render_floor_plan_with_services(
         content=output_svg_path.read_bytes(),
         mime_type="image/svg+xml",
         filename="floor-plan.svg",
-        thread_id=ctx.deps.state.thread_id,
+        room_id=room_id,
+        thread_id=thread_id,
         run_id=ctx.deps.state.run_id,
         created_by_tool="render_floor_plan",
         kind="floor_plan_svg",
@@ -123,9 +130,10 @@ def _render_floor_plan_with_services(
     summary = scene_to_summary(scene)
     in_memory_snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
     scene_revision = in_memory_snapshot.revision
-    if repository is not None and ctx.deps.state.thread_id is not None:
+    if repository is not None:
         persisted_snapshot = repository.save_revision(
-            thread_id=ctx.deps.state.thread_id,
+            room_id=room_id,
+            thread_id=thread_id,
             scene=scene,
             summary=summary,
             svg_asset_id=stored_svg.ref.attachment_id,
@@ -204,9 +212,10 @@ def _load_floor_plan_scene_yaml_with_services(
     scene = parse_scene_yaml(yaml_text, scene_level=scene_level)
     summary = scene_to_summary(scene)
     snapshot = ctx.deps.floor_plan_scene_store.set(ctx.deps.state.session_id, scene)
-    if repository is not None and ctx.deps.state.thread_id is not None:
+    if repository is not None:
         persisted_snapshot = repository.save_revision(
-            thread_id=ctx.deps.state.thread_id,
+            room_id=require_room_id(ctx.deps.state),
+            thread_id=require_thread_id(ctx.deps.state),
             scene=scene,
             summary=summary,
             svg_asset_id=None,
@@ -247,8 +256,8 @@ def _export_floor_plan_scene_yaml_with_services(
 ) -> dict[str, object]:
     repository = services.get_floor_plan_repository(ctx.deps.runtime)
     snapshot = ctx.deps.floor_plan_scene_store.get(ctx.deps.state.session_id)
-    if snapshot is None and repository is not None and ctx.deps.state.thread_id is not None:
-        persisted_snapshot = repository.get_latest_revision(thread_id=ctx.deps.state.thread_id)
+    if snapshot is None and repository is not None:
+        persisted_snapshot = repository.get_latest_revision(room_id=require_room_id(ctx.deps.state))
         if persisted_snapshot is not None:
             snapshot = ctx.deps.floor_plan_scene_store.set_with_revision(
                 ctx.deps.state.session_id,
@@ -281,12 +290,11 @@ def _confirm_floor_plan_revision_with_services(
     services: FloorPlanIntakeToolsetServices,
 ) -> dict[str, object]:
     repository = services.get_floor_plan_repository(ctx.deps.runtime)
-    thread_id = ctx.deps.state.thread_id
-    if repository is None or thread_id is None:
+    if repository is None:
         raise ValueError("Floor-plan persistence is unavailable for this runtime.")
 
     confirmed = repository.confirm_revision(
-        thread_id=thread_id,
+        room_id=require_room_id(ctx.deps.state),
         revision=revision,
         run_id=ctx.deps.state.run_id,
         confirmation_note=confirmation_note,
@@ -369,9 +377,8 @@ def build_floor_plan_intake_toolset(
             services=resolved_services,
         )
 
-    return FunctionToolset(
-        tools=[
-            build_remember_preference_tool(),
+    return build_first_class_agent_toolset(
+        local_tools=[
             Tool(render_floor_plan_tool, name="render_floor_plan"),
             Tool(load_floor_plan_scene_yaml_tool, name="load_floor_plan_scene_yaml"),
             Tool(export_floor_plan_scene_yaml_tool, name="export_floor_plan_scene_yaml"),

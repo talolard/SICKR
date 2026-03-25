@@ -16,6 +16,7 @@ from sqlalchemy.engine import make_url
 
 from ikea_agent.persistence.models import ensure_persistence_schema
 
+
 def _postgres_test_urls() -> tuple[str, str, str] | None:
     configured_url = (
         os.getenv("ALEMBIC_DATABASE_URL")
@@ -89,14 +90,19 @@ def test_alembic_upgrade_creates_runtime_tables() -> None:
             table_names = {(str(row[0]), str(row[1])) for row in cursor.fetchall()}
 
         assert {
+            ("app", "users"),
+            ("app", "projects"),
+            ("app", "rooms"),
             ("app", "threads"),
             ("app", "agent_runs"),
-            ("app", "message_archives"),
+            ("app", "thread_message_segments"),
             ("app", "assets"),
             ("app", "floor_plan_revisions"),
             ("app", "analysis_runs"),
             ("app", "analysis_input_assets"),
             ("app", "analysis_detections"),
+            ("app", "room_facts"),
+            ("app", "project_facts"),
             ("app", "search_runs"),
             ("app", "search_results"),
             ("app", "revealed_preferences"),

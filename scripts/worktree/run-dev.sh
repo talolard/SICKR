@@ -68,6 +68,13 @@ fi
 # shellcheck disable=SC1090
 source "${WORKTREE_ENV}"
 
+BOOTSTRAP_MODE="${WORKTREE_BOOTSTRAP_MODE:-full}"
+if [[ "${BOOTSTRAP_MODE}" != "full" ]]; then
+  printf 'This worktree is bootstrapped in %s mode and is not runnable yet.\n' "${BOOTSTRAP_MODE}" >&2
+  printf 'Upgrade it first with: bash scripts/worktree/bootstrap.sh --mode full --slot <0-99>\n' >&2
+  exit 1
+fi
+
 BACKEND_PORT="${BACKEND_PORT_ARG:-${BACKEND_PORT:-}}"
 UI_PORT="${UI_PORT_ARG:-${UI_PORT:-}}"
 
@@ -76,7 +83,7 @@ if [[ -z "${BACKEND_PORT}" || -z "${UI_PORT}" ]]; then
   exit 1
 fi
 
-export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR TRACE_ROOT_DIR
+export DATABASE_URL ARTIFACT_ROOT_DIR FEEDBACK_ROOT_DIR
 export PY_AG_UI_URL="http://127.0.0.1:${BACKEND_PORT}/ag-ui/"
 
 if [[ "${MODE}" == "both" || "${MODE}" == "backend" ]]; then

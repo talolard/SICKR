@@ -12,7 +12,6 @@ from ikea_agent.chat.product_images import (
     build_primary_image_url,
     build_ranked_image_url,
     build_seeded_public_image_url,
-    product_id_from_canonical_key,
 )
 from ikea_agent.chat.runtime import ChatRuntime
 from ikea_agent.chat_app.main import create_app
@@ -94,12 +93,6 @@ def test_build_seeded_public_image_url_uses_masters_same_host_path() -> None:
         )
         == "https://designagent.talperry.com/static/product-images/masters/90458891-primary.jpg"
     )
-
-
-def test_product_id_from_canonical_key_splits_country_suffix() -> None:
-    assert product_id_from_canonical_key("28508-DE") == "28508"
-    assert product_id_from_canonical_key("90606797-SE") == "90606797"
-    assert product_id_from_canonical_key("product-without-country") == "product-without-country"
 
 
 @dataclass(frozen=True, slots=True)

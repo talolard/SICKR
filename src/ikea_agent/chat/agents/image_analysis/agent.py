@@ -17,7 +17,7 @@ from ikea_agent.chat.agents.image_analysis.toolset import (
     ImageAnalysisToolsetServices,
     build_image_analysis_toolset,
 )
-from ikea_agent.chat.agents.shared import build_preference_instruction
+from ikea_agent.chat.agents.shared import build_known_fact_instruction
 from ikea_agent.chat.modeling import build_google_or_test_model
 from ikea_agent.config import get_settings
 
@@ -26,9 +26,9 @@ DESCRIPTION = "Analyze uploaded room photos with object detection, depth, and se
 PROMPT_PATH = Path(__file__).with_name("prompt.md")
 PROMPT = AgentPrompt(PROMPT_PATH)
 NOTES = "Image-analysis focused agent with attachment-driven tool calls."
-PREFERENCE_INSTRUCTION: Callable[[RunContext[ImageAnalysisAgentDeps]], str] = cast(
+KNOWN_FACT_INSTRUCTION: Callable[[RunContext[ImageAnalysisAgentDeps]], str] = cast(
     "Callable[[RunContext[ImageAnalysisAgentDeps]], str]",
-    build_preference_instruction(),
+    build_known_fact_instruction(),
 )
 
 
@@ -72,7 +72,7 @@ def build_image_analysis_agent(
         deps_type=ImageAnalysisAgentDeps,
         output_type=str,
         name="agent_image_analysis",
-        instructions=[PROMPT.instruction_text(), PREFERENCE_INSTRUCTION],
+        instructions=[PROMPT.instruction_text(), KNOWN_FACT_INSTRUCTION],
         toolsets=[build_image_analysis_toolset(toolset_services)],
     )
 

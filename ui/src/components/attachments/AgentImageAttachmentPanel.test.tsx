@@ -4,10 +4,6 @@ import { vi } from "vitest";
 import { AgentImageAttachmentPanel } from "./AgentImageAttachmentPanel";
 
 describe("AgentImageAttachmentPanel", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("uploads files and emits ready attachments", async () => {
     const onReadyAttachmentsChange = vi.fn();
     const fetchSpy = vi
@@ -29,6 +25,7 @@ describe("AgentImageAttachmentPanel", () => {
     render(
       <AgentImageAttachmentPanel
         onReadyAttachmentsChange={onReadyAttachmentsChange}
+        roomId="room-dev-default"
         threadId="agent-image-analysis-thread"
       />,
     );
@@ -41,7 +38,10 @@ describe("AgentImageAttachmentPanel", () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({
-      headers: expect.objectContaining({ "x-thread-id": "agent-image-analysis-thread" }),
+      headers: expect.objectContaining({
+        "x-room-id": "room-dev-default",
+        "x-thread-id": "agent-image-analysis-thread",
+      }),
     });
     await waitFor(() => {
       expect(onReadyAttachmentsChange).toHaveBeenLastCalledWith([
@@ -55,21 +55,5 @@ describe("AgentImageAttachmentPanel", () => {
         },
       ]);
     });
-  });
-
-  it("rejects uploads before a thread exists", async () => {
-    const onReadyAttachmentsChange = vi.fn();
-    const fetchSpy = vi.spyOn(global, "fetch");
-
-    render(<AgentImageAttachmentPanel onReadyAttachmentsChange={onReadyAttachmentsChange} threadId={null} />);
-
-    const input = screen.getByTestId("attachment-input");
-    const file = new File(["image-bytes"], "room.png", { type: "image/png" });
-    fireEvent.change(input, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(screen.getByText("Create or select a thread before uploading images.")).toBeInTheDocument();
-    });
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

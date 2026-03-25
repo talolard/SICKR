@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from sqlalchemy import Engine, insert
+from tests.shared.runtime_schema import ensure_runtime_schema
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.chat_app.health_routes import (
@@ -15,7 +16,6 @@ from ikea_agent.chat_app.health_routes import (
 from ikea_agent.config import AppSettings
 from ikea_agent.persistence.models import ensure_persistence_schema
 from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
-from ikea_agent.shared.bootstrap import ensure_runtime_schema
 from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
 from ikea_agent.shared.deploy_readiness import collect_seed_verification
 from ikea_agent.shared.ops_schema import seed_state

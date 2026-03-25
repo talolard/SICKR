@@ -1,19 +1,32 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    UserPromptPart,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from tests.shared.sqlite_db import create_sqlite_engine
 
 from ikea_agent.persistence.models import (
     AgentRunRecord,
-    MessageArchiveRecord,
+    ThreadMessageSegmentRecord,
     ensure_persistence_schema,
+)
+from ikea_agent.persistence.ownership import (
+    DEFAULT_DEV_ROOM_ID,
+    create_thread_record,
+    ensure_default_dev_hierarchy,
 )
 from ikea_agent.persistence.run_history_repository import (
     RunHistoryRepository,
-    ThreadRunHistoryEntry,
     extract_last_user_prompt,
 )
 
@@ -22,6 +35,28 @@ def _session_factory(tmp_path: Path) -> sessionmaker[Session]:
     engine = create_sqlite_engine(tmp_path / "run_history_test.sqlite")
     ensure_persistence_schema(engine)
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+
+def _seed_thread(session_factory: sessionmaker[Session], *, thread_id: str) -> None:
+    now = datetime.now(UTC)
+    with session_factory() as session:
+        ensure_default_dev_hierarchy(session, now=now)
+        create_thread_record(
+            session,
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id=thread_id,
+            now=now,
+        )
+        session.commit()
+
+
+def _message_batch(user_text: str, assistant_text: str) -> bytes:
+    return ModelMessagesTypeAdapter.dump_json(
+        [
+            ModelRequest(parts=[UserPromptPart(content=user_text)], run_id="model-run"),
+            ModelResponse(parts=[TextPart(content=assistant_text)], model_name="test-model"),
+        ]
+    )
 
 
 def test_extract_last_user_prompt_returns_latest_user_text() -> None:
@@ -35,27 +70,20 @@ def test_extract_last_user_prompt_returns_latest_user_text() -> None:
     assert prompt == "second"
 
 
-def test_record_run_start_and_complete_persists_archive(tmp_path: Path) -> None:
+def test_record_run_start_and_complete_persists_run_lifecycle(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-a")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-a",
         run_id="run-a",
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="design room",
-        agui_input_messages_json='[{"role":"user","content":"design room"}]',
     )
-    repository.record_run_complete(
-        run_id="run-a",
-        pydantic_all_messages_json=b'[{"kind":"request"}]',
-        pydantic_new_messages_json=b'[{"kind":"response"}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-a",
-        agui_event_trace_json='[{"type":"RUN_FINISHED"}]',
-    )
+    repository.record_run_complete(run_id="run-a")
 
     with session_factory() as session:
         run_row = session.execute(
@@ -63,31 +91,143 @@ def test_record_run_start_and_complete_persists_archive(tmp_path: Path) -> None:
                 AgentRunRecord.run_id == "run-a"
             )
         ).one()
-        archive_row = session.execute(
-            select(
-                MessageArchiveRecord.agui_input_messages_json,
-                MessageArchiveRecord.agui_event_trace_json,
-                MessageArchiveRecord.pydantic_all_messages_json,
-            ).where(MessageArchiveRecord.run_id == "run-a")
-        ).one()
 
     assert run_row.status == "completed"
     assert run_row.agent_name == "search"
-    assert archive_row.agui_input_messages_json is not None
-    assert archive_row.agui_event_trace_json == '[{"type":"RUN_FINISHED"}]'
-    assert archive_row.pydantic_all_messages_json == '[{"kind":"request"}]'
+
+
+def test_record_run_complete_persists_canonical_message_segment(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-history",
+        run_id="run-history-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="design room",
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello", "hi there"),
+    )
+
+    with session_factory() as session:
+        stored_segment = session.execute(
+            select(
+                ThreadMessageSegmentRecord.thread_id,
+                ThreadMessageSegmentRecord.run_id,
+                ThreadMessageSegmentRecord.sequence_no,
+            ).where(ThreadMessageSegmentRecord.run_id == "run-history-1")
+        ).one()
+
+    assert stored_segment.thread_id == "thread-history"
+    assert stored_segment.run_id == "run-history-1"
+    assert stored_segment.sequence_no == 1
+
+
+def test_record_run_complete_updates_existing_segment_without_new_sequence(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-history",
+        run_id="run-history-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="design room",
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello", "hi there"),
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello again", "updated answer"),
+    )
+
+    with session_factory() as session:
+        stored_segment = session.execute(
+            select(
+                ThreadMessageSegmentRecord.thread_id,
+                ThreadMessageSegmentRecord.run_id,
+                ThreadMessageSegmentRecord.sequence_no,
+            ).where(ThreadMessageSegmentRecord.run_id == "run-history-1")
+        ).one()
+
+    history = repository.load_message_history(thread_id="thread-history")
+
+    assert stored_segment.thread_id == "thread-history"
+    assert stored_segment.run_id == "run-history-1"
+    assert stored_segment.sequence_no == 1
+    first_request_part = history[0].parts[0]
+    second_response_part = history[1].parts[0]
+    assert isinstance(first_request_part, UserPromptPart)
+    assert isinstance(second_response_part, TextPart)
+    assert first_request_part.content == "hello again"
+    assert second_response_part.content == "updated answer"
+
+
+def test_load_message_history_returns_ordered_thread_history(tmp_path: Path) -> None:
+    session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-history")
+    repository = RunHistoryRepository(session_factory)
+
+    repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-history",
+        run_id="run-history-1",
+        agent_name="search",
+        parent_run_id=None,
+        user_prompt_text="first",
+    )
+    repository.record_run_complete(
+        run_id="run-history-1",
+        new_messages_json=_message_batch("hello", "hi there"),
+    )
+    repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
+        thread_id="thread-history",
+        run_id="run-history-2",
+        agent_name="search",
+        parent_run_id="run-history-1",
+        user_prompt_text="second",
+    )
+    repository.record_run_complete(
+        run_id="run-history-2",
+        new_messages_json=_message_batch("what now?", "next step"),
+    )
+
+    history = repository.load_message_history(thread_id="thread-history")
+
+    assert len(history) == 4
+    assert isinstance(history[0], ModelRequest)
+    assert isinstance(history[1], ModelResponse)
+    assert isinstance(history[2], ModelRequest)
+    assert isinstance(history[3], ModelResponse)
+    first_request_part = history[0].parts[0]
+    second_response_part = history[3].parts[0]
+    assert isinstance(first_request_part, UserPromptPart)
+    assert isinstance(second_response_part, TextPart)
+    assert first_request_part.content == "hello"
+    assert second_response_part.content == "next step"
 
 
 def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-b")
     repository = RunHistoryRepository(session_factory)
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-b",
         run_id="run-b",
         agent_name="search",
         parent_run_id="run-root",
         user_prompt_text=None,
-        agui_input_messages_json="[]",
     )
 
     repository.record_run_failed(run_id="run-b", error_message="boom")
@@ -106,23 +246,24 @@ def test_record_run_failed_sets_failed_status(tmp_path: Path) -> None:
 
 def test_record_run_start_is_fk_safe_for_existing_thread_with_child_runs(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
+    _seed_thread(session_factory, thread_id="thread-c")
     repository = RunHistoryRepository(session_factory)
 
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-c",
         run_id="run-c-1",
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="first",
-        agui_input_messages_json="[]",
     )
     repository.record_run_start(
+        room_id=DEFAULT_DEV_ROOM_ID,
         thread_id="thread-c",
         run_id="run-c-2",
         agent_name="search",
         parent_run_id=None,
         user_prompt_text="second",
-        agui_input_messages_json="[]",
     )
 
     with session_factory() as session:
@@ -141,56 +282,27 @@ def test_record_run_complete_missing_run_is_noop(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
-    repository.record_run_complete(
-        run_id="missing-run",
-        pydantic_all_messages_json=b"[]",
-        pydantic_new_messages_json=b"[]",
-    )
+    repository.record_run_complete(run_id="missing-run")
 
     with session_factory() as session:
-        archives = session.execute(select(MessageArchiveRecord.run_id)).scalars().all()
+        run_ids = session.execute(select(AgentRunRecord.run_id)).scalars().all()
 
-    assert archives == []
+    assert run_ids == []
 
 
-def test_list_thread_run_history_filters_by_agent_and_returns_trace_payloads(
-    tmp_path: Path,
-) -> None:
+def test_record_run_start_rejects_missing_thread_row(tmp_path: Path) -> None:
     session_factory = _session_factory(tmp_path)
     repository = RunHistoryRepository(session_factory)
 
-    repository.record_run_start(
-        thread_id="thread-h",
-        run_id="run-h-1",
-        agent_name="search",
-        parent_run_id=None,
-        user_prompt_text="first user prompt",
-        agui_input_messages_json='[{"role":"user","content":"first user prompt"}]',
-    )
-    repository.record_run_complete(
-        run_id="run-h-1",
-        pydantic_all_messages_json=b'[{"kind":"request","text":"first"}]',
-        pydantic_new_messages_json=b'[{"kind":"response","text":"ok"}]',
-    )
-    repository.record_run_event_trace(
-        run_id="run-h-1",
-        agui_event_trace_json='[{"type":"TEXT_MESSAGE_END"}]',
-    )
-    repository.record_run_start(
-        thread_id="thread-h",
-        run_id="run-h-2",
-        agent_name="image_analysis",
-        parent_run_id="run-h-1",
-        user_prompt_text="second user prompt",
-        agui_input_messages_json='[{"role":"user","content":"second user prompt"}]',
-    )
-
-    history = repository.list_thread_run_history(thread_id="thread-h", agent_name="search")
-
-    assert history
-    assert all(isinstance(entry, ThreadRunHistoryEntry) for entry in history)
-    assert len(history) == 1
-    assert history[0].run_id == "run-h-1"
-    assert history[0].agent_name == "search"
-    assert history[0].pydantic_all_messages_json is not None
-    assert history[0].agui_event_trace_json == '[{"type":"TEXT_MESSAGE_END"}]'
+    with pytest.raises(
+        ValueError,
+        match=r"Unknown thread_id `thread-z` for room `room-dev-default`\.",
+    ):
+        repository.record_run_start(
+            room_id=DEFAULT_DEV_ROOM_ID,
+            thread_id="thread-z",
+            run_id="run-z-1",
+            agent_name="search",
+            parent_run_id=None,
+            user_prompt_text="first user prompt",
+        )

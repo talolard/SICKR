@@ -9,7 +9,11 @@ Active runtime uses Postgres for:
 - `catalog.product_embeddings` (seeded embedding snapshots used directly by pgvector retrieval)
 - `catalog.product_embedding_neighbors` (optional legacy precomputed neighbor rows; active MMR no longer depends on them)
 - `catalog.product_images` (seeded image metadata for runtime image lookup)
-- `app.*` conversation and analysis tables managed by existing runtime migrations
+- `app.agent_runs` (run lifecycle and provenance)
+- `app.threads` (room-bound thread metadata, including durable activity timestamps used for room thread ordering)
+- `app.thread_message_segments` (canonical persisted PydanticAI message batches used for DB-backed thread continuation)
+- `app.floor_plan_revisions` (room-owned floor-plan snapshots with unique revision numbers per room)
+- other `app.*` room, thread, fact, artifact, and analysis tables managed by runtime migrations
 - `ops.seed_state` (observable seed versions and refresh metadata)
   - includes `postgres_snapshot` rows after a versioned snapshot artifact is built
 
@@ -27,8 +31,8 @@ Active runtime uses Postgres for:
    seed versions in `ops.seed_state`, writes one `postgres_snapshot` metadata row, and emits a
    versioned `pg_dump` artifact plus manifest.
 3. Normal `scripts/worktree/deps.sh ensure-postgres` and worktree bootstrap restore the latest
-   snapshot artifact into a fresh slot-local Postgres volume instead of reseeding from canonical
-   files.
+   snapshot artifact into a shared template database, then clone one isolated
+   Postgres database per worktree instead of reseeding from canonical files.
 4. `scripts/worktree/deps.sh reseed --slot <n>` remains the explicit maintenance workflow when a
    rebuild from canonical inputs is needed.
 5. Query flow retrieves semantic matches directly from Postgres pgvector tables, then derives the
