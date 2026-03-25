@@ -30,6 +30,7 @@ The repo now contains:
 - production `ui` and `backend` Dockerfiles
 - release-manifest generation
 - release-please-driven image publication
+- migration stairway validation in PR CI and release validation
 - ECS-oriented deploy workflows
 - an ECS task-definition renderer
 - Terraform modules for:
@@ -78,6 +79,8 @@ The biggest remaining gaps are:
 5. We still need one real end-to-end proof of:
    - AG-UI streaming through `CloudFront -> ALB -> backend`
    - Aurora pause-to-zero under the deployed runtime posture
+6. The new release/deploy hardening lane still needs the rest of epic `.8`
+   closed out so the next release does not depend on manual recovery.
 
 ## Work We Need To Do Before First Real Deploy
 

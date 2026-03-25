@@ -83,6 +83,51 @@ jobs:
           echo "Backend tests failed. See annotations and Backend Pytest report."
           exit 1
 
+  migration-stairway:
+    name: Migration Stairway (Postgres)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect migration-surface changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            migrations:
+              - 'alembic.ini'
+              - 'migrations/**'
+              - 'scripts/deploy/alembic_config.py'
+              - 'scripts/deploy/apply_migrations.py'
+              - 'scripts/deploy/migration_test_support.py'
+              - 'scripts/ci/run_migration_validation.sh'
+              - 'scripts/docker_deps/seed_postgres.py'
+              - 'tests/shared/test_migrations.py'
+              - 'tests/shared/test_migration_stairway.py'
+
+      - name: Set up Python + uv cache
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.migrations == 'true' }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install backend dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.migrations == 'true' }}
+        run: uv sync --all-groups --frozen
+
+      - name: Run migration validation suite
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.migrations == 'true' }}
+        run: bash scripts/ci/run_migration_validation.sh 0
+
+      - name: Skip migration validation when migration surface is unchanged
+        if: ${{ github.event_name != 'workflow_dispatch' && steps.changes.outputs.migrations != 'true' }}
+        run: echo "Migration-related files did not change; skipping stairway validation."
+
   frontend-unit:
     name: Frontend Unit (eslint, tsc, vitest)
     runs-on: ubuntu-latest
@@ -444,12 +489,13 @@ jobs:
   ci-summary:
     name: CI Summary
     if: ${{ always() }}
-    needs: [backend, frontend-unit, coverage, e2e-mock]
+    needs: [backend, migration-stairway, frontend-unit, coverage, e2e-mock]
     runs-on: ubuntu-latest
     steps:
       - name: Publish CI summary
         env:
           BACKEND_RESULT: ${{ needs.backend.result }}
+          MIGRATION_RESULT: ${{ needs['migration-stairway'].result }}
           FRONTEND_RESULT: ${{ needs['frontend-unit'].result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           COVERAGE_BACKEND_SOURCE: ${{ needs.coverage.outputs.backend_source_percent }}
@@ -480,6 +526,7 @@ jobs:
           | Lane | Result | Detail |
           | --- | --- | --- |
           | Backend (ruff, pyrefly, pytest) | ${BACKEND_RESULT} | ${backend_detail} |
+          | Migration Stairway (Postgres) | ${MIGRATION_RESULT} | fixture-seeded pgvector Postgres + Alembic stairway validation |
           | Frontend Unit (eslint, tsc, vitest) | ${FRONTEND_RESULT} | ${frontend_detail} |
           | Coverage (backend + frontend) | ${COVERAGE_RESULT} | ${coverage_detail} |
           | E2E (Playwright mock) | ${E2E_MOCK_RESULT} | ${e2e_mock_detail} |
