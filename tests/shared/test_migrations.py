@@ -16,7 +16,6 @@ from sqlalchemy.engine import make_url
 
 from ikea_agent.persistence.models import ensure_persistence_schema
 
-
 def _postgres_test_urls() -> tuple[str, str, str] | None:
     configured_url = (
         os.getenv("ALEMBIC_DATABASE_URL")
