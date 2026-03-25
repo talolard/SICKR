@@ -135,9 +135,11 @@ The CI deploy workflow should then:
 3. describe the current ECS task definitions
 4. render new task-definition revisions by replacing the image and release
    version fields
-5. run one-off backend migration and seed-verification tasks on Fargate
-6. update the backend service to the new task definition
-7. update the UI service to the new task definition
+5. strip any placeholder bootstrap command such as `sleep infinity` from the
+   rendered task definition so ECS uses the image-default runtime command
+6. run one-off backend migration and seed-verification tasks on Fargate
+7. update the backend service to the new task definition
+8. update the UI service to the new task definition
 
 This keeps the stable runtime contract in Terraform while keeping release
 rollouts source-controlled and repeatable.
@@ -189,3 +191,5 @@ Useful validation for this contract includes:
 - one real public-path validation on `designagent.talperry.com` after the ECS
   services are live, including `/api/agents` and
   `/api/agents/{agent}/metadata`
+- one validation that percent-encoded database credentials survive the Alembic
+  migration config path unchanged

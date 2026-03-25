@@ -32,6 +32,7 @@ from ikea_agent.shared.db_contract import (
 from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_database_engine
 from ingest.precompute_embedding_neighbors import build_neighbor_rows
+from scripts.deploy.alembic_config import set_sqlalchemy_url
 from scripts.docker_deps.seed_postgres import (
     SeedSummary,
     _fingerprint_paths,
@@ -360,7 +361,7 @@ def _wait_for_postgres(stack: SnapshotStack) -> None:
 def _upgrade_database(database_url: str) -> None:
     config = Config("alembic.ini")
     config.set_main_option("script_location", "migrations")
-    config.set_main_option("sqlalchemy.url", database_url)
+    set_sqlalchemy_url(config, database_url)
     command.upgrade(config, "head")
 
 

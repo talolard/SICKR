@@ -38,13 +38,12 @@ Current implementation honesty note:
 - the repo does not yet prove the full target contract end to end
 - the current publication workflow accepts only a merged PR into `release`
   whose title starts with `chore(release):`
-- the current publication workflow writes the release manifest and resolves the
-  ECS deploy inputs before tag push, but it still pushes the immutable Git tag
-  before creating the GitHub release
-- that means a failure after tag push can leave the repo with a tag but no
-  GitHub release, and reruns currently fail on the duplicate-tag guard
-- stronger provenance, failure-safe final publication, and promotion-boundary
-  enforcement are still unresolved
+- the current publication workflow writes the release manifest before final
+  publication and creates the immutable tag by creating the GitHub release
+  against the exact release commit
+- the current tag identity is plain `vX.Y.Z`; the older `designagent-vX.Y.Z`
+  component-prefixed form is obsolete and should not reappear
+- stronger provenance and promotion-boundary enforcement are still unresolved
 
 ## Why Release Please Fits Better
 
@@ -189,6 +188,8 @@ The current helper-config posture is:
 
 - `release-please-config.json` uses the `simple` strategy
 - `release-please-config.json` keeps the release PR in draft state by default
+- `release-please-config.json` uses plain `vX.Y.Z` tags without a component
+  prefix
 - `.release-please-manifest.json` tracks the current published app version
 
 Intended release-PR behavior once the `release` branch exists and is in use:
@@ -200,6 +201,12 @@ Intended release-PR behavior once the `release` branch exists and is in use:
 - Tal can inspect the changelog and version bump before merge
 - merging the release PR creates the release commit that publish automation
   treats as the source of truth
+
+Repository gate:
+
+- if the default `GITHUB_TOKEN` cannot create or update release PRs in this
+  repository, configure `RELEASE_PLEASE_TOKEN` with the minimum scope needed to
+  manage release PRs
 
 The publish workflow currently keys off merged release PRs titled
 `chore(release): ...`.
@@ -229,6 +236,9 @@ Required behavior:
 - the reviewed release PR content is the in-repo source of truth before publish
 - the GitHub release is created only after image publication and manifest
   creation succeed
+- the GitHub release creation step is also the immutable tag creation step, so
+  the release record and tag are created from the same action against the same
+  commit
 - the GitHub release may generate GitHub-native release notes from the immutable
   tag at final publication time
 - the published GitHub release should attach the release manifest so operators

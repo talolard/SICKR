@@ -116,7 +116,7 @@ Recommended repo shape:
 Tagging posture:
 
 - every release gets one app-level `release-please` version
-- both images are published under that exact immutable release version tag
+- both images are published under the exact immutable release tag `vX.Y.Z`
 - both images should also carry the exact released commit SHA as a secondary
   immutable tag
 - no floating tags such as `latest`, `main`, or `release` should be published
@@ -178,11 +178,13 @@ Release CI should do the deployment-specific work:
 1. resolve the release version
 2. build and push both images
 3. write the release manifest
-4. create the immutable Git tag and GitHub release
+4. create the immutable Git tag and GitHub release from the same final
+   publication step after the manifest exists
 5. describe the current ECS task definitions
 6. render new ECS task-definition revisions by replacing:
    - the image digest ref
    - the release-version env value
+   - placeholder bootstrap commands with the image-default runtime command
 7. run the backend migration task on Fargate
 8. run the backend seed-verification task on Fargate
 9. update the backend ECS service
@@ -217,5 +219,7 @@ Useful verification for this subspec includes:
 - local Docker image builds
 - manifest writer tests
 - ECS task-definition rendering tests
+- release-policy validation that `release-please` and manifest helpers agree on
+  the plain `vX.Y.Z` tag format
 - CI validation that a release can register task-definition revisions and roll
   out services without hand-edited AWS state

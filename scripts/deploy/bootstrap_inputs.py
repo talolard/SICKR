@@ -1,23 +1,11 @@
-"""Helpers for the deploy bootstrap input contract.
-
-This module computes the seed versions that deployment automation must pin for
-the release manifest and later verify on the host. The calculations intentionally
-mirror `scripts/docker_deps/seed_postgres.py`, but they accept virtual container
-paths so CI can compute the same fingerprints that the runtime seed step writes
-inside the container.
-"""
+"""Helpers for the deploy bootstrap input contract."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-_POSTGRES_PARQUET_RELATIVE_PATHS = (
-    PurePosixPath("data/parquet/products_canonical"),
-    PurePosixPath("data/parquet/product_embeddings"),
-)
-_BACKEND_CONTAINER_REPO_ROOT = PurePosixPath("/app")
+from scripts.deploy.seed_fingerprint import calculate_postgres_seed_version
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +22,8 @@ def create_release_bootstrap_inputs(
     """Return the release-bootstrap contract for one checked-out release commit."""
 
     normalized_run_id = validate_image_catalog_run_id(image_catalog_run_id)
-    postgres_paths = [
-        (_BACKEND_CONTAINER_REPO_ROOT / relative_path, repo_root / relative_path)
-        for relative_path in _POSTGRES_PARQUET_RELATIVE_PATHS
-    ]
     return ReleaseBootstrapInputs(
-        postgres_seed_version=fingerprint_virtual_paths(postgres_paths),
+        postgres_seed_version=calculate_postgres_seed_version(repo_root=repo_root),
         image_catalog_run_id=normalized_run_id,
     )
 
@@ -58,25 +42,3 @@ def validate_image_catalog_run_id(image_catalog_run_id: str) -> str:
         )
         raise ValueError(msg)
     return normalized
-
-
-def fingerprint_virtual_paths(paths: list[tuple[PurePosixPath, Path]]) -> str:
-    """Return the seed fingerprint for one ordered set of virtual/actual paths."""
-
-    digest = sha256()
-    for virtual_path, actual_path in sorted(paths, key=lambda item: item[0].as_posix()):
-        resolved_actual_path = actual_path.expanduser().resolve()
-        digest.update(virtual_path.as_posix().encode())
-        if resolved_actual_path.is_dir():
-            for file_path in sorted(
-                item for item in resolved_actual_path.rglob("*") if item.is_file()
-            ):
-                digest.update(str(file_path.relative_to(resolved_actual_path)).encode())
-                stat = file_path.stat()
-                digest.update(str(stat.st_size).encode())
-                digest.update(str(stat.st_mtime_ns).encode())
-        else:
-            stat = resolved_actual_path.stat()
-            digest.update(str(stat.st_size).encode())
-            digest.update(str(stat.st_mtime_ns).encode())
-    return digest.hexdigest()

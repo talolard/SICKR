@@ -32,6 +32,10 @@ from ikea_agent.shared.db_contract import (
 )
 from ikea_agent.shared.ops_schema import seed_state
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
+from scripts.deploy.seed_fingerprint import (
+    calculate_image_catalog_seed_version,
+    calculate_postgres_seed_version,
+)
 
 _PRODUCTS_PARQUET_PATH = "data/parquet/products_canonical"
 _EMBEDDINGS_PARQUET_PATH = "data/parquet/product_embeddings"
@@ -111,8 +115,11 @@ def seed_postgres_database(
         image_catalog_root=image_catalog_root,
         run_id=image_catalog_run_id,
     )
-    postgres_seed_version = _fingerprint_paths([products_parquet, embeddings_parquet])
-    image_catalog_seed_version = _fingerprint_paths([image_catalog_source])
+    postgres_seed_version = calculate_postgres_seed_version(repo_root=repo_root)
+    image_catalog_seed_version = calculate_image_catalog_seed_version(
+        image_catalog_root=image_catalog_root,
+        image_catalog_source=image_catalog_source,
+    )
     current_postgres_seed_version = _read_seed_version(
         engine=engine, system_name=POSTGRES_SEED_SYSTEM
     )

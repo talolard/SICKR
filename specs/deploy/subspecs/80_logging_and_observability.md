@@ -23,8 +23,8 @@ Use Logfire as the default backend observability layer.
 
 The deployment should lean on:
 
-- Logfire tracing and log aggregation for backend and Next server-side runtime
-  signals
+- Logfire tracing and log aggregation for backend runtime signals
+- structured Next server-side runtime logs in container logs / CloudWatch
 - targeted structured backend logs for operational facts
 - lightweight frontend diagnostics only where they materially help
 - existing AG-UI trace capture for deep debugging, not as an always-on log
@@ -105,7 +105,9 @@ shipping pipeline.
 
 Default rule:
 
-- backend and Next server-side logs go to Logfire by default
+- backend logs and traces go to Logfire by default
+- Next server-side route logs must at least land in structured container logs
+  that operators will check in CloudWatch
 - browser diagnostics stay minimal and are emitted only through explicit app
   flows when needed
 - AG-UI trace capture remains disabled in production-like deploys unless it is
@@ -171,8 +173,10 @@ The deployment should add or standardize server-side logging around failures in:
 - `/api/agents*`
 - `/api/traces*`
 
-These logs should stay server-side and flow into Logfire with the same release
-version and environment tagging as backend logs.
+These logs should stay server-side and must include the same release-version
+and environment tagging as backend logs. CloudWatch container logs are the
+current required sink; forwarding them into Logfire later is a valid follow-on
+improvement, not a v1 assumption.
 
 When a Next proxy route fails, the log payload must also include enough routing
 context to explain the failure without re-deriving env state from the task
@@ -238,6 +242,8 @@ The first public deployment needs at least these signals:
 - one ui health/readiness signal
 - one deploy-time public-path check that covers `/api/agents` and
   `/api/agents/{agent}/metadata`
+- one structured server-route failure log for any Next proxy failure, including
+  the effective upstream URL and configured backend base URL
 
 These signals should be enough to answer:
 
