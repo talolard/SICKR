@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from sqlalchemy import Engine
 from sqlalchemy.dialects import postgresql
 from tests.shared.sqlite_db import create_sqlite_engine
@@ -214,6 +215,32 @@ def test_read_image_urls_by_product_keys_returns_ordered_proxy_urls(tmp_path: Pa
             "/static/product-images/1/2",
         )
     }
+
+
+def test_read_image_urls_by_product_keys_rejects_missing_seeded_public_urls(
+    tmp_path: Path,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "retrieval_test_4b.sqlite")
+    _setup_schema(engine)
+    _seed_products(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            product_images.update()
+            .where(product_images.c.canonical_product_key == "1-DE")
+            .values(public_url=None, crawl_run_id="catalog-run-9")
+        )
+
+    repository = CatalogRepository(engine)
+
+    with pytest.raises(
+        ValueError,
+        match=r"requires seeded catalog\.product_images\.public_url",
+    ):
+        repository.read_image_urls_by_product_keys(
+            canonical_product_keys=["1-DE"],
+            serving_strategy="direct_public_url",
+            base_url="https://designagent.talperry.com/static/product-images",
+        )
 
 
 def test_resolve_product_image_path_returns_ranked_local_path(tmp_path: Path) -> None:

@@ -66,8 +66,12 @@ host deploy layer:
 | `LOGFIRE_SEND_MODE` | `if-token-present` | deploy works without a token but exports when configured |
 | `ALLOW_MODEL_REQUESTS` | `1` | the deployed app should use the real model path |
 | `IMAGE_SERVING_STRATEGY` | `direct_public_url` | public launch requires bucket-backed image delivery |
-| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base |
-| `ARTIFACT_ROOT_DIR` | `/var/lib/ikea-agent/artifacts` | mounted writable path for private artifacts |
+| `IMAGE_SERVICE_BASE_URL` | `https://designagent.talperry.com/static/product-images` | stable same-origin image base for runtime payloads and bootstrap seeding |
+| `ARTIFACT_ROOT_DIR` | `/var/lib/ikea-agent/artifacts` | mounted writable path for local materialization and read cache |
+| `ARTIFACT_STORAGE_BACKEND` | `s3` | deployed private artifacts must not rely on container-local disk as the durable store |
+| `ARTIFACT_S3_BUCKET` | deploy-specific private bucket name | durable private storage bucket for uploads and generated artifacts |
+| `ARTIFACT_S3_PREFIX` | `dev` or other environment prefix | optional bucket-relative root for private object keys |
+| `ARTIFACT_S3_REGION` | `eu-central-1` | explicit region when the runtime should not rely on ambient AWS config |
 | `FEEDBACK_CAPTURE_ENABLED` | `0` | keep optional local capture disabled in deployed v1 |
 | `TRACE_CAPTURE_ENABLED` | `0` | keep local trace-bundle capture disabled in deployed v1 |
 
@@ -85,6 +89,13 @@ entrypoints when needed:
 
 - `IKEA_IMAGE_CATALOG_ROOT_DIR`
 - `IKEA_IMAGE_CATALOG_RUN_ID`
+
+Seed/bootstrap note:
+
+- when `IMAGE_SERVICE_BASE_URL` is set, catalog seeding should write same-host
+  public URLs of the form
+  `https://designagent.talperry.com/static/product-images/<run-id>/<image-asset-key>`
+  into `catalog.product_images.public_url`
 
 ## UI Contract
 
@@ -115,7 +126,8 @@ The host deploy layer should work from these inputs:
 | `DATABASE_SECRET_ARN` | Terraform output |
 | `PRODUCT_IMAGE_BASE_URL` | fixed deploy config: `https://designagent.talperry.com/static/product-images` |
 
-The host should mount one writable path for backend artifacts:
+The host should mount one writable path for backend artifact materialization and
+cache:
 
 - `/var/lib/ikea-agent/artifacts`
 
@@ -131,4 +143,3 @@ These example files document the current expected values:
 - `docker/env/host.env.example`
 
 They are examples, not sources of secret truth.
-

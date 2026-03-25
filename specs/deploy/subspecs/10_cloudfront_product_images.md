@@ -115,6 +115,15 @@ The exact object-key convention can be decided later, but it should be:
 - deterministic
 - safe for long-lived CDN caching
 
+App-side seeding rule for v1:
+
+- the seed/bootstrap helpers should be able to derive that URL from:
+  - the configured same-host base URL
+  - the image catalog run id
+  - `image_asset_key`
+- runtime lookup may derive the same URL when `public_url` is missing, but the
+  intended deployed state is still a seeded `public_url` column
+
 ## Backend Behavior After This Change
 
 The backend proxy image routes should stay in the codebase for:

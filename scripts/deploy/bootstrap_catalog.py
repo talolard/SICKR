@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--image-catalog-root", default=None)
     parser.add_argument("--image-catalog-run-id", default=None)
+    parser.add_argument("--product-image-base-url", default=None)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
@@ -33,12 +34,14 @@ def main() -> None:
         args.image_catalog_root or settings.ikea_image_catalog_root_dir
     ).expanduser()
     image_catalog_run_id = args.image_catalog_run_id or settings.ikea_image_catalog_run_id
+    product_image_base_url = args.product_image_base_url or settings.image_service_base_url
 
     summary = seed_postgres_database(
         engine=create_database_engine(database_url),
         repo_root=repo_root,
         image_catalog_root=image_catalog_root,
         image_catalog_run_id=image_catalog_run_id,
+        product_image_base_url=product_image_base_url,
         force=args.force,
     )
     print(json.dumps(summary.__dict__, sort_keys=True))

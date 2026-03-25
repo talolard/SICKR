@@ -73,6 +73,10 @@ class AppSettings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
     artifact_root_dir: str = Field(default="data/artifacts")
+    artifact_storage_backend: Literal["local_disk", "s3"] = Field(default="local_disk")
+    artifact_s3_bucket: str | None = Field(default=None)
+    artifact_s3_prefix: str | None = Field(default=None)
+    artifact_s3_region: str | None = Field(default=None)
     ikea_image_catalog_root_dir: str = Field(
         default="/Users/tal/dev/tal_maria_ikea/.tmp_untracked/ikea_image_catalog"
     )

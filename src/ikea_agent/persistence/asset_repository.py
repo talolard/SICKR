@@ -2,12 +2,31 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ikea_agent.persistence.models import AgentRunRecord, AssetRecord, ThreadRecord
+
+
+@dataclass(frozen=True, slots=True)
+class PersistedAsset:
+    """Durable asset metadata needed to resolve one attachment id."""
+
+    asset_id: str
+    thread_id: str
+    run_id: str | None
+    created_by_tool: str | None
+    kind: str
+    mime_type: str
+    file_name: str | None
+    storage_path: str
+    sha256: str
+    size_bytes: int
+    width: int | None
+    height: int | None
 
 
 class AssetRepository:
@@ -81,6 +100,43 @@ class AssetRepository:
                 )
 
             session.commit()
+
+    def get_asset(self, *, asset_id: str) -> PersistedAsset | None:
+        """Return one persisted asset row for attachment-resolution flows."""
+
+        with self._session_factory() as session:
+            row = session.execute(
+                select(
+                    AssetRecord.asset_id,
+                    AssetRecord.thread_id,
+                    AssetRecord.run_id,
+                    AssetRecord.created_by_tool,
+                    AssetRecord.kind,
+                    AssetRecord.mime_type,
+                    AssetRecord.file_name,
+                    AssetRecord.storage_path,
+                    AssetRecord.sha256,
+                    AssetRecord.size_bytes,
+                    AssetRecord.width,
+                    AssetRecord.height,
+                ).where(AssetRecord.asset_id == asset_id)
+            ).one_or_none()
+        if row is None:
+            return None
+        return PersistedAsset(
+            asset_id=str(row.asset_id),
+            thread_id=str(row.thread_id),
+            run_id=str(row.run_id) if row.run_id is not None else None,
+            created_by_tool=str(row.created_by_tool) if row.created_by_tool is not None else None,
+            kind=str(row.kind),
+            mime_type=str(row.mime_type),
+            file_name=str(row.file_name) if row.file_name is not None else None,
+            storage_path=str(row.storage_path),
+            sha256=str(row.sha256),
+            size_bytes=int(row.size_bytes),
+            width=int(row.width) if row.width is not None else None,
+            height=int(row.height) if row.height is not None else None,
+        )
 
     @staticmethod
     def _ensure_thread(*, session: Session, thread_id: str, now: datetime) -> None:

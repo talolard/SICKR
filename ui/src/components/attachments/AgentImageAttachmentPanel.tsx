@@ -40,13 +40,24 @@ export function AgentImageAttachmentPanel({
   }, [attachments, onReadyAttachmentsChange]);
 
   const uploadAttachment = async (localId: string, file: File): Promise<void> => {
+    if (!threadId) {
+      const message = "Create or select a thread before uploading images.";
+      setAttachments((current) =>
+        current.map((attachment) =>
+          attachment.localId === localId
+            ? { ...attachment, status: "error", errorMessage: message }
+            : attachment,
+        ),
+      );
+      return;
+    }
     try {
       const response = await fetch("/api/attachments", {
         method: "POST",
         headers: {
           "content-type": file.type || "application/octet-stream",
           "x-filename": file.name,
-          ...(threadId ? { "x-thread-id": threadId } : {}),
+          "x-thread-id": threadId,
         },
         body: file,
       });

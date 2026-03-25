@@ -119,6 +119,21 @@ def _list_revealed_preferences(
     return repository.list_preferences(thread_id=thread_id)
 
 
+def _require_thread_id_from_payload(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="AG-UI requests must include a non-empty threadId.",
+        )
+    raw_thread_id = payload.get("thread_id") or payload.get("threadId")
+    if not isinstance(raw_thread_id, str) or not raw_thread_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="AG-UI requests must include a non-empty threadId.",
+        )
+    return raw_thread_id.strip()
+
+
 async def _parse_and_record_run_context(
     request: Request,
     *,
@@ -128,11 +143,11 @@ async def _parse_and_record_run_context(
 ) -> tuple[str, str]:
     body = await request.body()
     run_id = f"agui-{uuid4().hex[:16]}"
-    thread_id = "anonymous-thread"
+    thread_id: str | None = None
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
         run_id = str(payload.get("run_id") or payload.get("runId") or run_id)
-        thread_id = str(payload.get("thread_id") or payload.get("threadId") or thread_id)
+        thread_id = _require_thread_id_from_payload(payload)
         parent_run_id = payload.get("parent_run_id") or payload.get("parentRunId")
         parent_run_id_value = str(parent_run_id) if parent_run_id is not None else None
         message_payload = payload.get("messages")
@@ -163,8 +178,15 @@ async def _parse_and_record_run_context(
         ]
         payload["state"] = normalized_state
         request._body = json.dumps(payload).encode("utf-8")  # type: ignore[attr-defined]
+    except HTTPException:
+        raise
     except Exception:
         logger.debug("failed_to_parse_ag_ui_payload_for_run_history", exc_info=True)
+    if thread_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="AG-UI requests must include a non-empty threadId.",
+        )
     return run_id, thread_id
 
 
@@ -277,7 +299,7 @@ def _register_ag_ui_routes(
         on_complete = _build_on_complete(run_history_repository, run_id=run_id)
         try:
             with deps.attachment_store.bind_context(
-                thread_id=deps.state.thread_id or "anonymous-thread",
+                thread_id=thread_id,
                 run_id=deps.state.run_id,
             ):
                 response = await handle_ag_ui_request(

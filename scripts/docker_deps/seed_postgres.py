@@ -14,6 +14,7 @@ from pyarrow import parquet as pq
 from sqlalchemy import Connection, Engine, delete, func, insert, select
 from sqlalchemy.sql.base import Executable
 
+from ikea_agent.chat.product_images import build_seeded_public_image_url
 from ikea_agent.config import get_settings
 from ikea_agent.retrieval.display_titles import derive_display_title
 from ikea_agent.retrieval.schema import (
@@ -69,6 +70,7 @@ def main() -> None:
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--image-catalog-root", default=None)
     parser.add_argument("--image-catalog-run-id", default=None)
+    parser.add_argument("--product-image-base-url", default=None)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
@@ -78,6 +80,7 @@ def main() -> None:
         args.image_catalog_root or settings.ikea_image_catalog_root_dir
     ).expanduser()
     image_catalog_run_id = args.image_catalog_run_id or settings.ikea_image_catalog_run_id
+    product_image_base_url = args.product_image_base_url or settings.image_service_base_url
     database_url = resolve_database_url(database_url=args.database_url or settings.database_url)
     engine = create_database_engine(database_url)
     summary = seed_postgres_database(
@@ -85,6 +88,7 @@ def main() -> None:
         repo_root=repo_root,
         image_catalog_root=image_catalog_root,
         image_catalog_run_id=image_catalog_run_id,
+        product_image_base_url=product_image_base_url,
         force=args.force,
     )
     print(json.dumps(asdict(summary), indent=2, sort_keys=True))
@@ -96,6 +100,7 @@ def seed_postgres_database(
     repo_root: Path,
     image_catalog_root: Path,
     image_catalog_run_id: str | None,
+    product_image_base_url: str | None,
     force: bool,
 ) -> SeedSummary:
     """Seed catalog and image metadata into the local Postgres database."""
@@ -135,7 +140,11 @@ def seed_postgres_database(
 
     product_rows = _load_product_rows(products_parquet=products_parquet)
     embedding_rows = _load_embedding_rows(embeddings_parquet=embeddings_parquet)
-    image_rows = _load_image_rows(catalog_source=image_catalog_source)
+    image_rows = _load_image_rows(
+        catalog_source=image_catalog_source,
+        default_run_id=image_catalog_run_id,
+        product_image_base_url=product_image_base_url,
+    )
 
     with engine.begin() as connection:
         connection.execute(product_embedding_neighbors.delete())
@@ -178,6 +187,7 @@ def seed_postgres_database(
             details={
                 "catalog_source": str(image_catalog_source),
                 "image_count": len(image_rows),
+                "product_image_base_url": product_image_base_url,
             },
         )
 
@@ -273,7 +283,12 @@ def _load_embedding_rows(*, embeddings_parquet: Path) -> list[dict[str, object]]
     return embedding_rows
 
 
-def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
+def _load_image_rows(
+    *,
+    catalog_source: Path,
+    default_run_id: str | None,
+    product_image_base_url: str | None,
+) -> list[dict[str, object]]:
     deduped_rows: dict[str, dict[str, object]] = {}
     for row in _read_image_rows(catalog_source=catalog_source):
         image_asset_key = _str_or_none(row.get("image_asset_key"))
@@ -289,6 +304,14 @@ def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
         storage_backend_kind = (
             LOCAL_IMAGE_STORAGE_BACKEND if local_path is not None else REMOTE_IMAGE_STORAGE_BACKEND
         )
+        crawl_run_id = _str_or_none(row.get("crawl_run_id"))
+        public_url = _resolve_seed_public_url(
+            canonical_image_url=canonical_image_url,
+            crawl_run_id=crawl_run_id,
+            default_run_id=default_run_id,
+            image_asset_key=image_asset_key,
+            product_image_base_url=product_image_base_url,
+        )
         deduped_rows[image_asset_key] = {
             "image_asset_key": image_asset_key,
             "canonical_product_key": canonical_product_key,
@@ -298,11 +321,11 @@ def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
             "image_role": _str_or_none(row.get("image_role")),
             "storage_backend_kind": storage_backend_kind,
             "storage_locator": storage_locator,
-            "public_url": canonical_image_url,
+            "public_url": public_url,
             "local_path": local_path,
             "canonical_image_url": canonical_image_url,
             "provenance": _str_or_none(row.get("extraction_source")),
-            "crawl_run_id": _str_or_none(row.get("crawl_run_id")),
+            "crawl_run_id": crawl_run_id,
             "source_page_url": _str_or_none(row.get("source_page_url")),
             "sha256": _str_or_none(row.get("sha256")),
             "content_type": _str_or_none(row.get("content_type")),
@@ -312,6 +335,25 @@ def _load_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
             or _datetime_or_none(row.get("downloaded_at")),
         }
     return list(deduped_rows.values())
+
+
+def _resolve_seed_public_url(
+    *,
+    canonical_image_url: str | None,
+    crawl_run_id: str | None,
+    default_run_id: str | None,
+    image_asset_key: str,
+    product_image_base_url: str | None,
+) -> str | None:
+    del canonical_image_url
+    resolved_run_id = crawl_run_id or default_run_id
+    if product_image_base_url and resolved_run_id:
+        return build_seeded_public_image_url(
+            base_url=product_image_base_url,
+            run_id=resolved_run_id,
+            image_asset_key=image_asset_key,
+        )
+    return None
 
 
 def _read_image_rows(*, catalog_source: Path) -> list[dict[str, object]]:
