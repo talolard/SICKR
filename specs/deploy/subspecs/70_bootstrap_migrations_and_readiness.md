@@ -87,6 +87,12 @@ For v1, it is acceptable for this bootstrap to run from a dedicated operator
 workflow or explicit one-off command sequence rather than from normal app deploy
 automation.
 
+Current operator entry point:
+
+- `scripts/deploy/bootstrap_environment.sh`
+  The operator script may run from a dedicated worktree while reading pinned
+  parquet inputs from Tal's canonical checkout.
+
 ## Required Application Deploy Order
 
 Every release deploy must follow this order:

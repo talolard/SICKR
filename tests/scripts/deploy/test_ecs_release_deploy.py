@@ -6,11 +6,10 @@ from typing import Any
 
 import pytest
 from scripts.deploy.ecs_release_deploy import (
-    EcsDeployContext,
     ReleaseDeployRequest,
     ReleaseDeployResult,
+    build_backend_network_configuration,
     deploy_release,
-    resolve_deploy_context,
     run_one_off_backend_task_to_completion,
 )
 
@@ -47,14 +46,6 @@ class DeployReleaseHarness:
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "scripts.deploy.ecs_release_deploy.describe_service",
-            self.describe_service,
-        )
-        monkeypatch.setattr(
-            "scripts.deploy.ecs_release_deploy.resolve_deploy_context",
-            self.resolve_context,
-        )
-        monkeypatch.setattr(
             "scripts.deploy.ecs_release_deploy.describe_task_definition",
             self.describe_task_definition,
         )
@@ -79,36 +70,6 @@ class DeployReleaseHarness:
             self.wait_for_ui_service_stable,
         )
 
-    def describe_service(
-        self,
-        *,
-        cluster: str,
-        service_name: str,
-        aws_cli: object,
-    ) -> dict[str, Any]:
-        del aws_cli
-        self.events.append(("describe_service", service_name))
-        assert cluster == "cluster-1"
-        return {"serviceName": service_name}
-
-    def resolve_context(
-        self,
-        *,
-        backend_service: dict[str, Any],
-        ui_service: dict[str, Any],
-        aws_cli: object,
-    ) -> EcsDeployContext:
-        del aws_cli
-        assert backend_service["serviceName"] == "backend-service"
-        assert ui_service["serviceName"] == "ui-service"
-        self.events.append(("resolve_context", "ok"))
-        return EcsDeployContext(
-            backend_task_definition_arn="backend:current",
-            ui_task_definition_arn="ui:current",
-            backend_network_configuration={"awsvpcConfiguration": {"subnets": ["subnet-a"]}},
-            alb_dns_name="alb.example.internal",
-        )
-
     def describe_task_definition(
         self,
         *,
@@ -117,7 +78,7 @@ class DeployReleaseHarness:
     ) -> dict[str, Any]:
         del aws_cli
         self.events.append(("describe_task_definition", task_definition_arn))
-        is_backend = task_definition_arn.startswith("backend")
+        is_backend = "backend" in task_definition_arn
         family = "ikea-agent-dev-backend" if is_backend else "ikea-agent-dev-ui"
         name = "backend" if is_backend else "ui"
         return {
@@ -155,7 +116,13 @@ class DeployReleaseHarness:
         del aws_cli
         assert cluster == "cluster-1"
         assert task_definition_arn == "ikea-agent-dev-backend:next"
-        assert network_configuration == {"awsvpcConfiguration": {"subnets": ["subnet-a"]}}
+        assert network_configuration == {
+            "awsvpcConfiguration": {
+                "subnets": ["subnet-a", "subnet-b"],
+                "securityGroups": ["sg-backend"],
+                "assignPublicIp": "ENABLED",
+            }
+        }
         self.events.append(("run_one_off_backend_task", " ".join(command)))
         return "task-123"
 
@@ -204,58 +171,19 @@ class DeployReleaseHarness:
         self.events.append(("wait_for_ui_service_stable", service_name))
 
 
-def test_resolve_deploy_context_extracts_task_definitions_network_and_alb() -> None:
-    backend_service = {
-        "taskDefinition": "backend:12",
-        "loadBalancers": [{"targetGroupArn": "tg-123"}],
-        "networkConfiguration": {
-            "awsvpcConfiguration": {
-                "subnets": ["subnet-a", "subnet-b"],
-                "securityGroups": ["sg-backend"],
-                "assignPublicIp": "ENABLED",
-            }
-        },
+def test_build_backend_network_configuration_uses_authoritative_runtime_inputs() -> None:
+    network_configuration = build_backend_network_configuration(
+        subnet_ids=("subnet-a", "subnet-b"),
+        security_group_ids=("sg-backend",),
+    )
+
+    assert network_configuration == {
+        "awsvpcConfiguration": {
+            "subnets": ["subnet-a", "subnet-b"],
+            "securityGroups": ["sg-backend"],
+            "assignPublicIp": "ENABLED",
+        }
     }
-    ui_service = {"taskDefinition": "ui:34"}
-
-    def _json_handler(args: tuple[str, ...]) -> object:
-        if args == (
-            "elbv2",
-            "describe-target-groups",
-            "--target-group-arns",
-            "tg-123",
-        ):
-            return {"TargetGroups": [{"LoadBalancerArns": ["alb-123"]}]}
-        if args == (
-            "elbv2",
-            "describe-load-balancers",
-            "--load-balancer-arns",
-            "alb-123",
-        ):
-            return {"LoadBalancers": [{"DNSName": "alb.example.internal"}]}
-        msg = f"Unexpected json call: {args!r}"
-        raise AssertionError(msg)
-
-    aws_cli = StubAwsCli(json_handler=_json_handler)
-
-    context = resolve_deploy_context(
-        backend_service=backend_service,
-        ui_service=ui_service,
-        aws_cli=aws_cli,  # type: ignore[arg-type]
-    )
-
-    assert context == EcsDeployContext(
-        backend_task_definition_arn="backend:12",
-        ui_task_definition_arn="ui:34",
-        backend_network_configuration={
-            "awsvpcConfiguration": {
-                "subnets": ["subnet-a", "subnet-b"],
-                "securityGroups": ["sg-backend"],
-                "assignPublicIp": "ENABLED",
-            }
-        },
-        alb_dns_name="alb.example.internal",
-    )
 
 
 def test_run_one_off_backend_task_to_completion_raises_for_nonzero_exit_code() -> None:
@@ -297,6 +225,11 @@ def test_deploy_release_preserves_backend_then_ui_contract(
         cluster_name="cluster-1",
         backend_service_name="backend-service",
         ui_service_name="ui-service",
+        backend_task_definition_family="ikea-agent-dev-backend",
+        ui_task_definition_family="ikea-agent-dev-ui",
+        backend_run_task_subnet_ids=("subnet-a", "subnet-b"),
+        backend_run_task_security_group_ids=("sg-backend",),
+        app_alb_dns_name="alb.example.internal",
         app_version="1.2.3",
         backend_image_ref="backend@sha256:abcd",
         ui_image_ref="ui@sha256:efgh",
@@ -325,10 +258,7 @@ def test_deploy_release_preserves_backend_then_ui_contract(
         public_app_base_url="https://designagent.talperry.com",
     )
     assert harness.events == [
-        ("describe_service", "backend-service"),
-        ("describe_service", "ui-service"),
-        ("resolve_context", "ok"),
-        ("describe_task_definition", "backend:current"),
+        ("describe_task_definition", "ikea-agent-dev-backend"),
         ("register_task_definition", "ikea-agent-dev-backend"),
         ("run_one_off_backend_task", "python -m scripts.deploy.apply_migrations"),
         (
@@ -337,7 +267,7 @@ def test_deploy_release_preserves_backend_then_ui_contract(
         ),
         ("update_service", "backend-service:ikea-agent-dev-backend:next:1"),
         ("wait_for_backend_rollout", "backend-service:ikea-agent-dev-backend:next"),
-        ("describe_task_definition", "ui:current"),
+        ("describe_task_definition", "ikea-agent-dev-ui"),
         ("register_task_definition", "ikea-agent-dev-ui"),
         ("update_service", "ui-service:ikea-agent-dev-ui:next:1"),
         ("wait_for_ui_service_stable", "ui-service"),

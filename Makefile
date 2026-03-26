@@ -9,7 +9,7 @@ endif
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
-	deploy-migrate deploy-bootstrap deploy-verify-seed \
+	deploy-migrate deploy-bootstrap deploy-bootstrap-environment deploy-verify-seed \
 	dev human dev-human dev-all dev-all-mock reset agent-start agent-start-docs merge-list merge-list-all \
 	merge-list-failing merge-list-json merge-normalize
 
@@ -17,12 +17,23 @@ HOST ?= 127.0.0.1
 PORT ?= $(or $(BACKEND_PORT),8000)
 UI_DIR ?= ui
 UI_PORT ?= 3000
+PUBLIC_APP_BASE_URL ?= https://designagent.talperry.com
 UI_NODE_MODULES ?= $(UI_DIR)/node_modules
 PY_AG_UI_URL ?= http://127.0.0.1:$(PORT)/ag-ui/
 DATABASE_URL ?= postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent
 ARTIFACT_ROOT_DIR ?= data/artifacts
 FEEDBACK_ROOT_DIR ?= comments
 TRACE_ROOT_DIR ?= traces
+PRODUCT_IMAGE_BUCKET_NAME ?=
+PRIVATE_ARTIFACTS_BUCKET_NAME ?=
+ECS_CLUSTER_NAME ?=
+ECS_BACKEND_TASK_DEFINITION_FAMILY ?=
+ECS_RUN_TASK_SUBNET_IDS_JSON ?=
+ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON ?=
+IKEA_IMAGE_CATALOG_RUN_ID ?=
+BOOTSTRAP_INPUT_REPO_ROOT ?=
+BOOTSTRAP_RUN_TASK_CPU ?= 1024
+BOOTSTRAP_RUN_TASK_MEMORY ?= 4096
 UV := env -u VIRTUAL_ENV uv
 UV_RUN := $(UV) run
 COVERAGE_DIR ?= .tmp_untracked/coverage
@@ -100,6 +111,26 @@ deploy-migrate:
 
 deploy-bootstrap:
 	$(UV_RUN) python -m scripts.deploy.bootstrap_catalog
+
+deploy-bootstrap-environment:
+	@set -eu; \
+	extra_args=""; \
+	if [ -n "$(FORCE)" ]; then \
+		extra_args="$$extra_args --force"; \
+	fi; \
+	./scripts/deploy/bootstrap_environment.sh \
+		--product-image-bucket "$(PRODUCT_IMAGE_BUCKET_NAME)" \
+		--private-artifacts-bucket "$(PRIVATE_ARTIFACTS_BUCKET_NAME)" \
+		--ecs-cluster "$(ECS_CLUSTER_NAME)" \
+		--backend-task-definition-family "$(ECS_BACKEND_TASK_DEFINITION_FAMILY)" \
+		--run-task-subnets-json '$(ECS_RUN_TASK_SUBNET_IDS_JSON)' \
+		--run-task-security-groups-json '$(ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON)' \
+		--image-catalog-run-id "$(IKEA_IMAGE_CATALOG_RUN_ID)" \
+		--run-task-cpu "$(BOOTSTRAP_RUN_TASK_CPU)" \
+		--run-task-memory "$(BOOTSTRAP_RUN_TASK_MEMORY)" \
+		--bootstrap-input-repo-root "$(BOOTSTRAP_INPUT_REPO_ROOT)" \
+		--public-app-base-url "$(PUBLIC_APP_BASE_URL)" \
+		$$extra_args
 
 deploy-verify-seed:
 	$(UV_RUN) python -m scripts.deploy.verify_seed_state
