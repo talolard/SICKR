@@ -509,9 +509,10 @@ PY
             --desired-count 1 \
             --force-new-deployment \
             >/dev/null
-          aws ecs wait services-stable \
+          python -m scripts.deploy.wait_for_ecs_service_rollout \
             --cluster "${ECS_CLUSTER_NAME}" \
-            --services "${ECS_BACKEND_SERVICE_NAME}"
+            --service "${ECS_BACKEND_SERVICE_NAME}" \
+            --expected-task-definition "${BACKEND_TASK_DEFINITION_ARN}"
 
       - name: Register UI task definition revision
         id: ui_taskdef
