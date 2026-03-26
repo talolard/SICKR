@@ -13,6 +13,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ikea_agent.shared.db_contract import PRODUCT_EMBEDDING_DIMENSIONS
+from ikea_agent.shared.sqlalchemy_db import LOCAL_DATABASE_POOL_MODE
 
 
 class AgentModelConfig(BaseModel):
@@ -72,7 +73,7 @@ class AppSettings(BaseSettings):
         default="postgresql+psycopg://ikea:ikea@127.0.0.1:15432/ikea_agent",
         validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
-    database_pool_mode: Literal["queuepool", "nullpool"] = Field(default="queuepool")
+    database_pool_mode: Literal["queuepool", "nullpool"] = Field(default=LOCAL_DATABASE_POOL_MODE)
     artifact_root_dir: str = Field(default="data/artifacts")
     artifact_storage_backend: Literal["local_disk", "s3"] = Field(default="local_disk")
     artifact_s3_bucket: str | None = Field(default=None)

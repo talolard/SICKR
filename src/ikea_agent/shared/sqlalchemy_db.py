@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Final, Literal
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 DatabasePoolMode = Literal["queuepool", "nullpool"]
+LOCAL_DATABASE_POOL_MODE: Final[DatabasePoolMode] = "queuepool"
+DEPLOYED_DATABASE_POOL_MODE: Final[DatabasePoolMode] = "nullpool"
 
 
 def resolve_database_url(*, database_url: str | None) -> str:
@@ -23,7 +25,7 @@ def resolve_database_url(*, database_url: str | None) -> str:
 def create_database_engine(
     database_url: str,
     *,
-    pool_mode: DatabasePoolMode = "queuepool",
+    pool_mode: DatabasePoolMode = LOCAL_DATABASE_POOL_MODE,
 ) -> Engine:
     """Create a SQLAlchemy engine for one configured database URL."""
 

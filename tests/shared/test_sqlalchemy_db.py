@@ -6,6 +6,8 @@ import pytest
 from sqlalchemy.pool import NullPool
 
 from ikea_agent.shared.sqlalchemy_db import (
+    DEPLOYED_DATABASE_POOL_MODE,
+    LOCAL_DATABASE_POOL_MODE,
     create_database_engine,
     create_session_factory,
     resolve_database_url,
@@ -28,6 +30,11 @@ def test_create_database_engine_accepts_sqlite_url(tmp_path: Path) -> None:
 
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT 1").scalar_one() == 1
+
+
+def test_database_pool_mode_constants_capture_local_and_deployed_policy() -> None:
+    assert LOCAL_DATABASE_POOL_MODE == "queuepool"
+    assert DEPLOYED_DATABASE_POOL_MODE == "nullpool"
 
 
 def test_create_database_engine_enables_pool_pre_ping_for_psycopg(

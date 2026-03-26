@@ -26,11 +26,20 @@ Cross-check current deploy claims against:
 - The architecture direction is stable:
   `CloudFront + ALB + ECS Fargate + Aurora + S3`
 - The repo is already past "first deploy still needs to happen."
+- Aurora pause-to-zero is now a proven runtime behavior, not only a planned
+  property.
+- The deployed DB connection policy is settled:
+  ECS backend uses the Aurora writer endpoint with `DATABASE_POOL_MODE = nullpool`.
 - The real gap is now operational, not architectural:
   make the canonical `release -> publish -> deploy` path trustworthy without
   relying on manual recovery.
 - The manual ECS recovery lane exists in the repo today, but it is no longer a
   desired long-term path.
+
+Measured validation note:
+
+- see
+  [aurora_pause_to_zero_validation_2026-03-26.md](./aurora_pause_to_zero_validation_2026-03-26.md)
 
 ## What Is Implemented In The Repo Now
 
