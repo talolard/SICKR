@@ -36,10 +36,8 @@ Deploy should not rebuild images on the runtime platform.
 
 Current implementation honesty note:
 
-- the repo currently has `release-please`, `release-publish`,
-  `release-deploy`, and `manual-ref-deploy` workflows
-- the `manual-ref-deploy` workflow is transitional recovery tooling, not part
-  of the desired steady-state release model
+- the repo currently has `release-please`, `release-publish`, and
+  `release-deploy` workflows
 - the canonical publish lane is still not trustworthy enough to be treated as a
   solved problem
 
@@ -229,8 +227,8 @@ path. There should not be a host-local "previous release" mechanism anymore.
 Current repo-state note:
 
 - `release-deploy.yml` fits this redeploy model
-- `manual-ref-deploy.yml` does not; it is recovery debt to remove once the
-  canonical release path is trustworthy
+- redeploy should stay on immutable published release tags rather than
+  reintroducing a source-ref build workflow
 
 ## Redundant Old Path
 

@@ -146,9 +146,6 @@ host-local rollback bookkeeping.
 Rollback means redeploying an older immutable release tag through the same ECS
 workflow.
 
-The `manual-ref-deploy` workflow that still exists in the repo is transitional
-recovery debt, not part of the target release model.
-
 ## Bootstrap Versus Steady State
 
 One-off environment bootstrap is still separate from steady-state app deploy.

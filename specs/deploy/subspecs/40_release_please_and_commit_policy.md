@@ -410,7 +410,7 @@ What is true today:
   that the checked-out merge commit and `version.txt` agree on one release
 - prepared release state has advanced further than published immutable release
   state
-- the `manual-ref-deploy` workflow still exists, but it is recovery debt rather
-  than intended steady-state release machinery
+- redeploy should stay on immutable published release tags rather than a
+  source-ref rebuild path
 - GitHub still reports the `release` branch as unprotected until the operator
   branch rule is configured to require the governance checks

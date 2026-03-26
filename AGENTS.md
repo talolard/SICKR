@@ -30,8 +30,8 @@ Repository-wide invariants for work in `tal_maria_ikea`.
   - release provenance
   - deploy visibility later, only after the existing path is trustworthy
 - The canonical target is one automatic `main -> release -> publish -> deploy`
-  flow. The `manual-ref-deploy` workflow still exists in the repo, but it is
-  transitional recovery debt and should be removed rather than extended.
+  flow. Redeploys and rollbacks should reuse immutable published release tags
+  through the canonical ECS path rather than a source-ref build lane.
 - For deploy work, prefer the current workflows under `.github/workflows/`,
   Terraform under `infra/terraform/`, `docs/deployment_runtime_contract.md`, and
   the refreshed docs under `specs/deploy/` over older design notes.

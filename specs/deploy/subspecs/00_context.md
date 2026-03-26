@@ -35,8 +35,8 @@ traffic, and easy to debug without babysitting a host.
 - the repo is now in post-cutover hardening
 - the main deploy problem is workflow reliability and provenance, not choosing
   the runtime architecture
-- the `manual-ref-deploy` workflow still exists as recovery debt, but it is not
-  part of the desired steady-state deploy model
+- redeploy and rollback should run from immutable published release tags, not
+  from source-ref rebuild workflows
 - older deploy plans under `plans/` that still assume EC2, SSM, host bundles,
   or manual ECS backstops are historical background only
 
@@ -134,8 +134,9 @@ Shared release posture for the near term:
   - an immutable Git tag and GitHub release were created
 - deploy automation rolls those immutable artifacts onto ECS; it does not build
   on the runtime platform
-- the manual source-ref deploy path that still exists in the repo is temporary
-  recovery tooling, not a valid long-term parallel release path
+- redeploy and rollback use those same immutable published artifacts through the
+  ECS deploy path; source-ref rebuilds are out of scope for the steady-state
+  contract
 
 ## New Redundancies
 

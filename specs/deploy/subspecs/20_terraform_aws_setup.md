@@ -293,15 +293,15 @@ Terraform outputs should be sufficient to populate these repo variables:
 - `ECS_UI_SERVICE_NAME`
 - `IKEA_IMAGE_CATALOG_RUN_ID`
 
-The release and deploy IAM roles must trust GitHub OIDC subjects from both
-`refs/heads/release` and `refs/heads/main` today because the repo still contains
-the transitional `manual-ref-deploy` workflow.
+The release and deploy IAM roles must trust GitHub OIDC subjects from
+`refs/heads/release` because the canonical publish and redeploy path runs from
+published releases rather than source-ref builds from `main`.
 
 Target posture:
 
-- the canonical publish/deploy path should run from `release`
-- the extra `main` trust should be removed when the manual source-ref deploy
-  lane is deleted
+- the canonical publish/deploy path runs from `release`
+- do not widen GitHub OIDC trust to `main` unless a new documented workflow
+  actually requires it
 
 The old EC2-targeting repo variables are obsolete:
 
