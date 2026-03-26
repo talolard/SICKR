@@ -239,6 +239,16 @@ Policy:
 - `idle_session_timeout = 15 minutes`
 - `idle_in_transaction_session_timeout = 1 minute`
 - no `RDS Proxy`
+- deployed backend runtime uses the Aurora writer endpoint with
+  `DATABASE_POOL_MODE = nullpool`
+
+Measured validation note:
+
+- the deployed `ikea-agent-dev-db` cluster was verified on 2026-03-26 with
+  `MinCapacity = 0.0`, `SecondsUntilAutoPause = 900`, real zero-capacity idle
+  periods, and a successful cold-wake readiness probe
+- see
+  [aurora_pause_to_zero_validation_2026-03-26.md](../aurora_pause_to_zero_validation_2026-03-26.md)
 
 ## Storage
 

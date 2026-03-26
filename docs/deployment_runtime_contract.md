@@ -96,6 +96,13 @@ injection:
 - `FAL_KEY`
 - `LOGFIRE_TOKEN` when observability export is enabled
 
+Database policy note:
+
+- local development may keep `queuepool` as the default setting
+- the deployed ECS backend should stay on `nullpool`
+- this is a measured policy choice, not only a theoretical preference; see
+  [aurora_pause_to_zero_validation_2026-03-26.md](../specs/deploy/aurora_pause_to_zero_validation_2026-03-26.md)
+
 Product-image note:
 
 - when `IMAGE_SERVICE_BASE_URL` is set, catalog seeding should write same-host

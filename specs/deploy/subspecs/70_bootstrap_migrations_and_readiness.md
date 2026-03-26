@@ -249,6 +249,21 @@ Recommended v1 tolerance:
   deploy
 - retry database-backed readiness checks with backoff inside that window
 
+Measured validation on 2026-03-26:
+
+- the live `ikea-agent-dev-db` Aurora writer sat at
+  `ServerlessDatabaseCapacity = 0` and `ACUUtilization = 0` for several
+  consecutive minutes while the ECS backend service stayed up
+- a real readiness probe to
+  `http://ikea-agent-dev-alb-1739844720.eu-central-1.elb.amazonaws.com/api/health/ready`
+  then succeeded in `15.444` seconds and the same minute showed Aurora waking
+  above zero capacity
+- this validated the chosen runtime posture: deployed backend
+  `DATABASE_POOL_MODE = nullpool`, plus retry/backoff in deploy readiness
+  polling
+- see
+  [aurora_pause_to_zero_validation_2026-03-26.md](../aurora_pause_to_zero_validation_2026-03-26.md)
+
 What is not acceptable:
 
 - routing live traffic before readiness succeeds
