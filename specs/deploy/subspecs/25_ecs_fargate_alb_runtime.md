@@ -145,23 +145,26 @@ Optional hardening later:
 The UI task needs two different upstream contracts:
 
 - `PY_AG_UI_URL=http://<alb-dns>/ag-ui/` for AG-UI and CopilotKit agent traffic
-- `BACKEND_PROXY_BASE_URL=http://<alb-dns>:8000/` for Next server routes that
-  proxy backend-owned REST endpoints such as `/api/agents*`
+- `BACKEND_PROXY_BASE_URL=http://<alb-dns>/` for Next server routes that
+  proxy residual backend-owned endpoints such as `/api/rooms/*` and
+  `/attachments*`
 
-In production, browser traffic for `/api/agents*` and `/api/health*` should
-route straight to the backend through ALB listener rules instead of depending
-on the UI task to reach the backend-only ALB listener.
+In production, browser traffic for `/api/agents*`, `/api/health*`,
+`/api/rooms/*`, `/attachments*`, and `/ag-ui/*` should route straight to the
+backend through ALB listener rules instead of depending on a separate internal
+port or listener.
 
 That keeps the public browser contract stable while making the internal proxy
-hop explicit. The backend-only ALB listener is reachable from the UI ECS
-service security group, not from the public internet.
+hop explicit. The UI task should use the same ALB origin the browser uses, with
+path-based routing deciding whether a request lands on the backend or UI
+service.
 
 Operational preference:
 
 - keep `BACKEND_PROXY_BASE_URL` limited to residual Next.js server-side proxy
   routes that still need it
 - prefer direct public routing to the backend for backend-owned browser APIs
-  rather than expanding the internal UI-to-backend proxy surface
+  rather than expanding the server-side UI proxy surface
 
 ## One-Off Tasks
 

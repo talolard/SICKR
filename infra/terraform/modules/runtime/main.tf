@@ -71,7 +71,7 @@ locals {
   ui_container_name      = "ui"
   vpc_id                 = one(distinct([for subnet in data.aws_subnet.public : subnet.vpc_id]))
   alb_dns_url            = "http://${aws_lb.main.dns_name}"
-  backend_proxy_base_url = "http://${aws_lb.main.dns_name}:${var.backend_container_port}/"
+  backend_proxy_base_url = "${local.alb_dns_url}/"
   backend_environment = [
     { name = "APP_ENV", value = var.environment },
     { name = "LOG_LEVEL", value = "INFO" },
@@ -282,17 +282,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-resource "aws_lb_listener" "backend_proxy" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = var.backend_container_port
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
-  }
-}
-
 resource "aws_lb_listener_rule" "ag_ui" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 100
@@ -337,6 +326,38 @@ resource "aws_lb_listener_rule" "api_health" {
   condition {
     path_pattern {
       values = ["/api/health*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "api_rooms" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 92
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/rooms/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "attachments" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 93
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/attachments", "/attachments/*"]
     }
   }
 }

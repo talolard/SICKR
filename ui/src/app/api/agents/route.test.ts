@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe("agents route", () => {
   it("uses the explicit backend proxy base for deployed server-side fetches", async () => {
-    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb:8000/";
+    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb/";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -35,7 +35,7 @@ describe("agents route", () => {
 
     const response = await GET(new NextRequest("http://127.0.0.1:3000/api/agents?full=1"));
 
-    expect(global.fetch).toHaveBeenCalledWith("http://internal-alb:8000/api/agents?full=1", {
+    expect(global.fetch).toHaveBeenCalledWith("http://internal-alb/api/agents?full=1", {
       method: "GET",
       headers: { accept: "application/json" },
     });

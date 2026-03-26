@@ -21,14 +21,10 @@ export function backendProxyBaseUrl(): string {
   }
 
   const agUiUrl = new URL(agUiBaseUrl());
-  const port =
-    agUiUrl.port.length > 0 && agUiUrl.port !== "80" && agUiUrl.port !== "443"
-      ? agUiUrl.port
-      : "8000";
   agUiUrl.pathname = "/";
   agUiUrl.search = "";
   agUiUrl.hash = "";
-  agUiUrl.port = port;
+  agUiUrl.port = "";
   return ensureTrailingSlash(agUiUrl.toString());
 }
 

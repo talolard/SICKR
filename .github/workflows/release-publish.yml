@@ -385,7 +385,8 @@ PY
             --container ui \
             --image "${{ steps.release.outputs.ui_image_ref }}" \
             --set-env "APP_RELEASE_VERSION=${{ steps.release.outputs.app_version }}" \
-            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}:8000/"
+            --set-env "PY_AG_UI_URL=http://${{ steps.ecs.outputs.alb_dns_name }}/ag-ui/" \
+            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}/"
 
       - name: Register backend task definition revision
         id: backend_taskdef

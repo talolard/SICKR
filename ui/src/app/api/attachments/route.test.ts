@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const originalMockFlag = process.env.NEXT_PUBLIC_USE_MOCK_AGENT;
+const originalBackendProxyBaseUrl = process.env.BACKEND_PROXY_BASE_URL;
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -11,9 +12,57 @@ afterEach(() => {
   } else {
     process.env.NEXT_PUBLIC_USE_MOCK_AGENT = originalMockFlag;
   }
+  if (originalBackendProxyBaseUrl === undefined) {
+    delete process.env.BACKEND_PROXY_BASE_URL;
+  } else {
+    process.env.BACKEND_PROXY_BASE_URL = originalBackendProxyBaseUrl;
+  }
 });
 
 describe("attachment upload route", () => {
+  it("uses the root ALB backend proxy base for deployed attachment uploads", async () => {
+    process.env.NEXT_PUBLIC_USE_MOCK_AGENT = "0";
+    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb/";
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ attachment_id: "asset-1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      new NextRequest("http://127.0.0.1:3000/api/attachments", {
+        method: "POST",
+        body: new Uint8Array([1, 2, 3]),
+        headers: {
+          "content-type": "image/png",
+          "x-room-id": "room-1",
+          "x-thread-id": "thread-1",
+          "x-run-id": "run-1",
+          "x-filename": "chair.png",
+        },
+      }),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [upstreamUrl, upstreamInit] = fetchSpy.mock.calls[0] ?? [];
+    expect(String(upstreamUrl)).toBe("http://internal-alb/attachments");
+    expect(upstreamInit).toMatchObject({
+      method: "POST",
+      headers: {
+        "content-type": "image/png",
+        "x-filename": "chair.png",
+        "x-room-id": "room-1",
+        "x-thread-id": "thread-1",
+        "x-run-id": "run-1",
+      },
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ attachment_id: "asset-1" });
+  });
+
   it("logs failed upstream responses and preserves the status code", async () => {
     process.env.NEXT_PUBLIC_USE_MOCK_AGENT = "0";
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

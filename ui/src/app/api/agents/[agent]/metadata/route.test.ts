@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe("agent metadata route", () => {
   it("uses the explicit backend proxy base for deployed metadata fetches", async () => {
-    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb:8000/";
+    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb/";
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -38,7 +38,7 @@ describe("agent metadata route", () => {
       { params: Promise.resolve({ agent: "search" }) },
     );
 
-    expect(global.fetch).toHaveBeenCalledWith("http://internal-alb:8000/api/agents/search/metadata?full=1", {
+    expect(global.fetch).toHaveBeenCalledWith("http://internal-alb/api/agents/search/metadata?full=1", {
       method: "GET",
       headers: { accept: "application/json" },
     });
