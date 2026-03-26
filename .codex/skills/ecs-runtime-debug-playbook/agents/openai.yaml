@@ -1,0 +1,4 @@
+interface:
+  display_name: "ECS Runtime Debug Playbook"
+  short_description: "Debug ECS deploy/runtime drift issues."
+  default_prompt: "Use $ecs-runtime-debug-playbook to debug an ECS deployment that looks green but is not actually serving the intended revision."
