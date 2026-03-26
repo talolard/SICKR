@@ -158,6 +158,9 @@ rollouts source-controlled and repeatable.
 
 Current implementation note:
 
+- `release-publish.yml` and `release-deploy.yml` now call the shared Python
+  entry point `python -m scripts.deploy.ecs_release_deploy` for the canonical
+  ECS rollout sequence
 - the repo already exports the needed cluster/service names and ALB DNS through
   Terraform outputs
 - the current workflows still describe ECS services and the ALB live to derive
