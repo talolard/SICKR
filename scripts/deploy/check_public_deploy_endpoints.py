@@ -63,6 +63,34 @@ def _assert_metadata_payload(response: httpx.Response, expected_agent: str) -> N
         raise AssertionError(msg)
 
 
+def check_public_deploy_endpoints(base_url: str) -> None:
+    """Raise when the public deploy paths are not healthy enough for UI boot."""
+
+    timeout = httpx.Timeout(connect=5.0, read=20.0, write=20.0, pool=None)
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+        health_response = _request(client, base_url, EndpointCheck(path="/api/health"))
+        if health_response.status_code != _HTTP_OK:
+            msg = f"/api/health returned {health_response.status_code}."
+            raise AssertionError(msg)
+        _assert_health_payload(health_response)
+
+        agents_response = _request(client, base_url, EndpointCheck(path="/api/agents"))
+        if agents_response.status_code != _HTTP_OK:
+            msg = f"/api/agents returned {agents_response.status_code}."
+            raise AssertionError(msg)
+        first_agent = _assert_agents_payload(agents_response)
+
+        metadata_response = _request(
+            client,
+            base_url,
+            EndpointCheck(path=f"/api/agents/{first_agent}/metadata"),
+        )
+        if metadata_response.status_code != _HTTP_OK:
+            msg = f"/api/agents/{first_agent}/metadata returned {metadata_response.status_code}."
+            raise AssertionError(msg)
+        _assert_metadata_payload(metadata_response, first_agent)
+
+
 def main() -> int:
     """Exit non-zero when the public deploy path is not healthy enough for UI boot."""
 
@@ -74,30 +102,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    timeout = httpx.Timeout(connect=5.0, read=20.0, write=20.0, pool=None)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        health_response = _request(client, args.base_url, EndpointCheck(path="/api/health"))
-        if health_response.status_code != _HTTP_OK:
-            msg = f"/api/health returned {health_response.status_code}."
-            raise AssertionError(msg)
-        _assert_health_payload(health_response)
-
-        agents_response = _request(client, args.base_url, EndpointCheck(path="/api/agents"))
-        if agents_response.status_code != _HTTP_OK:
-            msg = f"/api/agents returned {agents_response.status_code}."
-            raise AssertionError(msg)
-        first_agent = _assert_agents_payload(agents_response)
-
-        metadata_response = _request(
-            client,
-            args.base_url,
-            EndpointCheck(path=f"/api/agents/{first_agent}/metadata"),
-        )
-        if metadata_response.status_code != _HTTP_OK:
-            msg = f"/api/agents/{first_agent}/metadata returned {metadata_response.status_code}."
-            raise AssertionError(msg)
-        _assert_metadata_payload(metadata_response, first_agent)
-
+    check_public_deploy_endpoints(args.base_url)
     print(f"Validated public agent routes on {args.base_url}.")
     return 0
 

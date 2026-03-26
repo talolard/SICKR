@@ -108,6 +108,7 @@ The concrete near-term file layout is:
 - `scripts/deploy/read_release_version.py`
 - `scripts/deploy/write_release_manifest.py`
 - `scripts/deploy/render_ecs_task_definition.py`
+- `scripts/deploy/ecs_release_deploy.py`
 - `docs/deployment_runtime_contract.md`
 
 The current build posture intentionally targets `linux/amd64` for release
@@ -206,6 +207,8 @@ Implementation preference:
   where possible
 - move non-trivial shell or Python logic into helper scripts when that keeps the
   workflow readable
+- keep the shared ECS rollout sequence in one tested Python entry point instead
+  of duplicating it across release workflows
 - do not preserve a second source-ref deploy workflow as a parallel steady-state
   path
 
