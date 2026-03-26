@@ -160,9 +160,17 @@ rollouts source-controlled and repeatable.
 
 Current implementation note:
 
-- `release-publish.yml` and `release-deploy.yml` now call the shared Python
-  entry point `python -m scripts.deploy.ecs_release_deploy` for the canonical
-  ECS rollout sequence
+- `release-please.yml` now runs on `main` and lets Release Please own the
+  changelog, version bump, Git tag, and GitHub release
+- `release-publish.yml` now runs from a published GitHub release tag, builds
+  both images, writes `release-manifest.json`, and uploads that manifest onto
+  the GitHub release record
+- `release-publish.yml` then calls `release-deploy.yml`, and
+  `release-deploy.yml` also remains manually dispatchable by immutable release
+  tag for redeploy and rollback
+- `release-publish.yml` and `release-deploy.yml` call the shared Python entry
+  point `python -m scripts.deploy.ecs_release_deploy` for the canonical ECS
+  rollout sequence
 - the repo now exports the needed cluster/service names, task-definition
   families, ALB DNS name, and one-off task network inputs through Terraform
   outputs

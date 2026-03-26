@@ -10,7 +10,8 @@ locals {
   github_oidc_provider_url  = "https://token.actions.githubusercontent.com"
   github_oidc_provider_host = "token.actions.githubusercontent.com"
   github_actions_subjects = [
-    "repo:${var.github_repository}:ref:refs/heads/${var.release_branch}",
+    "repo:${var.github_repository}:ref:refs/heads/${var.main_branch}",
+    "repo:${var.github_repository}:ref:refs/tags/v*",
   ]
 
   product_image_bucket_name     = "${local.name_prefix}-${var.aws_account_id}-product-images"

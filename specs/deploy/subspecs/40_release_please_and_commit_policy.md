@@ -6,6 +6,8 @@ for the deployment project.
 Read [00_context.md](./00_context.md) first for the shared deployment context.
 Read [30_dockerization_and_cicd.md](./30_dockerization_and_cicd.md) for the
 artifact and release-manifest contract this policy feeds.
+Read [docs/release_automation.md](../../docs/release_automation.md) for the
+operator-facing workflow summary.
 
 Implementation branch rule:
 - start work for this subspec from `tal/deployproject` or from a stacked branch
@@ -13,114 +15,72 @@ Implementation branch rule:
 
 ## Decision
 
-Use `release-please` for release preparation, changelog generation, and version
-file updates.
+Use `release-please` for release preparation, changelog generation, version
+file updates, Git tag creation, and GitHub release creation.
 
-Do not treat a merged release PR as a fully published release by itself.
+Do not use a long-lived `release` branch.
 
 Chosen target model for this repository:
 
-- `main` remains the integration branch
-- `release` remains the promotion and publish branch
+- `main` remains the integration branch and the release authority
 - conventional-commit intent is enforced at the `main` boundary
-- `release-please` maintains the draft release PR on `release`
+- `release-please` maintains one draft release PR against `main`
 - the release PR updates `CHANGELOG.md` and `version.txt`
-- the publish flow uses the release version prepared on `release` to build and
-  push the container images
-- the immutable Git tag and GitHub release are created only after both
-  containers are built, pushed, version-tagged, and the release manifest exists
-- deploy runs automatically from the successful canonical release flow
-- the manual source-ref deploy path is removed rather than preserved as a
-  second steady-state release lane
+- merging that release PR creates the immutable Git tag and GitHub release
+- the published GitHub release triggers image publication and manifest upload
+- the published release manifest is the deploy handoff into ECS
+- automatic deploy runs from the published release artifact set
+- manual redeploy stays on immutable published release tags
 
-This preserves the `main -> release` promotion model while making release
-publication depend on real artifacts instead of only on changelog generation.
+## Why This Fits Better
 
-Current implementation honesty note:
-
-- the repo has the release-preparation and release-publication workflows
-- the repo does not yet prove the full target contract end to end
-- `origin/release` already carries release-preparation state through `0.4.0`,
-  but the repo still has no published Git tags or GitHub releases
-- the current publication handoff now requires a merged Release Please-owned PR
-  head-ref shape on `release`, and the publish workflow resolves the release
-  version from the checked-out `version.txt` instead of PR title text
-- the current `main` copy of `.github/workflows/release-publish.yml` now uses
-  the checked-in release-identity helper and plain `vX.Y.Z` tags
-- the current tag identity is plain `vX.Y.Z`; the older `designagent-vX.Y.Z`
-  component-prefixed form is obsolete and should not reappear
-- stronger provenance and promotion-boundary enforcement are still unresolved
-
-## Why Release Please Fits Better
-
-`release-please` is a better fit than a fully implicit publish step for this
-repo because it separates:
+`release-please` is a better fit than a home-grown versioning path because it
+separates:
 
 - release preparation
 - release review
 - release publication
 
-That matters here because the real release artifact is not an npm publish.
-The real release artifact is:
+That separation still matters here, but the target branch should be `main`
+rather than a second long-lived branch. Using `release` for release-preparation
+commits caused branch drift by design and made the promotion boundary more
+complicated than the actual deployment contract required.
+
+The real published release artifact is:
 
 - one application version
-- one pair of pinned container images
-- one release manifest
 - one immutable Git tag and GitHub release
+- one pair of pinned container images
+- one release manifest that records the exact digests and bootstrap inputs
 
-We want a release process that is easy for one developer to reason about.
-A release PR is easier to inspect and debug than a fully implicit publish step.
+## Branch And Trigger Model
 
-## Branch Model
+The deployment project may still use stacked implementation branches below
+`tal/deployproject`, but that does not change release authority.
 
-The deployment project currently uses stacked work that descends from
-`tal/deployproject`.
-That does not replace the application release authority.
-
-The branch roles are:
+Current branch roles:
 
 - stacked deploy work branches -> implementation and review within the
   deployment project
-- `main` -> normal integration branch for releasable application history
-- `release` -> promotion and publication branch consumed by release tooling
+- `main` -> normal integration branch and release-preparation branch
+- immutable Git tags `vX.Y.Z` -> publication and redeploy authority
 
-Current repository-state note:
+Required flow:
 
-- `origin/release` now exists and is actively used by `release-please`
-- release-preparation PRs through `0.4.0` have already been merged there
-- the repo still does not have the matching immutable publication record of Git
-  tags and GitHub releases
-
-Required branch flow:
-
-1. deployment-project work lands on `tal/deployproject` or a descendant stacked
-   branch while the project is in flight
-2. releasable changes eventually land in PRs targeting `main`
-3. PRs into `main` use conventional-commit-style PR titles
-4. PRs into `main` are squash-merged so the resulting commit on `main` carries
+1. releasable work lands in PRs targeting `main`
+2. PRs into `main` use conventional-commit-style PR titles
+3. PRs into `main` are squash-merged so the resulting commit on `main` carries
    the release intent
-5. releasable work is promoted from `main` into `release`
-6. promotion from `main` to `release` must preserve the semantic commits that
-   `release-please` analyzes
-7. do not merge feature branches directly into `release`
+4. `release-please` runs on pushes to `main`
+5. `release-please` creates or updates one draft release PR against `main`
+6. merging that release PR creates the immutable Git tag and GitHub release
+7. `Release Publish` runs from the published release event, builds images,
+   writes `release-manifest.json`, and uploads the manifest to the GitHub
+   release
+8. `Release Deploy` deploys by immutable tag and manifest, either from the
+   automatic path or manual redeploy dispatch
 
-Practical promotion rule:
-
-- merge or fast-forward `main` into `release`
-- do not squash `main` into `release`
-- do not hand-author release commits on `release` except for the
-  `release-please` release PR
-
-Current enforcement note:
-
-- the repo currently enforces PR-title shape on PRs targeting `main`
-- the repo now validates PRs targeting `release` so only `main` promotion and
-  Release Please head refs are allowed
-- the repo now audits pushes to `release` so direct hotfix drift and
-  cherry-picked release rewrites fail governance checks
-- GitHub branch protection for `release` is still an operator setting, not a
-  repo-owned file; source control alone cannot prevent an administrator from
-  bypassing the branch rule
+There is no longer a supported `main -> release` promotion lane.
 
 ## Commit Policy
 
@@ -155,7 +115,7 @@ Examples:
 
 - `feat(search): add retailer fallback for missing dimensions`
 - `fix(ui): preserve trace state on refresh`
-- `build(ci): publish release manifest after image push`
+- `build(ci): upload release manifest to GitHub release`
 - `feat(api)!: replace thread bootstrap contract`
 
 ## Where Enforcement Happens
@@ -163,25 +123,18 @@ Examples:
 We do not need to enforce semantic commit messages on every local feature-branch
 commit.
 
-The important boundary is the code that lands on `main` and later reaches
-`release`.
+The important boundary is the code that lands on `main`.
 
 Required enforcement point:
 
 - PR title enforcement for PRs targeting `main`
 
-Practical rule:
-
-- if a PR targets `main`, its title must be a valid conventional-commit header
-- the PR must be squash-merged
-- the squash commit message must match the PR title
-
 The concrete enforcement workflow is:
 
 - `.github/workflows/pr-title-main.yml`
-- `.github/workflows/release-pr-governance.yml`
-- `.github/workflows/release-push-governance.yml`
-- `docs/release_branch_governance.md`
+
+The deleted `release`-branch governance workflows were transitional debt from
+the old promotion model and are no longer part of the intended path.
 
 ## Release PR Behavior
 
@@ -196,6 +149,7 @@ The concrete automation files are:
 
 - `.github/workflows/release-please.yml`
 - `.github/workflows/release-publish.yml`
+- `.github/workflows/release-deploy.yml`
 
 The current helper-config posture is:
 
@@ -203,214 +157,94 @@ The current helper-config posture is:
 - `release-please-config.json` keeps the release PR in draft state by default
 - `release-please-config.json` uses plain `vX.Y.Z` tags without a component
   prefix
-- `.release-please-manifest.json` tracks the current release-preparation version
-  on `release`; by itself it is not proof of a published immutable release
+- `release-please-config.json` uses `bootstrap-sha` to ignore the repo's older
+  non-conventional history and start the main-based release model from the
+  migration baseline
+- `.release-please-manifest.json` records the current release baseline version
 
 Intended release-PR behavior:
 
-- `release-please` runs on pushes to `release`
-- `release-please` creates or updates one draft release PR on `release`
+- `release-please` runs on pushes to `main`
+- `release-please` creates or updates one draft release PR on `main`
 - the release PR updates `CHANGELOG.md`
 - the release PR updates `version.txt`
 - Tal can inspect the changelog and version bump before merge
-- merging the release PR creates the release commit that publish automation
-  treats as the source of truth
+- merging the release PR creates the immutable Git tag and GitHub release
 
-Repository gate:
+## Authentication And Workflow Chaining
 
-- if the default `GITHUB_TOKEN` cannot create or update release PRs in this
-  repository, configure `RELEASE_PLEASE_TOKEN` with the minimum scope needed to
-  manage release PRs
+`RELEASE_PLEASE_TOKEN` is required for this repo's release automation.
 
-The current publish workflow no longer keys publication off PR title text.
-It requires the merged PR to come from the Release Please release-branch head
-shape and resolves the release version from the checked-out `version.txt`.
+Why:
 
-Current provenance note:
+- `release-please` must create PRs, tags, and GitHub releases
+- the downstream publish workflow is triggered by the GitHub release event
+- resources created with the built-in `GITHUB_TOKEN` do not trigger later
+  workflows, except for `workflow_dispatch` and `repository_dispatch`
 
-- the publish handoff now verifies the merged PR head ref matches the expected
-  Release Please shape before publishing artifacts
-- the publish workflow still depends on GitHub event payload shape rather than
-  a first-class Release Please output contract
+Therefore:
 
-Use the `simple` release strategy unless a stronger repo-specific reason appears
-later.
-That keeps the release state small and avoids mutating packaging metadata that
-is not otherwise part of the deployment contract.
+- do not fall back to `github.token` for `release-please`
+- treat `RELEASE_PLEASE_TOKEN` as an explicit Tal-owned release gate
+- keep the token scope minimal while still allowing release PR and release
+  creation
 
-## Changelog And Release Notes
+For AWS artifact publication and deploy:
 
-For this repo, changelog generation and final release notes are related but not
-the same artifact.
-
-Required behavior:
-
-- `release-please` updates `CHANGELOG.md` on the release PR
-- `version.txt` is updated on the same release PR
-- the reviewed release PR content is the in-repo source of truth before publish
-- the GitHub release is created only after image publication and manifest
-  creation succeed
-- the GitHub release creation step is also the immutable tag creation step, so
-  the release record and tag are created from the same action against the same
-  commit
-- the GitHub release may generate GitHub-native release notes from the immutable
-  tag at final publication time
-- the published GitHub release should attach the release manifest so operators
-  can retrieve the exact image digests that were released
-
-Operational rule:
-
-- the changelog is the reviewed release-preparation record in Git
-- the GitHub release is the external publication record created after artifact
-  publication succeeds
+- the publish workflow requires `AWS_RELEASE_ROLE_ARN`
+- the deploy workflow requires `AWS_DEPLOY_ROLE_ARN`
+- Terraform should allow GitHub OIDC subjects from `refs/heads/main` and
+  `refs/tags/v*`
 
 ## Publication Contract
 
 Target publication invariant for this repo:
 
-- a release should not be considered published until all of these are true:
-  - the `release-please` release PR has been merged
-  - both `ui` and `backend` images are built from that merged release commit
-  - both images are pushed to `ECR`
-  - both images are tagged with the exact release version
+- a release is not considered published until all of these are true:
+  - the Release Please PR on `main` has merged
+  - the immutable Git tag and GitHub release exist
+  - both `ui` and `backend` images are built and pushed for that tag
   - the release manifest exists and records the exact digests
-  - the ECS deploy workflow can consume that manifest without rebuilding or
+  - the GitHub release carries the release manifest as an asset
+  - ECS deploy automation can consume that manifest without rebuilding or
     retagging images
-  - the immutable Git tag is created for that same release commit
-  - the GitHub release is created from that same immutable tag
 
-That is the intended invariant. It is not yet fully guaranteed by the current
-workflow implementation.
+That means changelog preparation alone is not publication, and GitHub release
+creation alone is not enough either.
 
-Current repo reality:
+## Redeploy And Rollback
 
-- a merged Release Please PR into `release` can trigger the publish workflow
-- the workflow resolves the release version from the checked-out release ref
-- the workflow verifies that the checked-out merge commit, `version.txt`, and
-  final `vX.Y.Z` tag all describe one release identity
-- the workflow builds and pushes both images before writing the release manifest
-- the workflow attempts to create the GitHub release from the exact release
-  commit only after image publication and manifest creation
-- the automatic ECS deploy work happens after publication inside the canonical
-  release flow
-- the repo also still contains `manual-ref-deploy.yml`, but that is not part of
-  the intended long-term publication contract
+Rollback and redeploy should both use immutable published tags.
 
-Current unresolved gap:
+Required behavior:
 
-- changelog preparation alone is not release publication
-- the publish handoff is not yet owned directly by first-class Release Please
-  outputs; it still validates the GitHub PR event shape and merged head ref
-- prepared release state on `release` has already advanced beyond published
-  immutable release state
-- the current `main` publish workflow still needs real end-to-end validation
-  before the canonical path can fully replace recovery tooling
-- GitHub branch protection for `release` still must be configured in GitHub; it
-  is not declared from repo files
+- `Release Deploy` accepts a release tag by `workflow_dispatch`
+- it downloads that tag's `release-manifest.json`
+- it renders task-definition revisions from the Terraform-owned baseline
+- it redeploys those exact image digests to ECS
 
-Desired hardening still outstanding:
-
-1. prove or enforce that the publish path comes only from the real
-   `release-please` release PR
-2. make the final publication step failure-safe and trustworthy
-3. remove the manual source-ref deploy lane instead of preserving it as a
-   parallel path
-4. enforce the `main -> release` promotion rule rather than leaving it as prose
-
-## Immutability Rules
-
-Required Git rules:
-
-- release tags use the exact app version, for example `v1.4.2`
-- release tags are immutable
-- do not create floating Git tags such as `v1`, `v1.4`, `latest`, or `stable`
-
-Required container-tag rules:
-
-- each image gets the exact release version tag, for example `v1.4.2`
-- each image also gets an immutable commit-derived tag, for example
-  `sha-<commit>`
-- do not publish floating container tags such as `latest`, `main`, or
-  `release`
-- `ECR` tag immutability must prevent overwriting an existing version tag
-
-Operational rule:
-
-- digests remain the source of truth for deployment and rollback
-- tags are convenience metadata, not deployment authority
-
-## Authentication And Human Gates
-
-The default GitHub token may be enough for `release-please`, but we should not
-assume that.
-
-If `release-please` needs a Tal-provided GitHub token or app credential, treat
-that as an explicit Tal-owned gate in the deployment project.
-
-The implemented workflow therefore uses this auth posture:
-
-- default to `github.token`
-- allow an override via repository secret `RELEASE_PLEASE_TOKEN`
-- if Tal wants release-please-created PRs to trigger additional checks or needs
-  stronger branch-protection compatibility, populate `RELEASE_PLEASE_TOKEN` as
-  the explicit Tal-owned gate
-
-For artifact publication, the publish workflow also requires the repository
-variable `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the AWS publish
-role by OIDC instead of baking static AWS credentials into CI. That role trust
-currently allows both the `release` branch and `main` because the repo still
-contains the transitional `manual-ref-deploy` workflow.
-
-Target posture:
-
-- the normal publish path runs from `release`
-- the extra `main` trust should be removed with the manual source-ref deploy
-  lane
-
-Do not silently widen bot permissions.
+There should not be a source-ref rebuild workflow in the steady-state path.
 
 ## Validation
 
 Useful validation for this subspec means:
 
-- confirm the chosen release model matches the current top-level deploy spec in
-  [final_deployment_recommendation_2026-03-24_synthesized.md](../final_deployment_recommendation_2026-03-24_synthesized.md)
-- confirm the Docker/CI contract in
-  [30_dockerization_and_cicd.md](./30_dockerization_and_cicd.md) uses the same
-  definition of a published release
-- confirm the branch rules do not contradict the stacked-branch rule from
-  [guiding_principles.md](../guiding_principles.md)
+- confirm the chosen release model matches the top-level deploy spec and the
+  runtime contract
+- confirm the workflow trigger ordering still matches the intended invariant:
+  `main` release PR -> GitHub release -> publish -> deploy
 - confirm the helper config and workflow names referenced here match the
   repository files that currently implement the release-policy surface
-- check the workflow trigger conditions and publication ordering before claiming
-  any release-safety guarantee
-- check whether the documented current-state notes still match the real
-  `release` branch, current workflows, and current GitHub release state
+- confirm old `autorelease:*` labels from the retired `release` branch path do
+  not remain on merged PRs in a way that would block the new model
+- check that manual redeploy still works by immutable tag after publish changes
 
 ## Summary
 
 The near-term release policy target is:
 
 - conventional commits on `main`
-- promotion from `main` to `release` without squashing away releasable history
-- `release-please` prepares the draft release PR on `release`
-- merging that PR updates the changelog and version file
-- separate automation builds and publishes images plus the release manifest
-- only then do we create the immutable tag and GitHub release
-
-What is true today:
-
-- `release-please` is the chosen preparation tool and the repo contains the
-  supporting config and workflows
-- `origin/release` exists and carries release-preparation history
-- PR-title enforcement exists for PRs targeting `main`
-- PR governance exists for `release`, and push governance now audits direct
-  release updates against the allowed promotion paths
-- publication now requires a merged Release Please PR head-ref shape and checks
-  that the checked-out merge commit and `version.txt` agree on one release
-- prepared release state has advanced further than published immutable release
-  state
-- redeploy should stay on immutable published release tags rather than a
-  source-ref rebuild path
-- GitHub still reports the `release` branch as unprotected until the operator
-  branch rule is configured to require the governance checks
+- one draft Release Please PR on `main`
+- merge that PR to create the immutable tag and GitHub release
+- publish images and release manifest from the published release event
+- deploy and redeploy only from immutable published release tags

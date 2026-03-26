@@ -123,15 +123,13 @@ Use one application-level version per deployable release.
 The release flow should be:
 
 1. releasable changes land on `main` with conventional-commit intent
-2. releasable history is promoted from `main` to `release` without squashing
-   away the commit semantics that `release-please` analyzes
-3. `release-please` prepares the release PR and release version on `release`
+2. `release-please` prepares the release PR and release version on `main`
+3. merging that release PR creates the immutable Git tag and GitHub release
 4. CI uses that release version to build and push the `ui` and `backend`
    images under immutable version and commit tags
 5. CI writes one release manifest containing the pinned digests and bootstrap
    metadata
-6. CI creates the immutable Git tag and GitHub release only after image
-   publication and manifest creation succeed
+6. CI uploads that release manifest back onto the published GitHub release
 7. the same canonical release flow deploys automatically to ECS
 8. deploy automation renders new ECS task-definition revisions from the current
    Terraform-owned baseline
@@ -169,7 +167,7 @@ Normal deploys should not re-run catalog bootstrap.
 This architecture choice does not make the project launch-ready by itself.
 Before first public launch we still need:
 
-- a trustworthy canonical `release -> publish -> deploy` flow that does not
+- a trustworthy canonical `main -> GitHub release -> publish -> deploy` flow that does not
   depend on manual recovery
 - release provenance that ties Release Please state, image tags, release
   manifest, and GitHub release publication together cleanly

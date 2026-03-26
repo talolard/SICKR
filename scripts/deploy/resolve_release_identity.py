@@ -1,10 +1,10 @@
-"""Resolve one publishable release identity from the merged Release Please PR.
+"""Resolve one publishable release identity from a published GitHub release.
 
-This keeps the publish workflow anchored to the merged release commit and the
-checked-in release version instead of trusting mutable pull request title text.
-The release version comes from `version.txt`, and this helper proves that the
-merged release PR, current checked-out commit, and final Git tag all describe
-the same release.
+This keeps the publish workflow anchored to the immutable GitHub release event
+and the checked-in release version instead of trusting mutable pull-request or
+branch metadata. The release version comes from `version.txt`, and this helper
+proves that the published release event, the checked-out tag, and the current
+commit all describe the same release.
 """
 
 from __future__ import annotations
@@ -20,8 +20,6 @@ from typing import Any
 
 from scripts.deploy.read_release_version import read_release_version
 from scripts.deploy.release_manifest import validate_app_version, validate_git_sha
-
-_RELEASE_PLEASE_HEAD_REF_PREFIX = "release-please--branches--release"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,48 +79,37 @@ def resolve_release_identity(
     version_file: Path,
     head_sha: str | None = None,
 ) -> ReleaseIdentity:
-    """Validate one merged Release Please PR against the checked-out release commit."""
+    """Validate one published GitHub release against the checked-out tagged commit."""
 
     payload = _read_json_object(event_path)
-    pull_request = _require_object(payload, "pull_request")
-
-    if pull_request.get("merged") is not True:
-        msg = "Release publication requires a merged pull request event."
+    action = _require_string(payload, "action")
+    if action != "published":
+        msg = f"Release publication requires a published release event, found {action!r}."
         raise ValueError(msg)
 
-    base = _require_object(pull_request, "base")
-    base_ref = _require_string(base, "ref")
-    if base_ref != "release":
-        msg = f"Release publication only runs from the release branch, found base ref {base_ref!r}."
-        raise ValueError(msg)
-
-    head = _require_object(pull_request, "head")
-    head_ref = _require_string(head, "ref")
-    if not head_ref.startswith(_RELEASE_PLEASE_HEAD_REF_PREFIX):
-        msg = f"Release publication requires a Release Please head-ref shape, found {head_ref!r}."
-        raise ValueError(msg)
+    release = _require_object(payload, "release")
+    release_tag = _require_string(release, "tag_name")
 
     version = validate_app_version(read_release_version(version_file))
-
-    merge_commit_sha = validate_git_sha(_require_string(pull_request, "merge_commit_sha"))
-    current_head_sha = _resolve_current_head_sha(head_sha)
-    if merge_commit_sha != current_head_sha:
+    expected_tag = f"v{version}"
+    if release_tag != expected_tag:
         msg = (
-            "Checked-out commit does not match merged release PR commit: "
-            f"{current_head_sha!r} != {merge_commit_sha!r}."
+            "Published release tag "
+            f"{release_tag!r} does not match version.txt tag {expected_tag!r}."
         )
         raise ValueError(msg)
+    current_head_sha = _resolve_current_head_sha(head_sha)
 
     return ReleaseIdentity(
         version=version,
-        git_tag=f"v{version}",
+        git_tag=release_tag,
         git_sha=current_head_sha,
     )
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Resolve the publishable release identity from a merged Release Please PR."
+        description="Resolve the publishable release identity from a published GitHub release."
     )
     parser.add_argument(
         "--event-path",

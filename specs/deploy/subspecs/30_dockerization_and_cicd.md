@@ -183,21 +183,22 @@ PR CI should continue to focus on:
 
 Release CI should do the deployment-specific work:
 
-1. resolve the publishable release identity from the merged Release Please PR
-   and checked-out merge commit
-2. build and push both images
-3. write the release manifest
-4. create the immutable Git tag and GitHub release from the same final
-   publication step after the manifest exists
-5. describe the current ECS task definitions
-6. render new ECS task-definition revisions by replacing:
+1. let `release-please` maintain the draft release PR on `main`
+2. after that PR merges, let `release-please` create the immutable Git tag and
+   GitHub release
+3. resolve the publishable release identity from the published GitHub release
+   event and checked-out tag
+4. build and push both images
+5. write the release manifest
+6. upload the release manifest back onto the published GitHub release
+7. render new ECS task-definition revisions by replacing:
    - the image digest ref
    - the release-version env value
    - placeholder bootstrap commands with the image-default runtime command
-7. run the backend migration task on Fargate
-8. run the backend seed-verification task on Fargate
-9. update the backend ECS service
-10. update the UI ECS service
+8. run the backend migration task on Fargate
+9. run the backend seed-verification task on Fargate
+10. update the backend ECS service
+11. update the UI ECS service
 
 Implementation preference:
 
@@ -227,6 +228,8 @@ path. There should not be a host-local "previous release" mechanism anymore.
 Current repo-state note:
 
 - `release-deploy.yml` fits this redeploy model
+- `release-publish.yml` now runs from the published GitHub release event rather
+  than a PR merge into a long-lived promotion branch
 - redeploy should stay on immutable published release tags rather than
   reintroducing a source-ref build workflow
 

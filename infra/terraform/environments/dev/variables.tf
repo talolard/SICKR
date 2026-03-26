@@ -46,10 +46,10 @@ variable "github_repository" {
   default     = "talolard/SICKR"
 }
 
-variable "release_branch" {
-  description = "Release branch allowed to publish release artifacts."
+variable "main_branch" {
+  description = "Main branch allowed to prepare releases and run manual redeploys."
   type        = string
-  default     = "release"
+  default     = "main"
 }
 
 variable "extra_tags" {

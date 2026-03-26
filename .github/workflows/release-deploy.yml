@@ -1,6 +1,12 @@
 name: Release Deploy
 
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Release tag to deploy, for example v0.1.2."
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_tag:
@@ -15,6 +21,7 @@ permissions:
 env:
   AWS_REGION: eu-central-1
   PUBLIC_APP_BASE_URL: https://designagent.talperry.com
+  RELEASE_TAG: ${{ inputs.release_tag }}
 
 jobs:
   deploy:
@@ -27,7 +34,7 @@ jobs:
       - name: Checkout tagged release commit
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Require deploy configuration
         env:
@@ -61,7 +68,6 @@ jobs:
       - name: Download immutable release manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
