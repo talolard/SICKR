@@ -114,9 +114,13 @@ Practical promotion rule:
 Current enforcement note:
 
 - the repo currently enforces PR-title shape on PRs targeting `main`
-- the repo does not yet enforce history-preserving promotion from `main` to
-  `release`
-- that promotion rule is still policy, not a mechanically enforced boundary
+- the repo now validates PRs targeting `release` so only `main` promotion and
+  Release Please head refs are allowed
+- the repo now audits pushes to `release` so direct hotfix drift and
+  cherry-picked release rewrites fail governance checks
+- GitHub branch protection for `release` is still an operator setting, not a
+  repo-owned file; source control alone cannot prevent an administrator from
+  bypassing the branch rule
 
 ## Commit Policy
 
@@ -175,6 +179,9 @@ Practical rule:
 The concrete enforcement workflow is:
 
 - `.github/workflows/pr-title-main.yml`
+- `.github/workflows/release-pr-governance.yml`
+- `.github/workflows/release-push-governance.yml`
+- `docs/release_branch_governance.md`
 
 ## Release PR Behavior
 
@@ -298,7 +305,8 @@ Current unresolved gap:
   immutable release state
 - the current `main` publish workflow still needs real end-to-end validation
   before the canonical path can fully replace recovery tooling
-- the `main -> release` promotion boundary is still policy, not mechanism
+- GitHub branch protection for `release` still must be configured in GitHub; it
+  is not declared from repo files
 
 Desired hardening still outstanding:
 
@@ -396,11 +404,13 @@ What is true today:
   supporting config and workflows
 - `origin/release` exists and carries release-preparation history
 - PR-title enforcement exists for PRs targeting `main`
+- PR governance exists for `release`, and push governance now audits direct
+  release updates against the allowed promotion paths
 - publication now requires a merged Release Please PR head-ref shape and checks
   that the checked-out merge commit and `version.txt` agree on one release
 - prepared release state has advanced further than published immutable release
   state
 - the `manual-ref-deploy` workflow still exists, but it is recovery debt rather
   than intended steady-state release machinery
-- the `main -> release` promotion rule is still documented policy rather than
-  enforced repository behavior
+- GitHub still reports the `release` branch as unprotected until the operator
+  branch rule is configured to require the governance checks
