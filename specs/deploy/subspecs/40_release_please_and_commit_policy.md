@@ -25,9 +25,13 @@ Chosen target model for this repository:
 - conventional-commit intent is enforced at the `main` boundary
 - `release-please` maintains the draft release PR on `release`
 - the release PR updates `CHANGELOG.md` and `version.txt`
-- a separate publish workflow builds and pushes the container images
+- the publish flow uses the release version prepared on `release` to build and
+  push the container images
 - the immutable Git tag and GitHub release are created only after both
   containers are built, pushed, version-tagged, and the release manifest exists
+- deploy runs automatically from the successful canonical release flow
+- the manual source-ref deploy path is removed rather than preserved as a
+  second steady-state release lane
 
 This preserves the `main -> release` promotion model while making release
 publication depend on real artifacts instead of only on changelog generation.
@@ -36,11 +40,13 @@ Current implementation honesty note:
 
 - the repo has the release-preparation and release-publication workflows
 - the repo does not yet prove the full target contract end to end
-- the current publication workflow accepts only a merged PR into `release`
-  whose title starts with `chore(release):`
-- the current publication workflow writes the release manifest before final
-  publication and creates the immutable tag by creating the GitHub release
-  against the exact release commit
+- `origin/release` already carries release-preparation state through `0.4.0`,
+  but the repo still has no published Git tags or GitHub releases
+- the current publication handoff still accepts only a merged PR into `release`
+  whose title starts with `chore(release):`, which is weaker than a
+  Release-Please-owned handoff
+- the current `main` copy of `.github/workflows/release-publish.yml` is not a
+  trustworthy executable contract because it contains a YAML parsing regression
 - the current tag identity is plain `vX.Y.Z`; the older `designagent-vX.Y.Z`
   component-prefixed form is obsolete and should not reappear
 - stronger provenance and promotion-boundary enforcement are still unresolved
@@ -80,10 +86,10 @@ The branch roles are:
 
 Current repository-state note:
 
-- at the time this document was last reviewed for PR `#93`, no local or remote
-  `release` branch existed yet in the checkout used for review
-- treat creation of the `release` branch plus its protections as a repository
-  bootstrap gate, not as an already-proven fact
+- `origin/release` now exists and is actively used by `release-please`
+- release-preparation PRs through `0.4.0` have already been merged there
+- the repo still does not have the matching immutable publication record of Git
+  tags and GitHub releases
 
 Required branch flow:
 
@@ -190,9 +196,10 @@ The current helper-config posture is:
 - `release-please-config.json` keeps the release PR in draft state by default
 - `release-please-config.json` uses plain `vX.Y.Z` tags without a component
   prefix
-- `.release-please-manifest.json` tracks the current published app version
+- `.release-please-manifest.json` tracks the current release-preparation version
+  on `release`; by itself it is not proof of a published immutable release
 
-Intended release-PR behavior once the `release` branch exists and is in use:
+Intended release-PR behavior:
 
 - `release-please` runs on pushes to `release`
 - `release-please` creates or updates one draft release PR on `release`
@@ -208,10 +215,10 @@ Repository gate:
   repository, configure `RELEASE_PLEASE_TOKEN` with the minimum scope needed to
   manage release PRs
 
-The publish workflow currently keys off merged release PRs titled
+The current publish workflow still keys off merged release PRs titled
 `chore(release): ...`.
-That title shape is therefore part of the release-publication contract and
-should stay aligned with the release-please configuration and workflow wiring.
+That title coupling is transitional debt, not the desired long-term
+release-publication contract.
 
 Current provenance note:
 
@@ -265,45 +272,41 @@ Target publication invariant for this repo:
   - the immutable Git tag is created for that same release commit
   - the GitHub release is created from that same immutable tag
 
-That is the intended invariant.
-It is not yet fully guaranteed by the current workflow implementation.
+That is the intended invariant. It is not yet fully guaranteed by the current
+workflow implementation.
 
-What the current implementation actually enforces:
+Current repo reality:
 
 - a merged PR into `release` with a `chore(release): ...` title can trigger the
   publish workflow
-- the workflow resolves the version from the checked-out ref
+- the workflow resolves the release version from the checked-out release ref
 - the workflow builds and pushes both images before writing the release manifest
-- the workflow writes the release manifest before creating the Git tag
-- the workflow resolves the ECS deploy inputs before creating the Git tag
-- the workflow pushes the immutable Git tag before creating the GitHub release
+- the workflow attempts to create the GitHub release from the exact release
+  commit only after image publication and manifest creation
+- the automatic ECS deploy work happens after publication inside the canonical
+  release flow
+- the repo also still contains `manual-ref-deploy.yml`, but that is not part of
+  the intended long-term publication contract
 
 Current unresolved gap:
 
 - changelog preparation alone is not release publication
-- artifact publication currently happens before tag push
-- deploy bundle and payload generation currently happen before tag push
-- final GitHub release creation can still fail after tag push
-- reruns then fail on the duplicate-tag guard, so final publication is not yet
-  failure-safe
-
-Current implemented publication order:
-
-1. merge a qualifying `chore(release): ...` PR into `release`
-2. read the app version from the checked-out ref
-3. build and push both images
-4. capture the resulting digests
-5. write and upload the release manifest artifact
-6. resolve the ECS deploy inputs from the current service baselines
-7. create and push the immutable Git tag for that same commit
-8. attempt to create the GitHub release from that immutable tag
+- the publish handoff is still title-based instead of being owned directly by
+  Release Please outputs
+- prepared release state on `release` has already advanced beyond published
+  immutable release state
+- the current `main` publish workflow is broken, so the canonical path is not
+  yet trustworthy enough to replace recovery tooling
+- the `main -> release` promotion boundary is still policy, not mechanism
 
 Desired hardening still outstanding:
 
 1. prove or enforce that the publish path comes only from the real
    `release-please` release PR
-2. make the final tag-plus-GitHub-release publication failure-safe
-3. enforce the `main -> release` promotion rule rather than leaving it as prose
+2. make the final publication step failure-safe and trustworthy
+3. remove the manual source-ref deploy lane instead of preserving it as a
+   parallel path
+4. enforce the `main -> release` promotion rule rather than leaving it as prose
 
 ## Immutability Rules
 
@@ -346,9 +349,14 @@ The implemented workflow therefore uses this auth posture:
 For artifact publication, the publish workflow also requires the repository
 variable `AWS_RELEASE_ROLE_ARN` so GitHub Actions can assume the AWS publish
 role by OIDC instead of baking static AWS credentials into CI. That role trust
-must allow both the `release` branch and `main`, because the normal publish
-path runs from `release` while the manual ref deploy workflow is intentionally
-allowed to build and deploy a specific merged `main` commit.
+currently allows both the `release` branch and `main` because the repo still
+contains the transitional `manual-ref-deploy` workflow.
+
+Target posture:
+
+- the normal publish path runs from `release`
+- the extra `main` trust should be removed with the manual source-ref deploy
+  lane
 
 Do not silently widen bot permissions.
 
@@ -356,8 +364,8 @@ Do not silently widen bot permissions.
 
 Useful validation for this subspec means:
 
-- confirm the chosen release model matches the project decisions in
-  [multi_agent_review.md](../multi_agent_review.md)
+- confirm the chosen release model matches the current top-level deploy spec in
+  [final_deployment_recommendation_2026-03-24_synthesized.md](../final_deployment_recommendation_2026-03-24_synthesized.md)
 - confirm the Docker/CI contract in
   [30_dockerization_and_cicd.md](./30_dockerization_and_cicd.md) uses the same
   definition of a published release
@@ -367,8 +375,8 @@ Useful validation for this subspec means:
   repository files that currently implement the release-policy surface
 - check the workflow trigger conditions and publication ordering before claiming
   any release-safety guarantee
-- check whether the `release` branch actually exists before describing it as a
-  live repository surface
+- check whether the documented current-state notes still match the real
+  `release` branch, current workflows, and current GitHub release state
 
 ## Summary
 
@@ -385,11 +393,13 @@ What is true today:
 
 - `release-please` is the chosen preparation tool and the repo contains the
   supporting config and workflows
+- `origin/release` exists and carries release-preparation history
 - PR-title enforcement exists for PRs targeting `main`
 - publication is currently keyed off a merged `chore(release): ...` PR, not
   stronger `release-please` provenance
-- publication currently renders the manifest and ECS deploy inputs before
-  pushing the immutable Git tag
-- final publication is not yet failure-safe after tag push
+- prepared release state has advanced further than published immutable release
+  state
+- the `manual-ref-deploy` workflow still exists, but it is recovery debt rather
+  than intended steady-state release machinery
 - the `main -> release` promotion rule is still documented policy rather than
   enforced repository behavior

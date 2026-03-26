@@ -1,27 +1,36 @@
 # Deployment Project Status
 
-Last updated: 2026-03-25
+Last updated: 2026-03-26
 
 Read [guiding_principles.md](./guiding_principles.md) first.
 The documents under `specs/deploy/` are the current source of truth for this
-deployment project and trump older deployment plans, notes, and critiques.
+deployment project. Historical review documents and older deploy plans are
+background only and must not override current workflow, Terraform, or runtime
+contract reality.
+
+Historical background only:
+
+- [multi_agent_review.md](./multi_agent_review.md)
+- older deploy plans under `plans/`, especially any plan that still assumes
+  EC2, SSM, host deploy bundles, or manual ECS recovery as part of the normal
+  deploy path
+
+Cross-check current deploy claims against:
+
+- `.github/workflows/`
+- `infra/terraform/`
+- [docs/deployment_runtime_contract.md](../../docs/deployment_runtime_contract.md)
 
 ## Current Canonical Direction
 
-The deployment project has pivoted from:
-
-- `CloudFront + EC2 host + SSM + docker compose`
-
-to:
-
-- `CloudFront + ALB + ECS Fargate + Aurora + S3`
-
-This is an intentional simplification move. The trade is:
-
-- higher steady-state app runtime cost
-- much lower host-management burden
-
-For this project, that is the right trade.
+- The architecture direction is stable:
+  `CloudFront + ALB + ECS Fargate + Aurora + S3`
+- The repo is already past "first deploy still needs to happen."
+- The real gap is now operational, not architectural:
+  make the canonical `release -> publish -> deploy` path trustworthy without
+  relying on manual recovery.
+- The manual ECS recovery lane exists in the repo today, but it is no longer a
+  desired long-term path.
 
 ## What Is Implemented In The Repo Now
 
@@ -29,7 +38,7 @@ The repo now contains:
 
 - production `ui` and `backend` Dockerfiles
 - release-manifest generation
-- release-please-driven image publication
+- `release-please`-driven release preparation on `release`
 - migration stairway validation in PR CI and release validation
 - ECS-oriented deploy workflows
 - an ECS task-definition renderer
@@ -50,6 +59,31 @@ The old EC2-host deploy path has been removed from the repo surface:
 - no host deploy env example
 - no EC2 compute module
 
+## What Is Still Untrustworthy
+
+- The canonical release-publication lane is still weaker than intended.
+  `release-please` prepares release state, but publication still depends on a
+  separate handoff that is not yet strong enough.
+- `origin/release` already contains prepared release state through `0.4.0`, but
+  the repo still has no published Git tags or GitHub releases. Prepared release
+  state has moved ahead of published immutable release state.
+- The current `main` copy of `.github/workflows/release-publish.yml` is not a
+  trustworthy executable contract because it contains a YAML parsing regression.
+- The manual `manual-ref-deploy` lane is currently the more proven recovery
+  path, but that is a sign of canonical-path weakness, not a desired steady
+  state.
+- The current deploy workflows still rediscover some ECS and ALB state live
+  instead of consuming Terraform outputs end to end.
+
+## Current Work Priorities
+
+The current deploy priority order is:
+
+1. workflow reliability
+2. docs accuracy
+3. release provenance
+4. deploy visibility later, only after the existing path is trustworthy
+
 ## What This Makes Redundant
 
 The following work should now be treated as obsolete, not as an alternate path:
@@ -60,57 +94,28 @@ The following work should now be treated as obsolete, not as an alternate path:
 - host-local rollback bookkeeping
 - host-local compose orchestration
 - any design that still assumes `nginx` or a host reverse proxy is required
+- keeping `manual-ref-deploy` as a parallel steady-state deploy path
 
-## Major Gaps Still Open
+## Current Goals
 
-The pivot is real, but it does not mean the deployment is done.
+The next deploy slice should:
 
-The biggest remaining gaps are:
+- make the normal release path trustworthy
+- remove the manual ECS recovery lane and its docs/cross-links
+- align Release Please, immutable image tags, release manifest identity, and
+  GitHub release publication
+- keep the deploy contract automatic and fail-fast
+- update docs before and after workflow changes so future work stops inheriting
+  stale assumptions
 
-1. The new Terraform runtime still needs real `plan` and likely iterative fixes.
-2. The GitHub repo variables need to shift from EC2-targeting values to ECS
-   values:
-   - `ECS_CLUSTER_NAME`
-   - `ECS_BACKEND_SERVICE_NAME`
-   - `ECS_UI_SERVICE_NAME`
-3. The first environment bootstrap still has to happen against the target
-   Aurora cluster.
-4. Product images still need to be present in the public bucket before launch.
-5. We still need one real end-to-end proof of:
-   - AG-UI streaming through `CloudFront -> ALB -> backend`
-   - Aurora pause-to-zero under the deployed runtime posture
-6. The new release/deploy hardening lane still needs the rest of epic `.8`
-   closed out so the next release does not depend on manual recovery.
+## Current Recommended Sequence
 
-## Work We Need To Do Before First Real Deploy
-
-Before the first real ECS deploy can succeed, we still need:
-
-1. `terraform validate`
-2. a real Terraform apply for the Fargate/ALB runtime
-3. GitHub repo variables updated from Terraform outputs
-4. one release publish run to push immutable images
-5. one one-off bootstrap run for the target environment
-6. one deploy workflow run against ECS
-
-## Epic Impact
-
-This architecture pivot changes the meaning of several epics and tasks.
-
-Most importantly:
-
-- Terraform/AWS work now means ECS+ALB runtime, not EC2 host bring-up
-- build/publish/deploy automation now means ECS task-definition and service
-  rollout, not SSM host orchestration
-- launch-readiness validation must prove the public ECS path, not an EC2 host
-- the Beads graph has been updated so the runtime, edge, and deploy tasks now
-  point at the ECS/ALB substrate rather than the obsolete host path
-
-## Recommended Next Sequence
-
-1. Finish and validate the Terraform Fargate/ALB runtime shape.
-2. Populate the new ECS GitHub repo variables from Terraform outputs.
-3. Run one first release publication to produce immutable image digests and a
-   release manifest.
-4. Bootstrap the environment once.
-5. Run the first ECS deploy and public-path validation.
+1. Refresh `AGENTS.md` and the deploy specs so they describe the repo's actual
+   state and current goals.
+2. Treat older deploy epics and plans as historical unless explicitly
+   refreshed.
+3. Remove the manual ECS lane from the intended deploy design and its docs.
+4. Simplify and repair the canonical `release -> publish -> deploy` flow.
+5. Tighten release provenance so the immutable artifact record proves what was
+   published.
+6. Refresh the docs again after the workflow changes land.

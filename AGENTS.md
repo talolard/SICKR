@@ -19,6 +19,27 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - Role-specific behavior lives under `.codex/agents/`; see [docs/codex_multi_agent_workflow.md](docs/codex_multi_agent_workflow.md).
 - Detailed workflow, transport, and UI contracts live in the linked docs/specs below rather than in `AGENTS.md`.
 
+## Deploy Work State
+
+- Deploy work is in post-cutover hardening, not pre-deploy architecture
+  selection. One live ECS Fargate deploy has already happened, but the canonical
+  release path is not yet trustworthy enough.
+- The current deploy priority order is:
+  - workflow reliability
+  - docs accuracy
+  - release provenance
+  - deploy visibility later, only after the existing path is trustworthy
+- The canonical target is one automatic `main -> release -> publish -> deploy`
+  flow. The `manual-ref-deploy` workflow still exists in the repo, but it is
+  transitional recovery debt and should be removed rather than extended.
+- For deploy work, prefer the current workflows under `.github/workflows/`,
+  Terraform under `infra/terraform/`, `docs/deployment_runtime_contract.md`, and
+  the refreshed docs under `specs/deploy/` over older design notes.
+- Older deploy plans and epics under `plans/` are historical background unless
+  they are explicitly refreshed. In particular, any plan that still assumes EC2,
+  SSM, host deploy bundles, or manual ECS backstops is stale and must not be
+  treated as current guidance.
+
 ## Workflow invariants
 
 - Mutating implementation work must happen in a dedicated worktree. Start new work with `make agent-start ...`; for existing assigned work, stay in the provided worktree. See [docs/worktree_multi_agent_workflow.md](docs/worktree_multi_agent_workflow.md).

@@ -70,6 +70,15 @@ That means:
 - manual console changes are allowed only for bootstrapping secret values and
   for emergency recovery
 
+Current implementation honesty note:
+
+- Terraform already exports the ECS cluster and service names, ALB DNS name,
+  CloudFront distribution, bucket names, and GitHub role ARNs
+- the current deploy workflows still use live AWS API discovery for service
+  baselines and ALB-derived runtime details
+- that rediscovery is implementation debt, not the intended steady-state
+  contract
+
 ## Repository Layout
 
 Recommended Terraform layout:
@@ -275,9 +284,14 @@ Terraform outputs should be sufficient to populate these repo variables:
 - `IKEA_IMAGE_CATALOG_RUN_ID`
 
 The release and deploy IAM roles must trust GitHub OIDC subjects from both
-`refs/heads/release` and `refs/heads/main`. `release` owns the normal publish
-path; `main` is allowed to run the manual ref deploy workflow for an explicit
-post-merge deploy.
+`refs/heads/release` and `refs/heads/main` today because the repo still contains
+the transitional `manual-ref-deploy` workflow.
+
+Target posture:
+
+- the canonical publish/deploy path should run from `release`
+- the extra `main` trust should be removed when the manual source-ref deploy
+  lane is deleted
 
 The old EC2-targeting repo variables are obsolete:
 

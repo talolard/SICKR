@@ -1,5 +1,10 @@
 # Multi-Agent Review
 
+Historical planning synthesis only.
+Use [project_status_2026-03-25.md](./project_status_2026-03-25.md), the
+refreshed subspecs, current workflows, and current Terraform as the live source
+of truth for deploy work.
+
 This document summarizes four independent planning passes over the canonical
 deployment spec and its subspecs.
 

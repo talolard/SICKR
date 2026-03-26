@@ -28,6 +28,18 @@ feedback" deployment.
 We want a deployment that is simple, repeatable, cheap enough for very low
 traffic, and easy to debug without babysitting a host.
 
+## Current Repository State
+
+- one live ECS Fargate deploy has already happened, but only after manual
+  recovery steps
+- the repo is now in post-cutover hardening
+- the main deploy problem is workflow reliability and provenance, not choosing
+  the runtime architecture
+- the `manual-ref-deploy` workflow still exists as recovery debt, but it is not
+  part of the desired steady-state deploy model
+- older deploy plans under `plans/` that still assume EC2, SSM, host bundles,
+  or manual ECS backstops are historical background only
+
 ## Goals
 
 - keep the current product architecture intact
@@ -113,12 +125,17 @@ Shared release posture for the near term:
 - `main` remains the normal integration branch
 - releases are promoted from `main` to `release`
 - `release-please` is the preferred semver and release-note automation mechanism
+- the canonical target is one automatic `release -> publish -> deploy` flow
+- release workflow reliability, docs accuracy, and release provenance are the
+  current priorities
 - release publication means:
   - immutable images were built and pushed
   - an immutable release manifest exists
   - an immutable Git tag and GitHub release were created
 - deploy automation rolls those immutable artifacts onto ECS; it does not build
   on the runtime platform
+- the manual source-ref deploy path that still exists in the repo is temporary
+  recovery tooling, not a valid long-term parallel release path
 
 ## New Redundancies
 

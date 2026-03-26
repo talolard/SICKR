@@ -34,6 +34,15 @@ names:
 
 Deploy should not rebuild images on the runtime platform.
 
+Current implementation honesty note:
+
+- the repo currently has `release-please`, `release-publish`,
+  `release-deploy`, and `manual-ref-deploy` workflows
+- the `manual-ref-deploy` workflow is transitional recovery tooling, not part
+  of the desired steady-state release model
+- the canonical publish lane is still not trustworthy enough to be treated as a
+  solved problem
+
 ## Why This Is Separate
 
 This is a separate decision from Terraform and AWS topology.
@@ -190,23 +199,34 @@ Release CI should do the deployment-specific work:
 9. update the backend ECS service
 10. update the UI ECS service
 
-## Manual Deploy And Rollback
+Implementation preference:
 
-Manual deploys should still exist, but they should use the same ECS path:
+- keep the normal release path in one canonical workflow with dependent jobs
+  where possible
+- move non-trivial shell or Python logic into helper scripts when that keeps the
+  workflow readable
+- do not preserve a second source-ref deploy workflow as a parallel steady-state
+  path
+
+## Redeploy And Rollback
+
+The normal deploy path should be automatic from successful release publication.
+
+If an already-published immutable release needs to be rolled out again:
 
 - select an immutable Git release tag
-- download that tag’s release manifest
+- download that tag's release manifest
 - render ECS task-definition revisions from the current baseline
 - deploy those revisions to ECS
 
-The manual ref deploy workflow is a separate emergency/operator path. It should
-remain digest-driven and may use one unique per-run image tag as a temporary
-push handle, but it must not try to publish canonical immutable release tags
-such as `vX.Y.Z` or `sha-<commit>`. Those identities belong to the real release
-workflow only.
+Rollback means redeploying an older immutable release tag through the same ECS
+path. There should not be a host-local "previous release" mechanism anymore.
 
-Rollback means redeploying an older immutable release tag. There should not be a
-host-local “previous release” mechanism anymore.
+Current repo-state note:
+
+- `release-deploy.yml` fits this redeploy model
+- `manual-ref-deploy.yml` does not; it is recovery debt to remove once the
+  canonical release path is trustworthy
 
 ## Redundant Old Path
 
