@@ -61,14 +61,16 @@ The old EC2-host deploy path has been removed from the repo surface:
 
 ## What Is Still Untrustworthy
 
-- The canonical release-publication lane is still weaker than intended.
-  `release-please` prepares release state, but publication still depends on a
-  separate handoff that is not yet strong enough.
+- The canonical release-publication lane is still not fully proven.
+  `release-please` prepares release state, and publish now validates the merged
+  Release Please PR head ref, merge commit, and final `vX.Y.Z` tag identity,
+  but the end-to-end path still lacks a published immutable release record.
 - `origin/release` already contains prepared release state through `0.4.0`, but
   the repo still has no published Git tags or GitHub releases. Prepared release
   state has moved ahead of published immutable release state.
-- The current `main` copy of `.github/workflows/release-publish.yml` is not a
-  trustworthy executable contract because it contains a YAML parsing regression.
+- The current `main` copy of `.github/workflows/release-publish.yml` now uses
+  the checked-in release-identity helper and plain `vX.Y.Z` tags, but that
+  executable contract still needs real publication validation.
 - The manual `manual-ref-deploy` lane is currently the more proven recovery
   path, but that is a sign of canonical-path weakness, not a desired steady
   state.

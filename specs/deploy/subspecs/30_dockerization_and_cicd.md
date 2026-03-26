@@ -184,7 +184,8 @@ PR CI should continue to focus on:
 
 Release CI should do the deployment-specific work:
 
-1. resolve the release version
+1. resolve the publishable release identity from the merged Release Please PR
+   and checked-out merge commit
 2. build and push both images
 3. write the release manifest
 4. create the immutable Git tag and GitHub release from the same final

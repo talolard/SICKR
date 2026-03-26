@@ -24,14 +24,13 @@ jobs:
     name: Build, push, manifest, and publish
     if: >-
       github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == 'release' &&
-      startsWith(github.event.pull_request.title, 'chore(release):')
+      github.event.pull_request.base.ref == 'release'
     runs-on: ubuntu-latest
     outputs:
-      release_tag: ${{ steps.version.outputs.tag }}
-      release_version: ${{ steps.version.outputs.version }}
-      release_git_sha: ${{ steps.version.outputs.git_sha }}
-      release_manifest_artifact_name: release-manifest-${{ steps.version.outputs.tag }}
+      release_tag: ${{ steps.release_identity.outputs.tag }}
+      release_version: ${{ steps.release_identity.outputs.version }}
+      release_git_sha: ${{ steps.release_identity.outputs.git_sha }}
+      release_manifest_artifact_name: release-manifest-${{ steps.release_identity.outputs.tag }}
     steps:
       - name: Resolve release ref
         id: release_ref
@@ -63,26 +62,21 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Resolve and validate release identity
+        id: release_identity
+        run: |
+          set -euo pipefail
+          python -m scripts.deploy.resolve_release_identity >> "${GITHUB_OUTPUT}"
+
       - name: Install backend dependencies
         run: uv sync --all-groups --frozen
 
       - name: Run migration validation suite
         run: bash scripts/ci/run_migration_validation.sh 0
 
-      - name: Resolve release version
-        id: version
-        run: |
-          set -euo pipefail
-          version="$(python scripts/deploy/read_release_version.py)"
-          tag="$(python scripts/deploy/read_release_version.py --with-v-prefix)"
-          git_sha="$(git rev-parse HEAD)"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-          echo "git_sha=${git_sha}" >> "${GITHUB_OUTPUT}"
-
       - name: Reject duplicate immutable tag
         env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_TAG: ${{ steps.release_identity.outputs.tag }}
         run: |
           set -euo pipefail
           if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
@@ -145,12 +139,12 @@ PY
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:${{ steps.version.outputs.tag }}
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:sha-${{ steps.version.outputs.git_sha }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:${{ steps.release_identity.outputs.tag }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.BACKEND_ECR_REPOSITORY }}:sha-${{ steps.release_identity.outputs.git_sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ steps.version.outputs.git_sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.release_identity.outputs.git_sha }}
+            org.opencontainers.image.version=${{ steps.release_identity.outputs.version }}
 
       - name: Build and push UI image
         id: ui_image
@@ -161,20 +155,20 @@ PY
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:${{ steps.version.outputs.tag }}
-            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:sha-${{ steps.version.outputs.git_sha }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:${{ steps.release_identity.outputs.tag }}
+            ${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}:sha-${{ steps.release_identity.outputs.git_sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ steps.version.outputs.git_sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.release_identity.outputs.git_sha }}
+            org.opencontainers.image.version=${{ steps.release_identity.outputs.version }}
 
       - name: Write release manifest
         run: |
           set -euo pipefail
           python -m scripts.deploy.write_release_manifest \
-            --app-version "${{ steps.version.outputs.version }}" \
-            --git-tag "${{ steps.version.outputs.tag }}" \
-            --git-sha "${{ steps.version.outputs.git_sha }}" \
+            --app-version "${{ steps.release_identity.outputs.version }}" \
+            --git-tag "${{ steps.release_identity.outputs.tag }}" \
+            --git-sha "${{ steps.release_identity.outputs.git_sha }}" \
             --postgres-seed-version "${{ steps.bootstrap_inputs.outputs.postgres_seed_version }}" \
             --image-catalog-run-id "${{ steps.bootstrap_inputs.outputs.image_catalog_run_id }}" \
             --ui-repository "${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}" \
@@ -186,19 +180,19 @@ PY
       - name: Upload release manifest artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-manifest-${{ steps.version.outputs.tag }}
+          name: release-manifest-${{ steps.release_identity.outputs.tag }}
           path: release-manifest.json
           if-no-files-found: error
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_TAG: ${{ steps.release_identity.outputs.tag }}
         run: |
           set -euo pipefail
           gh release create "${RELEASE_TAG}" \
             release-manifest.json \
-            --target "${{ steps.version.outputs.git_sha }}" \
+            --target "${{ steps.release_identity.outputs.git_sha }}" \
             --title "${RELEASE_TAG}" \
             --generate-notes
 
@@ -247,19 +241,19 @@ PY
           set -euo pipefail
           manifest_path="release-assets/release-manifest.json"
           python - <<'PY' "${manifest_path}" >> "${GITHUB_OUTPUT}"
-          import json
-          import sys
-          from pathlib import Path
+import json
+import sys
+from pathlib import Path
 
-          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          print(f"app_version={payload['app_version']}")
-          print(f"git_tag={payload['git_tag']}")
-          print(f"git_sha={payload['git_sha']}")
-          print(f"backend_image_ref={payload['backend_image']['digest_ref']}")
-          print(f"ui_image_ref={payload['ui_image']['digest_ref']}")
-          print(f"postgres_seed_version={payload['bootstrap']['postgres_seed_version']}")
-          print(f"image_catalog_run_id={payload['bootstrap']['image_catalog_run_id']}")
-          PY
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(f"app_version={payload['app_version']}")
+print(f"git_tag={payload['git_tag']}")
+print(f"git_sha={payload['git_sha']}")
+print(f"backend_image_ref={payload['backend_image']['digest_ref']}")
+print(f"ui_image_ref={payload['ui_image']['digest_ref']}")
+print(f"postgres_seed_version={payload['bootstrap']['postgres_seed_version']}")
+print(f"image_catalog_run_id={payload['bootstrap']['image_catalog_run_id']}")
+PY
 
       - name: Configure AWS deploy credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -296,54 +290,57 @@ PY
         run: |
           set -euo pipefail
           python - <<'PY' backend-service.json ui-service.json
-          import json
-          import subprocess
-          import sys
-          from pathlib import Path
+import json
+import subprocess
+import sys
+from pathlib import Path
 
-          backend_service = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          ui_service = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          target_group_arn = backend_service["loadBalancers"][0]["targetGroupArn"]
-          target_group_payload = json.loads(
-              subprocess.check_output(
-                  [
-                      "aws",
-                      "elbv2",
-                      "describe-target-groups",
-                      "--target-group-arns",
-                      target_group_arn,
-                  ],
-                  text=True,
-              )
-          )
-          load_balancer_arn = target_group_payload["TargetGroups"][0]["LoadBalancerArns"][0]
-          load_balancer_payload = json.loads(
-              subprocess.check_output(
-                  [
-                      "aws",
-                      "elbv2",
-                      "describe-load-balancers",
-                      "--load-balancer-arns",
-                      load_balancer_arn,
-                  ],
-                  text=True,
-              )
-          )
-          alb_dns_name = load_balancer_payload["LoadBalancers"][0]["DNSName"]
+backend_service = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+ui_service = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+target_group_arn = backend_service["loadBalancers"][0]["targetGroupArn"]
+target_group_payload = json.loads(
+    subprocess.check_output(
+        [
+            "aws",
+            "elbv2",
+            "describe-target-groups",
+            "--target-group-arns",
+            target_group_arn,
+        ],
+        text=True,
+    )
+)
+load_balancer_arn = target_group_payload["TargetGroups"][0]["LoadBalancerArns"][0]
+load_balancer_payload = json.loads(
+    subprocess.check_output(
+        [
+            "aws",
+            "elbv2",
+            "describe-load-balancers",
+            "--load-balancer-arns",
+            load_balancer_arn,
+        ],
+        text=True,
+    )
+)
+alb_dns_name = load_balancer_payload["LoadBalancers"][0]["DNSName"]
 
-          backend_network = {"awsvpcConfiguration": backend_service["networkConfiguration"]["awsvpcConfiguration"]}
-          Path("backend-network-configuration.json").write_text(
-              json.dumps(backend_network, indent=2) + "\n",
-              encoding="utf-8",
-          )
+backend_network = {"awsvpcConfiguration": backend_service["networkConfiguration"]["awsvpcConfiguration"]}
+Path("backend-network-configuration.json").write_text(
+    json.dumps(backend_network, indent=2) + "\n",
+    encoding="utf-8",
+)
 
-          output_lines = [
-              f"backend_task_definition={backend_service['taskDefinition']}",
-              f"ui_task_definition={ui_service['taskDefinition']}",
-              f"alb_dns_name={alb_dns_name}",
-          ]
-          Path.home().joinpath("ecs-output.txt").write_text("\n".join(output_lines) + "\n", encoding="utf-8")
-          PY
+output_lines = [
+    f"backend_task_definition={backend_service['taskDefinition']}",
+    f"ui_task_definition={ui_service['taskDefinition']}",
+    f"alb_dns_name={alb_dns_name}",
+]
+Path.home().joinpath("ecs-output.txt").write_text(
+    "\n".join(output_lines) + "\n",
+    encoding="utf-8",
+)
+PY
           cat "${HOME}/ecs-output.txt" >> "${GITHUB_OUTPUT}"
 
       - name: Download current backend task definition
