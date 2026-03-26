@@ -9,11 +9,11 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 
 from ikea_agent.config import get_settings
 from ikea_agent.logging_config import configure_logging
 from ikea_agent.observability.logfire_setup import configure_logfire
+from ikea_agent.shared.deploy_readiness import collect_runtime_schema_verification
 from ikea_agent.shared.sqlalchemy_db import create_database_engine, resolve_database_url
 from scripts.deploy.alembic_config import set_sqlalchemy_url
 
@@ -56,8 +56,10 @@ def main() -> None:
             database_url,
             pool_mode=settings.database_pool_mode,
         )
-        with engine.connect() as connection:
-            revision = MigrationContext.configure(connection).get_current_revision()
+        schema_verification = collect_runtime_schema_verification(
+            engine,
+            alembic_config=alembic_config,
+        )
     except Exception:
         logger.exception(
             "deployment_migration_failed",
@@ -68,15 +70,40 @@ def main() -> None:
         )
         raise
 
+    if schema_verification.schema.status != "ok":
+        logger.error(
+            "deployment_migration_schema_verification_failed",
+            extra={
+                "current_revision": schema_verification.details.current_revision,
+                "environment": settings.runtime_environment,
+                "head_revision": schema_verification.details.head_revision,
+                "missing_tables": list(schema_verification.details.missing_tables),
+                "release_version": settings.release_version,
+            },
+        )
+        raise RuntimeError(schema_verification.schema.detail)
+
     logger.info(
         "deployment_migration_succeeded",
         extra={
-            "current_revision": revision,
+            "current_revision": schema_verification.details.current_revision,
             "environment": settings.runtime_environment,
+            "head_revision": schema_verification.details.head_revision,
+            "missing_tables": list(schema_verification.details.missing_tables),
             "release_version": settings.release_version,
         },
     )
-    print(json.dumps({"current_revision": revision, "status": "ok"}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "current_revision": schema_verification.details.current_revision,
+                "head_revision": schema_verification.details.head_revision,
+                "missing_tables": list(schema_verification.details.missing_tables),
+                "status": "ok",
+            },
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":

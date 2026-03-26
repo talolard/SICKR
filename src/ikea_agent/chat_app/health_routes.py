@@ -8,11 +8,9 @@ from pathlib import Path
 from typing import Literal
 
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
-from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import Engine, text
 
 from ikea_agent.config import AppSettings
 from ikea_agent.shared.deploy_readiness import (
@@ -20,6 +18,7 @@ from ikea_agent.shared.deploy_readiness import (
     DeployCheckResult,
     SeedVerificationDetails,
     SeedVerificationResult,
+    collect_runtime_schema_verification,
     collect_seed_verification,
 )
 
@@ -40,37 +39,12 @@ def _alembic_config() -> Config:
     return Config(str(_repo_root() / "alembic.ini"))
 
 
-def _sqlite_schema_is_bootstrapped(engine: Engine) -> bool:
-    inspector = inspect(engine)
-    return inspector.has_table("threads", schema="app") and inspector.has_table(
-        "seed_state", schema="ops"
-    )
-
-
 def _schema_check(engine: Engine) -> HealthCheckResult:
-    if engine.dialect.name == "sqlite":
-        if _sqlite_schema_is_bootstrapped(engine):
-            return HealthCheckResult(
-                status="ok",
-                detail="SQLite local runtime tables are present.",
-            )
-        return HealthCheckResult(
-            status="failed",
-            detail="SQLite local runtime tables are missing.",
-        )
-
-    head_revision = ScriptDirectory.from_config(_alembic_config()).get_current_head()
-    with engine.connect() as connection:
-        current_revision = MigrationContext.configure(connection).get_current_revision()
-    if current_revision == head_revision:
-        return HealthCheckResult(
-            status="ok",
-            detail=f"Alembic revision is at head ({head_revision}).",
-        )
-    return HealthCheckResult(
-        status="failed",
-        detail=f"Alembic revision {current_revision!r} does not match head {head_revision!r}.",
+    schema_verification = collect_runtime_schema_verification(
+        engine,
+        alembic_config=_alembic_config(),
     )
+    return _coerce_health_check(schema_verification.schema)
 
 
 def _coerce_health_check(result: DeployCheckResult) -> HealthCheckResult:

@@ -40,6 +40,7 @@ def test_schema_check_for_sqlite_reports_missing_tables(tmp_path: Path) -> None:
 
     assert result.status == "failed"
     assert "missing" in result.detail.lower()
+    assert "app.users" in result.detail
 
 
 def test_schema_check_for_sqlite_reports_ready_tables(tmp_path: Path) -> None:
@@ -50,7 +51,7 @@ def test_schema_check_for_sqlite_reports_ready_tables(tmp_path: Path) -> None:
     result = _schema_check(engine)
 
     assert result.status == "ok"
-    assert "present" in result.detail.lower()
+    assert "runtime tables are present" in result.detail.lower()
 
 
 def test_seed_state_check_reports_unready_systems(tmp_path: Path) -> None:

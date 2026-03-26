@@ -5,15 +5,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import Engine, Table, func, select
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Engine, Table, func, inspect, select
 
+from ikea_agent.persistence.models import Base
 from ikea_agent.retrieval.schema import product_embeddings, product_images, products_canonical
-from ikea_agent.shared.db_contract import IMAGE_CATALOG_SEED_SYSTEM, POSTGRES_SEED_SYSTEM
+from ikea_agent.shared.db_contract import (
+    APP_SCHEMA,
+    IMAGE_CATALOG_SEED_SYSTEM,
+    POSTGRES_SEED_SYSTEM,
+)
 from ikea_agent.shared.ops_schema import seed_state
 
 REQUIRED_SEED_SYSTEMS: tuple[str, ...] = (
     POSTGRES_SEED_SYSTEM,
     IMAGE_CATALOG_SEED_SYSTEM,
+)
+REQUIRED_RUNTIME_TABLES: tuple[str, ...] = tuple(
+    sorted(
+        f"{APP_SCHEMA}.{table.name}"
+        for table in Base.metadata.sorted_tables
+        if table.schema == APP_SCHEMA
+    )
 )
 
 _REQUIRED_TABLE_NAMES: dict[str, Table] = {
@@ -47,6 +62,86 @@ class SeedVerificationResult:
     seed_state: DeployCheckResult
     catalog_data: DeployCheckResult
     details: SeedVerificationDetails
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeSchemaDetails:
+    """Observable runtime-schema facts required to trust one deploy."""
+
+    current_revision: str | None
+    head_revision: str | None
+    missing_tables: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeSchemaVerificationResult:
+    """Combined Alembic and physical-table verification for the app schema."""
+
+    schema: DeployCheckResult
+    details: RuntimeSchemaDetails
+
+
+def collect_runtime_schema_verification(
+    engine: Engine,
+    *,
+    alembic_config: Config | None,
+) -> RuntimeSchemaVerificationResult:
+    """Return one deploy-safe verdict for the current runtime schema."""
+
+    missing_tables = _missing_runtime_tables(engine)
+    current_revision: str | None = None
+    head_revision: str | None = None
+
+    if engine.dialect.name == "postgresql":
+        if alembic_config is None:
+            msg = "alembic_config is required for PostgreSQL runtime schema verification."
+            raise ValueError(msg)
+        head_revision = ScriptDirectory.from_config(alembic_config).get_current_head()
+        with engine.connect() as connection:
+            current_revision = MigrationContext.configure(connection).get_current_revision()
+        if current_revision != head_revision:
+            return RuntimeSchemaVerificationResult(
+                schema=DeployCheckResult(
+                    status="failed",
+                    detail=(
+                        f"Alembic revision {current_revision!r} does not match head "
+                        f"{head_revision!r}."
+                    ),
+                ),
+                details=RuntimeSchemaDetails(
+                    current_revision=current_revision,
+                    head_revision=head_revision,
+                    missing_tables=missing_tables,
+                ),
+            )
+
+    if missing_tables:
+        return RuntimeSchemaVerificationResult(
+            schema=DeployCheckResult(
+                status="failed",
+                detail=(
+                    f"Runtime schema is missing required app tables: {', '.join(missing_tables)}."
+                ),
+            ),
+            details=RuntimeSchemaDetails(
+                current_revision=current_revision,
+                head_revision=head_revision,
+                missing_tables=missing_tables,
+            ),
+        )
+
+    if engine.dialect.name == "postgresql":
+        detail = f"Alembic revision is at head ({head_revision}) and required app tables exist."
+    else:
+        detail = "SQLite runtime tables are present."
+    return RuntimeSchemaVerificationResult(
+        schema=DeployCheckResult(status="ok", detail=detail),
+        details=RuntimeSchemaDetails(
+            current_revision=current_revision,
+            head_revision=head_revision,
+            missing_tables=missing_tables,
+        ),
+    )
 
 
 def collect_seed_verification(
@@ -154,3 +249,16 @@ def _build_catalog_data_check(
         status="ok",
         detail="Seeded catalog tables are populated for deploy traffic.",
     )
+
+
+def _missing_runtime_tables(engine: Engine) -> tuple[str, ...]:
+    """Return the fully-qualified app tables that the live engine still lacks."""
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names(schema=APP_SCHEMA))
+    missing_tables = [
+        table_name
+        for table_name in REQUIRED_RUNTIME_TABLES
+        if table_name.removeprefix(f"{APP_SCHEMA}.") not in existing_tables
+    ]
+    return tuple(sorted(missing_tables))
