@@ -1,54 +1,35 @@
 name: Release Publish
 
 on:
-  pull_request_target:
-    types: [closed]
-    branches: [release]
+  release:
+    types: [published]
 
 permissions:
   contents: write
   id-token: write
 
 concurrency:
-  group: release-publish-release-branch
+  group: release-publish-${{ github.event.release.tag_name || github.run_id }}
   cancel-in-progress: false
 
 env:
   AWS_REGION: eu-central-1
   UI_ECR_REPOSITORY: ikea-agent/ui
   BACKEND_ECR_REPOSITORY: ikea-agent/backend
-  PUBLIC_APP_BASE_URL: https://designagent.talperry.com
 
 jobs:
   publish:
     name: Build, push, manifest, and publish
-    if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.base.ref == 'release'
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.release_identity.outputs.tag }}
       release_version: ${{ steps.release_identity.outputs.version }}
       release_git_sha: ${{ steps.release_identity.outputs.git_sha }}
-      release_manifest_artifact_name: release-manifest-${{ steps.release_identity.outputs.tag }}
     steps:
-      - name: Resolve release ref
-        id: release_ref
-        env:
-          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${MERGE_COMMIT_SHA:-}" ]]; then
-            echo "ref=${MERGE_COMMIT_SHA}" >> "${GITHUB_OUTPUT}"
-          else
-            echo "Could not determine the release ref to publish."
-            exit 1
-          fi
-
-      - name: Checkout release commit
+      - name: Checkout released tag
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.release_ref.outputs.ref }}
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -73,16 +54,6 @@ jobs:
 
       - name: Run migration validation suite
         run: bash scripts/ci/run_migration_validation.sh 0
-
-      - name: Reject duplicate immutable tag
-        env:
-          RELEASE_TAG: ${{ steps.release_identity.outputs.tag }}
-        run: |
-          set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Release tag ${RELEASE_TAG} already exists; refusing to overwrite an immutable tag."
-            exit 1
-          fi
 
       - name: Require AWS publish role configuration
         env:
@@ -184,120 +155,18 @@ jobs:
           path: release-manifest.json
           if-no-files-found: error
 
-      - name: Create GitHub release
+      - name: Upload release manifest to published release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_identity.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "${RELEASE_TAG}" \
-            release-manifest.json \
-            --target "${{ steps.release_identity.outputs.git_sha }}" \
-            --title "${RELEASE_TAG}" \
-            --generate-notes
+          gh release upload "${RELEASE_TAG}" release-manifest.json --clobber
 
   deploy:
-    name: Deploy release to ECS Fargate
+    name: Deploy published release
     needs: publish
-    runs-on: ubuntu-latest
-    concurrency:
-      group: designagent-dev-release-operations
-      cancel-in-progress: false
-    steps:
-      - name: Checkout release commit
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.publish.outputs.release_git_sha }}
-
-      - name: Require deploy configuration
-        env:
-          AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
-          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
-          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
-          ECS_BACKEND_TASK_DEFINITION_FAMILY: ${{ vars.ECS_BACKEND_TASK_DEFINITION_FAMILY }}
-          ECS_UI_TASK_DEFINITION_FAMILY: ${{ vars.ECS_UI_TASK_DEFINITION_FAMILY }}
-          ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
-          ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
-          APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
-        run: |
-          set -euo pipefail
-          for required_name in \
-            AWS_DEPLOY_ROLE_ARN \
-            ECS_CLUSTER_NAME \
-            ECS_BACKEND_SERVICE_NAME \
-            ECS_UI_SERVICE_NAME \
-            ECS_BACKEND_TASK_DEFINITION_FAMILY \
-            ECS_UI_TASK_DEFINITION_FAMILY \
-            ECS_RUN_TASK_SUBNET_IDS_JSON \
-            ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON \
-            APP_ALB_DNS_NAME; do
-            if [[ -z "${!required_name:-}" ]]; then
-              echo "Repository variable ${required_name} must be set before automatic ECS deploy can run."
-              exit 1
-            fi
-          done
-
-      - name: Download release manifest artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.publish.outputs.release_manifest_artifact_name }}
-          path: release-assets
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Resolve release metadata
-        id: release
-        run: |
-          set -euo pipefail
-          manifest_path="release-assets/release-manifest.json"
-          python - <<'PY' "${manifest_path}" >> "${GITHUB_OUTPUT}"
-            import json
-            import sys
-            from pathlib import Path
-
-            payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-            print(f"app_version={payload['app_version']}")
-            print(f"git_tag={payload['git_tag']}")
-            print(f"git_sha={payload['git_sha']}")
-            print(f"backend_image_ref={payload['backend_image']['digest_ref']}")
-            print(f"ui_image_ref={payload['ui_image']['digest_ref']}")
-            print(f"postgres_seed_version={payload['bootstrap']['postgres_seed_version']}")
-            print(f"image_catalog_run_id={payload['bootstrap']['image_catalog_run_id']}")
-            PY
-
-      - name: Configure AWS deploy credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Deploy release through shared ECS entry point
-        env:
-          ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
-          ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
-          ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
-          ECS_BACKEND_TASK_DEFINITION_FAMILY: ${{ vars.ECS_BACKEND_TASK_DEFINITION_FAMILY }}
-          ECS_UI_TASK_DEFINITION_FAMILY: ${{ vars.ECS_UI_TASK_DEFINITION_FAMILY }}
-          ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
-          ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
-          APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
-        run: |
-          set -euo pipefail
-          python -m scripts.deploy.ecs_release_deploy \
-            --cluster "${ECS_CLUSTER_NAME}" \
-            --backend-service "${ECS_BACKEND_SERVICE_NAME}" \
-            --ui-service "${ECS_UI_SERVICE_NAME}" \
-            --backend-task-definition-family "${ECS_BACKEND_TASK_DEFINITION_FAMILY}" \
-            --ui-task-definition-family "${ECS_UI_TASK_DEFINITION_FAMILY}" \
-            --backend-run-task-subnets-json "${ECS_RUN_TASK_SUBNET_IDS_JSON}" \
-            --backend-run-task-security-groups-json "${ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON}" \
-            --app-alb-dns-name "${APP_ALB_DNS_NAME}" \
-            --app-version "${{ steps.release.outputs.app_version }}" \
-            --backend-image "${{ steps.release.outputs.backend_image_ref }}" \
-            --ui-image "${{ steps.release.outputs.ui_image_ref }}" \
-            --postgres-seed-version "${{ steps.release.outputs.postgres_seed_version }}" \
-            --public-app-base-url "${PUBLIC_APP_BASE_URL}"
+    uses: ./.github/workflows/release-deploy.yml
+    with:
+      release_tag: ${{ needs.publish.outputs.release_tag }}
+    secrets: inherit

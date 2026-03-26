@@ -5,7 +5,7 @@ region         = "eu-central-1"
 hosted_zone_name  = "talperry.com"
 public_hostname   = "designagent.talperry.com"
 github_repository = "talolard/SICKR"
-release_branch    = "release"
+main_branch       = "main"
 
 vpc_cidr              = "10.42.0.0/16"
 public_subnet_cidrs   = ["10.42.0.0/24", "10.42.1.0/24"]

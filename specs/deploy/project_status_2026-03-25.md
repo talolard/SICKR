@@ -31,7 +31,7 @@ Cross-check current deploy claims against:
 - The deployed DB connection policy is settled:
   ECS backend uses the Aurora writer endpoint with `DATABASE_POOL_MODE = nullpool`.
 - The real gap is now operational, not architectural:
-  make the canonical `release -> publish -> deploy` path trustworthy without
+  make the canonical `main -> GitHub release -> publish -> deploy` path trustworthy without
   relying on manual recovery.
 - The intended redeploy and rollback path is immutable release-tag redeploy via
   `release-deploy.yml`, not a source-ref build workflow.
@@ -47,7 +47,7 @@ The repo now contains:
 
 - production `ui` and `backend` Dockerfiles
 - release-manifest generation
-- `release-please`-driven release preparation on `release`
+- `release-please`-driven release preparation on `main`
 - migration stairway validation in PR CI and release validation
 - ECS-oriented deploy workflows
 - an ECS task-definition renderer
@@ -126,7 +126,7 @@ The next deploy slice should:
    refreshed.
 3. Keep redeploy and rollback on immutable published release tags and remove
    any stale docs that still describe a source-ref deploy lane.
-4. Simplify and repair the canonical `release -> publish -> deploy` flow.
+4. Simplify and repair the canonical `main -> GitHub release -> publish -> deploy` flow.
 5. Tighten release provenance so the immutable artifact record proves what was
    published.
 6. Refresh the docs again after the workflow changes land.

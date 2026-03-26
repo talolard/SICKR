@@ -175,9 +175,9 @@ operators need:
 
 The release workflow should use the `release_publish_role_arn` output for the
 repository variable `AWS_RELEASE_ROLE_ARN`. The role trust policy should allow
-GitHub OIDC subjects from `refs/heads/release`, because release publication and
-redeploys are driven by immutable published releases rather than source-ref
-builds from `main`.
+GitHub OIDC subjects from `refs/heads/main` and `refs/tags/v*`, because
+release preparation now happens on `main`, while release publication and
+automatic deploy run from immutable published release tags.
 
 The deploy workflow should use:
 

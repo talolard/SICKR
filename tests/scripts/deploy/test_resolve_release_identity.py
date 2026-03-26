@@ -15,29 +15,21 @@ from scripts.deploy.resolve_release_identity import (
 def _write_release_event(
     path: Path,
     *,
-    title: str = "chore(release): release 1.4.2",
-    head_ref: str = "release-please--branches--release",
-    merged: bool = True,
-    merge_commit_sha: str = "abc1234def5678",
-    base_ref: str = "release",
+    action: str = "published",
+    tag_name: str = "v1.4.2",
 ) -> None:
     path.write_text(
         json.dumps(
             {
-                "pull_request": {
-                    "merged": merged,
-                    "title": title,
-                    "merge_commit_sha": merge_commit_sha,
-                    "base": {"ref": base_ref},
-                    "head": {"ref": head_ref},
-                }
+                "action": action,
+                "release": {"tag_name": tag_name},
             }
         ),
         encoding="utf-8",
     )
 
 
-def test_resolve_release_identity_accepts_release_please_merge(tmp_path: Path) -> None:
+def test_resolve_release_identity_accepts_published_release(tmp_path: Path) -> None:
     event_path = tmp_path / "event.json"
     version_file = tmp_path / "version.txt"
     version_file.write_text("1.4.2\n", encoding="utf-8")
@@ -54,47 +46,27 @@ def test_resolve_release_identity_accepts_release_please_merge(tmp_path: Path) -
     assert identity.git_sha == "abc1234def5678"
 
 
-def test_resolve_release_identity_accepts_plain_release_title(tmp_path: Path) -> None:
+def test_resolve_release_identity_rejects_non_published_event(tmp_path: Path) -> None:
     event_path = tmp_path / "event.json"
     version_file = tmp_path / "version.txt"
     version_file.write_text("1.4.2\n", encoding="utf-8")
-    _write_release_event(event_path, title="chore(release): release 1.4.2")
+    _write_release_event(event_path, action="created")
 
-    identity = resolve_release_identity(
-        event_path=event_path,
-        version_file=version_file,
-        head_sha="abc1234def5678",
-    )
+    with pytest.raises(ValueError, match="published release event"):
+        resolve_release_identity(
+            event_path=event_path,
+            version_file=version_file,
+            head_sha="abc1234def5678",
+        )
 
-    assert identity.git_tag == "v1.4.2"
 
-
-def test_resolve_release_identity_ignores_release_pr_title_text(tmp_path: Path) -> None:
+def test_resolve_release_identity_rejects_mismatched_release_tag(tmp_path: Path) -> None:
     event_path = tmp_path / "event.json"
     version_file = tmp_path / "version.txt"
     version_file.write_text("1.4.2\n", encoding="utf-8")
-    _write_release_event(
-        event_path,
-        title="release please wrote some other title here",
-        head_ref="release-please--branches--release--components--designagent",
-    )
+    _write_release_event(event_path, tag_name="v9.9.9")
 
-    identity = resolve_release_identity(
-        event_path=event_path,
-        version_file=version_file,
-        head_sha="abc1234def5678",
-    )
-
-    assert identity.git_tag == "v1.4.2"
-
-
-def test_resolve_release_identity_rejects_non_release_please_head_ref(tmp_path: Path) -> None:
-    event_path = tmp_path / "event.json"
-    version_file = tmp_path / "version.txt"
-    version_file.write_text("1.4.2\n", encoding="utf-8")
-    _write_release_event(event_path, head_ref="feature/not-a-release-pr")
-
-    with pytest.raises(ValueError, match="Release Please head-ref shape"):
+    with pytest.raises(ValueError, match=r"does not match version.txt tag"):
         resolve_release_identity(
             event_path=event_path,
             version_file=version_file,

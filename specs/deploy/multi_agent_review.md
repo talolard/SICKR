@@ -74,8 +74,8 @@ Core thesis:
   complexity
 
 Main recommendations:
-- finalize `main -> release`, immutable tags/digests, released-commit identity,
-  and release manifest semantics early
+- finalize release authority on `main`, immutable tags/digests,
+  released-commit identity, and release manifest semantics early
 - build release tooling and Docker pipeline early
 - treat the first reliable deploy-to-origin as the main milestone
 - add CloudFront/public edge only after origin deploy works

@@ -123,9 +123,12 @@ Shared storage posture for the near term:
 Shared release posture for the near term:
 
 - `main` remains the normal integration branch
-- releases are promoted from `main` to `release`
 - `release-please` is the preferred semver and release-note automation mechanism
-- the canonical target is one automatic `release -> publish -> deploy` flow
+- `release-please` maintains the draft release PR on `main`
+- merging the Release Please PR on `main` creates the immutable Git tag and
+  GitHub release
+- the canonical target is one automatic `main -> GitHub release -> publish ->
+  deploy` flow
 - release workflow reliability, docs accuracy, and release provenance are the
   current priorities
 - release publication means:

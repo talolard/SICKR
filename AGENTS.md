@@ -29,7 +29,8 @@ Repository-wide invariants for work in `tal_maria_ikea`.
   - docs accuracy
   - release provenance
   - deploy visibility later, only after the existing path is trustworthy
-- The canonical target is one automatic `main -> release -> publish -> deploy`
+- The canonical target is one automatic
+  `main -> release-please PR on main -> GitHub release -> publish -> deploy`
   flow. Redeploys and rollbacks should reuse immutable published release tags
   through the canonical ECS path rather than a source-ref build lane.
 - For deploy work, prefer the current workflows under `.github/workflows/`,
