@@ -28,6 +28,11 @@ The application runtime should be:
 
 This replaces the older single-EC2-host deploy model.
 
+Current repo-state note:
+
+- one live ECS deployment has already happened on this runtime shape
+- the remaining work is runtime and workflow hardening, not runtime selection
+
 ## Why This Is Better For This Project
 
 This project optimizes for:
@@ -151,6 +156,13 @@ That keeps the public browser contract stable while making the internal proxy
 hop explicit. The backend-only ALB listener is reachable from the UI ECS
 service security group, not from the public internet.
 
+Operational preference:
+
+- keep `BACKEND_PROXY_BASE_URL` limited to residual Next.js server-side proxy
+  routes that still need it
+- prefer direct public routing to the backend for backend-owned browser APIs
+  rather than expanding the internal UI-to-backend proxy surface
+
 ## One-Off Tasks
 
 The deploy system still needs one-off backend tasks for:
@@ -175,17 +187,17 @@ alive as parallel deployment options:
 - host-bundle rendering scripts
 - host-local rollback state
 
-## Pre-Deploy Work Still Required
+## Remaining Runtime Hardening Work
 
-Moving to this architecture does not make the system instantly launch-ready.
-The remaining concrete work before first real deploy is:
+Moving to this architecture did not automatically make the release path
+trustworthy. The remaining concrete runtime-facing work is:
 
-1. Terraform must provision the ECS cluster, ALB, services, task roles, and
-   CloudFront-to-ALB origin wiring.
-2. The release and deploy workflows must target ECS instead of EC2.
-3. The one-off database bootstrap must still happen for the environment.
-4. Product images must still be present in S3 before public launch, even though
-   the app shell can deploy earlier.
+1. the canonical release/publish/deploy path must stop depending on manual
+   recovery
+2. AG-UI streaming through the public path still needs explicit proof
+3. the one-off database bootstrap must still happen for the environment
+4. product images must still be present in S3 before public launch, even though
+   the app shell can deploy earlier
 
 ## Validation
 

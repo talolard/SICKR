@@ -17,6 +17,13 @@ This is not the full Terraform implementation and not the final launch runbook.
 Its job is to state the correct cohesive deployment picture so the subspecs and
 tasks can decompose it consistently.
 
+Current repo-state note:
+
+- one live ECS Fargate deploy has already happened
+- the repo is in post-cutover hardening, not pre-cutover architecture selection
+- this document defines the desired steady-state contract, not a claim that the
+  current workflows already satisfy it end to end
+
 ## Canonical Recommendation
 
 Use this topology:
@@ -115,24 +122,32 @@ Use one application-level version per deployable release.
 
 The release flow should be:
 
-1. release-please prepares and promotes the release
-2. CI builds the `ui` and `backend` images
-3. CI pushes both images to ECR under immutable version and commit tags
-4. CI writes one release manifest containing the pinned digests and bootstrap
+1. releasable changes land on `main` with conventional-commit intent
+2. releasable history is promoted from `main` to `release` without squashing
+   away the commit semantics that `release-please` analyzes
+3. `release-please` prepares the release PR and release version on `release`
+4. CI uses that release version to build and push the `ui` and `backend`
+   images under immutable version and commit tags
+5. CI writes one release manifest containing the pinned digests and bootstrap
    metadata
-5. CI creates the immutable Git tag and GitHub release
-6. CI or a manual workflow renders new ECS task-definition revisions from the
-   current Terraform-owned baseline
-7. deploy automation runs one-off backend migration and seed-verification tasks
+6. CI creates the immutable Git tag and GitHub release only after image
+   publication and manifest creation succeed
+7. the same canonical release flow deploys automatically to ECS
+8. deploy automation renders new ECS task-definition revisions from the current
+   Terraform-owned baseline
+9. deploy automation runs one-off backend migration and seed-verification tasks
    on Fargate
-8. deploy automation updates the backend ECS service
-9. deploy automation updates the UI ECS service
+10. deploy automation updates the backend ECS service
+11. deploy automation updates the UI ECS service
 
 There should be no host-local deploy bundle, no SSM command payload, and no
 host-local rollback bookkeeping.
 
 Rollback means redeploying an older immutable release tag through the same ECS
 workflow.
+
+The `manual-ref-deploy` workflow that still exists in the repo is transitional
+recovery debt, not part of the target release model.
 
 ## Bootstrap Versus Steady State
 
@@ -157,9 +172,12 @@ Normal deploys should not re-run catalog bootstrap.
 This architecture choice does not make the project launch-ready by itself.
 Before first public launch we still need:
 
-- Terraform to provision the ECS cluster, ALB, services, CloudFront, Aurora,
-  and buckets coherently
-- release and deploy automation to target ECS rather than EC2
+- a trustworthy canonical `release -> publish -> deploy` flow that does not
+  depend on manual recovery
+- release provenance that ties Release Please state, image tags, release
+  manifest, and GitHub release publication together cleanly
+- Terraform, workflow docs, and runtime contract docs that all describe the
+  same deploy shape
 - one real proof of AG-UI streaming through `CloudFront -> ALB -> backend`
 - one real proof of Aurora pause-to-zero with the deployed connection policy
 - one one-off environment bootstrap for the target database

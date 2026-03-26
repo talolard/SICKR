@@ -5,8 +5,10 @@ Read [00_context.md](../specs/deploy/subspecs/00_context.md) for the shared
 deployment assumptions.
 
 The files under `specs/deploy/` are the current source of truth for deployment
-work and trump older deployment notes and plans. This document exists to make
-the deploy-time runtime contract explicit for implementers and CI.
+work and trump older deployment notes and plans. Older deploy plans that still
+assume EC2, SSM, host deploy bundles, or manual ECS backstops are historical
+background only. This document exists to make the deploy-time runtime contract
+explicit for implementers and CI.
 
 ## Purpose
 
@@ -144,6 +146,14 @@ The CI deploy workflow should then:
 
 This keeps the stable runtime contract in Terraform while keeping release
 rollouts source-controlled and repeatable.
+
+Current implementation note:
+
+- the repo already exports the needed cluster/service names and ALB DNS through
+  Terraform outputs
+- the current workflows still describe ECS services and the ALB live to derive
+  some rollout inputs
+- that discovery is transitional implementation debt, not the intended contract
 
 ## Deploy Inputs
 
