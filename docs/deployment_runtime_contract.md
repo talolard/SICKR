@@ -142,8 +142,10 @@ The CI deploy workflow should then:
 
 1. build and push immutable image digests
 2. write the release manifest
-3. describe the current ECS task definitions
-4. render new task-definition revisions by replacing the image and release
+3. read the Terraform-owned task-definition families, ALB DNS name, and one-off
+   task network config from repository configuration
+4. render new task-definition revisions from those Terraform-owned families by
+   replacing the image and release
    version fields
 5. strip any placeholder bootstrap command such as `sleep infinity` from the
    rendered task definition so ECS uses the image-default runtime command
@@ -161,11 +163,11 @@ Current implementation note:
 - `release-publish.yml` and `release-deploy.yml` now call the shared Python
   entry point `python -m scripts.deploy.ecs_release_deploy` for the canonical
   ECS rollout sequence
-- the repo already exports the needed cluster/service names and ALB DNS through
-  Terraform outputs
-- the current workflows still describe ECS services and the ALB live to derive
-  some rollout inputs
-- that discovery is transitional implementation debt, not the intended contract
+- the repo now exports the needed cluster/service names, task-definition
+  families, ALB DNS name, and one-off task network inputs through Terraform
+  outputs
+- repository variables should mirror those Terraform outputs so the workflows
+  do not rediscover stable ALB or ECS runtime inputs live
 
 ## Deploy Inputs
 
@@ -177,6 +179,11 @@ The ECS deploy workflow should work from these inputs:
 | `ECS_CLUSTER_NAME` | Terraform output / GitHub repo variable |
 | `ECS_BACKEND_SERVICE_NAME` | Terraform output / GitHub repo variable |
 | `ECS_UI_SERVICE_NAME` | Terraform output / GitHub repo variable |
+| `ECS_BACKEND_TASK_DEFINITION_FAMILY` | Terraform output / GitHub repo variable |
+| `ECS_UI_TASK_DEFINITION_FAMILY` | Terraform output / GitHub repo variable |
+| `ECS_RUN_TASK_SUBNET_IDS_JSON` | Terraform output / GitHub repo variable |
+| `ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON` | Terraform output / GitHub repo variable |
+| `APP_ALB_DNS_NAME` | Terraform output / GitHub repo variable |
 | `RELEASE_VERSION` | release manifest `app_version` |
 | `RELEASE_GIT_TAG` | release manifest `git_tag` |
 | `RELEASE_GIT_SHA` | release manifest `git_sha` |
@@ -187,6 +194,29 @@ The ECS deploy workflow should work from these inputs:
 
 Old EC2 deploy inputs such as host ports, deploy-state directories, SSM
 payloads, and Compose project names are intentionally out of contract now.
+
+## Environment Bootstrap Contract
+
+One-off environment bootstrap is explicit operator work and stays outside the
+steady-state release flow.
+
+The checked-in operator entry point is:
+
+- `scripts/deploy/bootstrap_environment.sh`
+  This script may run from a dedicated worktree, but its pinned parquet inputs
+  can come from a separate canonical checkout via `BOOTSTRAP_INPUT_REPO_ROOT`.
+
+That script runs from Tal's canonical checkout, uploads the pinned parquet and
+image-catalog artifacts to the private artifacts bucket, and then invokes one
+backend ECS task inside the VPC to:
+
+1. sync `images/masters/` into the product-image bucket
+2. seed or refresh `catalog.*` plus `ops.seed_state` from those staged artifacts
+3. verify the resulting seed state against the current parquet and image-catalog
+   versions
+
+Normal release deploys must only verify that bootstrap state is ready; they do
+not upload product images or reseed the catalog.
 
 ## Rollback Contract
 

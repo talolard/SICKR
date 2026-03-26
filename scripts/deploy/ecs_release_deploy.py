@@ -42,6 +42,11 @@ class ReleaseDeployRequest:
     cluster_name: str
     backend_service_name: str
     ui_service_name: str
+    backend_task_definition_family: str
+    ui_task_definition_family: str
+    backend_run_task_subnet_ids: tuple[str, ...]
+    backend_run_task_security_group_ids: tuple[str, ...]
+    app_alb_dns_name: str
     app_version: str
     backend_image_ref: str
     ui_image_ref: str
@@ -51,16 +56,6 @@ class ReleaseDeployRequest:
     ui_desired_count: int = 1
     backend_rollout_timeout_seconds: float = 900.0
     backend_rollout_poll_seconds: float = 15.0
-
-
-@dataclass(frozen=True, slots=True)
-class EcsDeployContext:
-    """Current ECS metadata needed to render and roll the release."""
-
-    backend_task_definition_arn: str
-    ui_task_definition_arn: str
-    backend_network_configuration: dict[str, Any]
-    alb_dns_name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +121,7 @@ def describe_service(*, cluster: str, service_name: str, aws_cli: AwsCli) -> dic
 
 
 def describe_task_definition(*, task_definition_arn: str, aws_cli: AwsCli) -> dict[str, Any]:
-    """Return one ECS task definition payload."""
+    """Return one ECS task definition payload for a family or full ARN."""
 
     return _require_dict(
         aws_cli.json(
@@ -141,66 +136,26 @@ def describe_task_definition(*, task_definition_arn: str, aws_cli: AwsCli) -> di
     )
 
 
-def resolve_deploy_context(
+def build_backend_network_configuration(
     *,
-    backend_service: dict[str, Any],
-    ui_service: dict[str, Any],
-    aws_cli: AwsCli,
-) -> EcsDeployContext:
-    """Resolve the current task definitions, awsvpc config, and ALB DNS name."""
+    subnet_ids: tuple[str, ...],
+    security_group_ids: tuple[str, ...],
+) -> dict[str, Any]:
+    """Return one awsvpc config from the Terraform-owned deploy contract."""
 
-    backend_task_definition_arn = _require_str(
-        backend_service.get("taskDefinition"),
-        "taskDefinition",
-    )
-    ui_task_definition_arn = _require_str(ui_service.get("taskDefinition"), "taskDefinition")
-    load_balancers = backend_service.get("loadBalancers")
-    if not isinstance(load_balancers, list) or not load_balancers:
-        msg = "Backend ECS service must expose at least one load balancer."
-        raise RuntimeError(msg)
-    first_load_balancer = load_balancers[0]
-    if not isinstance(first_load_balancer, dict):
-        msg = "Unexpected backend load balancer payload."
-        raise TypeError(msg)
-    target_group_arn = _require_str(first_load_balancer.get("targetGroupArn"), "targetGroupArn")
-    target_group_payload = _require_dict(
-        aws_cli.json(
-            "elbv2",
-            "describe-target-groups",
-            "--target-group-arns",
-            target_group_arn,
-        ),
-        "target group description",
-    )
-    load_balancer_arns = target_group_payload["TargetGroups"][0]["LoadBalancerArns"]
-    if not isinstance(load_balancer_arns, list) or not load_balancer_arns:
-        msg = "Backend target group must resolve to a load balancer ARN."
-        raise RuntimeError(msg)
-    load_balancer_payload = _require_dict(
-        aws_cli.json(
-            "elbv2",
-            "describe-load-balancers",
-            "--load-balancer-arns",
-            str(load_balancer_arns[0]),
-        ),
-        "load balancer description",
-    )
-    alb_dns_name = _require_str(load_balancer_payload["LoadBalancers"][0]["DNSName"], "DNSName")
-
-    network_configuration = backend_service.get("networkConfiguration")
-    if not isinstance(network_configuration, dict):
-        msg = "Backend ECS service must include networkConfiguration."
-        raise TypeError(msg)
-    awsvpc_configuration = network_configuration.get("awsvpcConfiguration")
-    if not isinstance(awsvpc_configuration, dict):
-        msg = "Backend ECS service must include awsvpcConfiguration."
-        raise TypeError(msg)
-    return EcsDeployContext(
-        backend_task_definition_arn=backend_task_definition_arn,
-        ui_task_definition_arn=ui_task_definition_arn,
-        backend_network_configuration={"awsvpcConfiguration": awsvpc_configuration},
-        alb_dns_name=alb_dns_name,
-    )
+    if not subnet_ids:
+        msg = "Expected at least one backend run-task subnet id."
+        raise ValueError(msg)
+    if not security_group_ids:
+        msg = "Expected at least one backend run-task security group id."
+        raise ValueError(msg)
+    return {
+        "awsvpcConfiguration": {
+            "subnets": list(subnet_ids),
+            "securityGroups": list(security_group_ids),
+            "assignPublicIp": "ENABLED",
+        }
+    }
 
 
 def register_task_definition(*, task_definition: dict[str, Any], aws_cli: AwsCli) -> str:
@@ -363,25 +318,14 @@ def deploy_release(
 
     aws = aws_cli or AwsCli()
     smoke_check = check_public_deploy_endpoints if smoke_checker is None else smoke_checker
-    backend_service = describe_service(
-        cluster=request.cluster_name,
-        service_name=request.backend_service_name,
-        aws_cli=aws,
-    )
-    ui_service = describe_service(
-        cluster=request.cluster_name,
-        service_name=request.ui_service_name,
-        aws_cli=aws,
-    )
-    context = resolve_deploy_context(
-        backend_service=backend_service,
-        ui_service=ui_service,
-        aws_cli=aws,
+    backend_network_configuration = build_backend_network_configuration(
+        subnet_ids=request.backend_run_task_subnet_ids,
+        security_group_ids=request.backend_run_task_security_group_ids,
     )
 
     backend_task_definition = render_task_definition(
         payload=describe_task_definition(
-            task_definition_arn=context.backend_task_definition_arn,
+            task_definition_arn=request.backend_task_definition_family,
             aws_cli=aws,
         ),
         container_name="backend",
@@ -396,14 +340,14 @@ def deploy_release(
     run_one_off_backend_task_to_completion(
         cluster=request.cluster_name,
         task_definition_arn=backend_task_definition_arn,
-        network_configuration=context.backend_network_configuration,
+        network_configuration=backend_network_configuration,
         command=["python", "-m", "scripts.deploy.apply_migrations"],
         aws_cli=aws,
     )
     run_one_off_backend_task_to_completion(
         cluster=request.cluster_name,
         task_definition_arn=backend_task_definition_arn,
-        network_configuration=context.backend_network_configuration,
+        network_configuration=backend_network_configuration,
         command=[
             "python",
             "-m",
@@ -434,15 +378,15 @@ def deploy_release(
 
     ui_task_definition = render_task_definition(
         payload=describe_task_definition(
-            task_definition_arn=context.ui_task_definition_arn,
+            task_definition_arn=request.ui_task_definition_family,
             aws_cli=aws,
         ),
         container_name="ui",
         image=request.ui_image_ref,
         env_updates={
             "APP_RELEASE_VERSION": request.app_version,
-            "PY_AG_UI_URL": f"http://{context.alb_dns_name}/ag-ui/",
-            "BACKEND_PROXY_BASE_URL": f"http://{context.alb_dns_name}/",
+            "PY_AG_UI_URL": f"http://{request.app_alb_dns_name}/ag-ui/",
+            "BACKEND_PROXY_BASE_URL": f"http://{request.app_alb_dns_name}/",
         },
     )
     ui_task_definition_arn = register_task_definition(
@@ -463,7 +407,7 @@ def deploy_release(
     )
     smoke_check(request.public_app_base_url)
     return ReleaseDeployResult(
-        alb_dns_name=context.alb_dns_name,
+        alb_dns_name=request.app_alb_dns_name,
         backend_task_definition_arn=backend_task_definition_arn,
         ui_task_definition_arn=ui_task_definition_arn,
         backend_service_name=request.backend_service_name,
@@ -511,6 +455,11 @@ def _parse_args() -> ReleaseDeployRequest:
     parser.add_argument("--cluster", required=True)
     parser.add_argument("--backend-service", required=True)
     parser.add_argument("--ui-service", required=True)
+    parser.add_argument("--backend-task-definition-family", required=True)
+    parser.add_argument("--ui-task-definition-family", required=True)
+    parser.add_argument("--backend-run-task-subnets-json", required=True)
+    parser.add_argument("--backend-run-task-security-groups-json", required=True)
+    parser.add_argument("--app-alb-dns-name", required=True)
     parser.add_argument("--app-version", required=True)
     parser.add_argument("--backend-image", required=True)
     parser.add_argument("--ui-image", required=True)
@@ -525,6 +474,17 @@ def _parse_args() -> ReleaseDeployRequest:
         cluster_name=args.cluster,
         backend_service_name=args.backend_service,
         ui_service_name=args.ui_service,
+        backend_task_definition_family=args.backend_task_definition_family,
+        ui_task_definition_family=args.ui_task_definition_family,
+        backend_run_task_subnet_ids=_parse_string_list_argument(
+            raw=args.backend_run_task_subnets_json,
+            field_name="backend_run_task_subnet_ids",
+        ),
+        backend_run_task_security_group_ids=_parse_string_list_argument(
+            raw=args.backend_run_task_security_groups_json,
+            field_name="backend_run_task_security_group_ids",
+        ),
+        app_alb_dns_name=args.app_alb_dns_name,
         app_version=args.app_version,
         backend_image_ref=args.backend_image,
         ui_image_ref=args.ui_image,
@@ -535,6 +495,24 @@ def _parse_args() -> ReleaseDeployRequest:
         backend_rollout_timeout_seconds=args.backend_rollout_timeout_seconds,
         backend_rollout_poll_seconds=args.backend_rollout_poll_seconds,
     )
+
+
+def _parse_string_list_argument(*, raw: str, field_name: str) -> tuple[str, ...]:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        msg = f"Expected {field_name} to be valid JSON."
+        raise ValueError(msg) from exc
+    if not isinstance(payload, list) or not payload:
+        msg = f"Expected {field_name} to be a non-empty JSON list of strings."
+        raise ValueError(msg)
+    values: list[str] = []
+    for index, value in enumerate(payload):
+        if not isinstance(value, str) or not value:
+            msg = f"Expected {field_name}[{index}] to be a non-empty string."
+            raise ValueError(msg)
+        values.append(value)
+    return tuple(values)
 
 
 def main() -> int:

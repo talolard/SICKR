@@ -184,9 +184,23 @@ The deploy workflow should use:
 - `ecs_cluster_name`
 - `ecs_backend_service_name`
 - `ecs_ui_service_name`
+- `ecs_backend_task_definition_family`
+- `ecs_ui_task_definition_family`
+- `ecs_run_task_subnet_ids`
+- `ecs_backend_run_task_security_group_ids`
+- `app_alb_dns_name`
 - `cloudfront_distribution_id` only if a later deploy step truly needs targeted
   invalidation
 - the secret ARNs from Terraform outputs rather than rediscovering them in AWS
+
+The environment bootstrap path should use:
+
+- `product_image_bucket_name`
+- `database_secret_name`
+
+Repository variables should mirror these Terraform outputs in JSON or string
+form so the workflows and operator scripts do not rediscover stable runtime
+inputs live.
 
 ## Validation
 

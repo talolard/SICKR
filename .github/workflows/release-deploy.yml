@@ -35,9 +35,23 @@ jobs:
           ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
           ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
           ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+          ECS_BACKEND_TASK_DEFINITION_FAMILY: ${{ vars.ECS_BACKEND_TASK_DEFINITION_FAMILY }}
+          ECS_UI_TASK_DEFINITION_FAMILY: ${{ vars.ECS_UI_TASK_DEFINITION_FAMILY }}
+          ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
+          ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
+          APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
         run: |
           set -euo pipefail
-          for required_name in AWS_DEPLOY_ROLE_ARN ECS_CLUSTER_NAME ECS_BACKEND_SERVICE_NAME ECS_UI_SERVICE_NAME; do
+          for required_name in \
+            AWS_DEPLOY_ROLE_ARN \
+            ECS_CLUSTER_NAME \
+            ECS_BACKEND_SERVICE_NAME \
+            ECS_UI_SERVICE_NAME \
+            ECS_BACKEND_TASK_DEFINITION_FAMILY \
+            ECS_UI_TASK_DEFINITION_FAMILY \
+            ECS_RUN_TASK_SUBNET_IDS_JSON \
+            ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON \
+            APP_ALB_DNS_NAME; do
             if [[ -z "${!required_name:-}" ]]; then
               echo "Repository variable ${required_name} must be set before ECS deploy automation can run."
               exit 1
@@ -104,12 +118,22 @@ jobs:
           ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME }}
           ECS_BACKEND_SERVICE_NAME: ${{ vars.ECS_BACKEND_SERVICE_NAME }}
           ECS_UI_SERVICE_NAME: ${{ vars.ECS_UI_SERVICE_NAME }}
+          ECS_BACKEND_TASK_DEFINITION_FAMILY: ${{ vars.ECS_BACKEND_TASK_DEFINITION_FAMILY }}
+          ECS_UI_TASK_DEFINITION_FAMILY: ${{ vars.ECS_UI_TASK_DEFINITION_FAMILY }}
+          ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
+          ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
+          APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
         run: |
           set -euo pipefail
           python -m scripts.deploy.ecs_release_deploy \
             --cluster "${ECS_CLUSTER_NAME}" \
             --backend-service "${ECS_BACKEND_SERVICE_NAME}" \
             --ui-service "${ECS_UI_SERVICE_NAME}" \
+            --backend-task-definition-family "${ECS_BACKEND_TASK_DEFINITION_FAMILY}" \
+            --ui-task-definition-family "${ECS_UI_TASK_DEFINITION_FAMILY}" \
+            --backend-run-task-subnets-json "${ECS_RUN_TASK_SUBNET_IDS_JSON}" \
+            --backend-run-task-security-groups-json "${ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON}" \
+            --app-alb-dns-name "${APP_ALB_DNS_NAME}" \
             --app-version "${{ steps.release.outputs.app_version }}" \
             --backend-image "${{ steps.release.outputs.backend_image_ref }}" \
             --ui-image "${{ steps.release.outputs.ui_image_ref }}" \

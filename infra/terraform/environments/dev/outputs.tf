@@ -143,6 +143,26 @@ output "ecs_ui_service_name" {
   value       = module.runtime.ui_service_name
 }
 
+output "ecs_backend_task_definition_family" {
+  description = "Task-definition family name for backend releases."
+  value       = module.runtime.backend_task_definition_family
+}
+
+output "ecs_ui_task_definition_family" {
+  description = "Task-definition family name for UI releases."
+  value       = module.runtime.ui_task_definition_family
+}
+
+output "ecs_run_task_subnet_ids" {
+  description = "Subnet ids for one-off deploy tasks and the ECS services."
+  value       = module.network.public_subnet_ids
+}
+
+output "ecs_backend_run_task_security_group_ids" {
+  description = "Security group ids for backend one-off deploy tasks."
+  value       = [module.network.backend_service_security_group_id]
+}
+
 output "app_alb_dns_name" {
   description = "DNS name of the public ALB used as the CloudFront app origin."
   value       = module.runtime.alb_dns_name
