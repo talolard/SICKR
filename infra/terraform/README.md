@@ -174,10 +174,10 @@ operators need:
 - CloudFront distribution id, ARN, domain name, and viewer certificate ARN
 
 The release workflow should use the `release_publish_role_arn` output for the
-repository variable `AWS_RELEASE_ROLE_ARN`. The role trust policy must allow
-GitHub OIDC subjects from both `refs/heads/release` and `refs/heads/main`:
-`release` publishes tagged releases, and `main` is allowed to run the manual
-ref deploy workflow when we need to build and deploy a known-good merge commit.
+repository variable `AWS_RELEASE_ROLE_ARN`. The role trust policy should allow
+GitHub OIDC subjects from `refs/heads/release`, because release publication and
+redeploys are driven by immutable published releases rather than source-ref
+builds from `main`.
 
 The deploy workflow should use:
 
