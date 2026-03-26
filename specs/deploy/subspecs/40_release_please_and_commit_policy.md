@@ -43,8 +43,8 @@ Current implementation honesty note:
 - `origin/release` already carries release-preparation state through `0.4.0`,
   but the repo still has no published Git tags or GitHub releases
 - the current publication handoff now requires a merged Release Please-owned PR
-  head ref on `release`, and the publish workflow also checks that the merged
-  PR title version matches the checked-out `version.txt`
+  head-ref shape on `release`, and the publish workflow resolves the release
+  version from the checked-out `version.txt` instead of PR title text
 - the current `main` copy of `.github/workflows/release-publish.yml` now uses
   the checked-in release-identity helper and plain `vX.Y.Z` tags
 - the current tag identity is plain `vX.Y.Z`; the older `designagent-vX.Y.Z`
@@ -215,15 +215,14 @@ Repository gate:
   repository, configure `RELEASE_PLEASE_TOKEN` with the minimum scope needed to
   manage release PRs
 
-The current publish workflow no longer keys publication off PR title alone.
-It requires the merged PR to come from the Release Please-owned release branch
-shape and still validates that the release PR title version matches the
-checked-out `version.txt`.
+The current publish workflow no longer keys publication off PR title text.
+It requires the merged PR to come from the Release Please release-branch head
+shape and resolves the release version from the checked-out `version.txt`.
 
 Current provenance note:
 
-- the publish handoff now verifies the merged PR head ref belongs to Release
-  Please before publishing artifacts
+- the publish handoff now verifies the merged PR head ref matches the expected
+  Release Please shape before publishing artifacts
 - the publish workflow still depends on GitHub event payload shape rather than
   a first-class Release Please output contract
 
@@ -280,8 +279,8 @@ Current repo reality:
 
 - a merged Release Please PR into `release` can trigger the publish workflow
 - the workflow resolves the release version from the checked-out release ref
-- the workflow verifies that the merged PR title version, checked-out merge
-  commit, and final `vX.Y.Z` tag all describe one release identity
+- the workflow verifies that the checked-out merge commit, `version.txt`, and
+  final `vX.Y.Z` tag all describe one release identity
 - the workflow builds and pushes both images before writing the release manifest
 - the workflow attempts to create the GitHub release from the exact release
   commit only after image publication and manifest creation
@@ -397,8 +396,8 @@ What is true today:
   supporting config and workflows
 - `origin/release` exists and carries release-preparation history
 - PR-title enforcement exists for PRs targeting `main`
-- publication now requires a merged Release Please-owned PR head ref and checks
-  that the release PR title version matches the checked-out `version.txt`
+- publication now requires a merged Release Please PR head-ref shape and checks
+  that the checked-out merge commit and `version.txt` agree on one release
 - prepared release state has advanced further than published immutable release
   state
 - the `manual-ref-deploy` workflow still exists, but it is recovery debt rather

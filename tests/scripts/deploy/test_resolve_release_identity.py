@@ -69,15 +69,13 @@ def test_resolve_release_identity_accepts_plain_release_title(tmp_path: Path) ->
     assert identity.git_tag == "v1.4.2"
 
 
-def test_resolve_release_identity_accepts_component_release_title_for_back_compat(
-    tmp_path: Path,
-) -> None:
+def test_resolve_release_identity_ignores_release_pr_title_text(tmp_path: Path) -> None:
     event_path = tmp_path / "event.json"
     version_file = tmp_path / "version.txt"
     version_file.write_text("1.4.2\n", encoding="utf-8")
     _write_release_event(
         event_path,
-        title="chore(release): release designagent 1.4.2",
+        title="release please wrote some other title here",
         head_ref="release-please--branches--release--components--designagent",
     )
 
@@ -96,21 +94,7 @@ def test_resolve_release_identity_rejects_non_release_please_head_ref(tmp_path: 
     version_file.write_text("1.4.2\n", encoding="utf-8")
     _write_release_event(event_path, head_ref="feature/not-a-release-pr")
 
-    with pytest.raises(ValueError, match="Release Please-owned head ref"):
-        resolve_release_identity(
-            event_path=event_path,
-            version_file=version_file,
-            head_sha="abc1234def5678",
-        )
-
-
-def test_resolve_release_identity_rejects_title_version_mismatch(tmp_path: Path) -> None:
-    event_path = tmp_path / "event.json"
-    version_file = tmp_path / "version.txt"
-    version_file.write_text("1.4.2\n", encoding="utf-8")
-    _write_release_event(event_path, title="chore(release): release 1.4.3")
-
-    with pytest.raises(ValueError, match=r"does not match version\.txt"):
+    with pytest.raises(ValueError, match="Release Please head-ref shape"):
         resolve_release_identity(
             event_path=event_path,
             version_file=version_file,

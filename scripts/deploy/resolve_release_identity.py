@@ -1,9 +1,10 @@
 """Resolve one publishable release identity from the merged Release Please PR.
 
-This keeps the publish workflow anchored to Release Please-owned release state
-instead of trusting ad hoc pull request titles alone. The release version still
-comes from `version.txt`, and this helper proves that the merged release PR,
-current checked-out commit, and final Git tag all describe the same release.
+This keeps the publish workflow anchored to the merged release commit and the
+checked-in release version instead of trusting mutable pull request title text.
+The release version comes from `version.txt`, and this helper proves that the
+merged release PR, current checked-out commit, and final Git tag all describe
+the same release.
 """
 
 from __future__ import annotations
@@ -11,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -22,10 +22,6 @@ from scripts.deploy.read_release_version import read_release_version
 from scripts.deploy.release_manifest import validate_app_version, validate_git_sha
 
 _RELEASE_PLEASE_HEAD_REF_PREFIX = "release-please--branches--release"
-_RELEASE_TITLE_RE = re.compile(
-    r"^chore\(release\): release(?: [A-Za-z0-9][A-Za-z0-9._-]*)? "
-    r"(?P<version>(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$"
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,18 +75,6 @@ def _resolve_current_head_sha(head_sha: str | None) -> str:
     return validate_git_sha(resolved_sha)
 
 
-def _release_title_version(title: str) -> str:
-    match = _RELEASE_TITLE_RE.fullmatch(title)
-    if match is None:
-        msg = (
-            "Expected Release Please release title in the form "
-            "'chore(release): release <version>' or "
-            "'chore(release): release <component> <version>'."
-        )
-        raise ValueError(msg)
-    return validate_app_version(match.group("version"))
-
-
 def resolve_release_identity(
     *,
     event_path: Path,
@@ -115,18 +99,10 @@ def resolve_release_identity(
     head = _require_object(pull_request, "head")
     head_ref = _require_string(head, "ref")
     if not head_ref.startswith(_RELEASE_PLEASE_HEAD_REF_PREFIX):
-        msg = f"Release publication requires a Release Please-owned head ref, found {head_ref!r}."
+        msg = f"Release publication requires a Release Please head-ref shape, found {head_ref!r}."
         raise ValueError(msg)
 
-    title = _require_string(pull_request, "title")
-    title_version = _release_title_version(title)
     version = validate_app_version(read_release_version(version_file))
-    if title_version != version:
-        msg = (
-            "Release PR title version does not match version.txt: "
-            f"{title_version!r} != {version!r}."
-        )
-        raise ValueError(msg)
 
     merge_commit_sha = validate_git_sha(_require_string(pull_request, "merge_commit_sha"))
     current_head_sha = _resolve_current_head_sha(head_sha)
