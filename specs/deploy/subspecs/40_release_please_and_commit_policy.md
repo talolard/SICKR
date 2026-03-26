@@ -42,11 +42,11 @@ Current implementation honesty note:
 - the repo does not yet prove the full target contract end to end
 - `origin/release` already carries release-preparation state through `0.4.0`,
   but the repo still has no published Git tags or GitHub releases
-- the current publication handoff still accepts only a merged PR into `release`
-  whose title starts with `chore(release):`, which is weaker than a
-  Release-Please-owned handoff
-- the current `main` copy of `.github/workflows/release-publish.yml` is not a
-  trustworthy executable contract because it contains a YAML parsing regression
+- the current publication handoff now requires a merged Release Please-owned PR
+  head-ref shape on `release`, and the publish workflow resolves the release
+  version from the checked-out `version.txt` instead of PR title text
+- the current `main` copy of `.github/workflows/release-publish.yml` now uses
+  the checked-in release-identity helper and plain `vX.Y.Z` tags
 - the current tag identity is plain `vX.Y.Z`; the older `designagent-vX.Y.Z`
   component-prefixed form is obsolete and should not reappear
 - stronger provenance and promotion-boundary enforcement are still unresolved
@@ -215,16 +215,16 @@ Repository gate:
   repository, configure `RELEASE_PLEASE_TOKEN` with the minimum scope needed to
   manage release PRs
 
-The current publish workflow still keys off merged release PRs titled
-`chore(release): ...`.
-That title coupling is transitional debt, not the desired long-term
-release-publication contract.
+The current publish workflow no longer keys publication off PR title text.
+It requires the merged PR to come from the Release Please release-branch head
+shape and resolves the release version from the checked-out `version.txt`.
 
 Current provenance note:
 
-- the title-prefix check is weaker than verifying that the merged PR was
-  actually produced by `release-please`
-- the current docs must not describe that as stronger provenance than it is
+- the publish handoff now verifies the merged PR head ref matches the expected
+  Release Please shape before publishing artifacts
+- the publish workflow still depends on GitHub event payload shape rather than
+  a first-class Release Please output contract
 
 Use the `simple` release strategy unless a stronger repo-specific reason appears
 later.
@@ -277,9 +277,10 @@ workflow implementation.
 
 Current repo reality:
 
-- a merged PR into `release` with a `chore(release): ...` title can trigger the
-  publish workflow
+- a merged Release Please PR into `release` can trigger the publish workflow
 - the workflow resolves the release version from the checked-out release ref
+- the workflow verifies that the checked-out merge commit, `version.txt`, and
+  final `vX.Y.Z` tag all describe one release identity
 - the workflow builds and pushes both images before writing the release manifest
 - the workflow attempts to create the GitHub release from the exact release
   commit only after image publication and manifest creation
@@ -291,12 +292,12 @@ Current repo reality:
 Current unresolved gap:
 
 - changelog preparation alone is not release publication
-- the publish handoff is still title-based instead of being owned directly by
-  Release Please outputs
+- the publish handoff is not yet owned directly by first-class Release Please
+  outputs; it still validates the GitHub PR event shape and merged head ref
 - prepared release state on `release` has already advanced beyond published
   immutable release state
-- the current `main` publish workflow is broken, so the canonical path is not
-  yet trustworthy enough to replace recovery tooling
+- the current `main` publish workflow still needs real end-to-end validation
+  before the canonical path can fully replace recovery tooling
 - the `main -> release` promotion boundary is still policy, not mechanism
 
 Desired hardening still outstanding:
@@ -395,8 +396,8 @@ What is true today:
   supporting config and workflows
 - `origin/release` exists and carries release-preparation history
 - PR-title enforcement exists for PRs targeting `main`
-- publication is currently keyed off a merged `chore(release): ...` PR, not
-  stronger `release-please` provenance
+- publication now requires a merged Release Please PR head-ref shape and checks
+  that the checked-out merge commit and `version.txt` agree on one release
 - prepared release state has advanced further than published immutable release
   state
 - the `manual-ref-deploy` workflow still exists, but it is recovery debt rather
