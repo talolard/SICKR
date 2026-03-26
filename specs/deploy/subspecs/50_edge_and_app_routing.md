@@ -53,8 +53,8 @@ The rule is simple:
 - if the browser already talks to a Next.js route today, keep that public path
   browser-stable and same-origin unless there is a clear simplification win in
   routing a backend-owned API straight to the backend
-- `/ag-ui/*`, `/api/agents*`, and `/api/health*` should land on the backend
-  service
+- `/ag-ui/*`, `/api/agents*`, `/api/health*`, `/api/rooms/*`, and
+  `/attachments*` should land on the backend service
 
 ## CloudFront Behavior Split
 
@@ -112,15 +112,15 @@ Required ALB rules:
 - default listener action forwards to the UI target group
 - one listener rule forwards `/api/agents*` to the backend target group
 - one listener rule forwards `/api/health*` to the backend target group
+- one listener rule forwards `/api/rooms/*` to the backend target group
+- one listener rule forwards `/attachments` and `/attachments/*` to the backend
+  target group
 - one listener rule forwards `/ag-ui/*` to the backend target group
-- one backend-only listener on port `8000` forwards all paths to the backend
-  target group for UI server-side proxy traffic
 
 There is no required `nginx` layer in this architecture.
 
 Internal routing rule:
 
-- the browser never uses the backend-only ALB listener directly
 - Next server proxy routes use `BACKEND_PROXY_BASE_URL`
 - AG-UI client traffic uses `PY_AG_UI_URL`
 

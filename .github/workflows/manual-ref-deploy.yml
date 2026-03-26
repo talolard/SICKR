@@ -246,7 +246,8 @@ jobs:
             --container ui \
             --image "${{ steps.login_ecr.outputs.registry }}/${{ env.UI_ECR_REPOSITORY }}@${{ steps.ui_image.outputs.digest }}" \
             --set-env "APP_RELEASE_VERSION=${{ steps.meta.outputs.app_version }}" \
-            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}:8000/"
+            --set-env "PY_AG_UI_URL=http://${{ steps.ecs.outputs.alb_dns_name }}/ag-ui/" \
+            --set-env "BACKEND_PROXY_BASE_URL=http://${{ steps.ecs.outputs.alb_dns_name }}/"
 
       - name: Register backend task definition revision
         id: backend_taskdef

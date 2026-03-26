@@ -46,7 +46,7 @@ describe("ui health routes", () => {
   });
 
   it("proxies backend readiness through /api/health", async () => {
-    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb:8000/";
+    process.env.BACKEND_PROXY_BASE_URL = "http://internal-alb/";
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ status: "ok", checks: { database: { status: "ok" } } }), {
         status: 200,
@@ -59,7 +59,7 @@ describe("ui health routes", () => {
     const response = await GET(new NextRequest("http://127.0.0.1:3000/api/health?full=1"));
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      "http://internal-alb:8000/api/health/ready?full=1",
+      "http://internal-alb/api/health/ready?full=1",
       {
         method: "GET",
         headers: { accept: "application/json" },

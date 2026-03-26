@@ -25,9 +25,9 @@ describe("backendProxy", () => {
     delete process.env.BACKEND_PROXY_BASE_URL;
 
     expect(agUiBaseUrl()).toBe("http://example-alb/ag-ui/");
-    expect(backendProxyBaseUrl()).toBe("http://example-alb:8000/");
+    expect(backendProxyBaseUrl()).toBe("http://example-alb/");
     expect(buildBackendProxyUrl("/api/agents", "?full=1").toString()).toBe(
-      "http://example-alb:8000/api/agents?full=1",
+      "http://example-alb/api/agents?full=1",
     );
   });
 
