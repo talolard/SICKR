@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/talolard/SICKR/compare/v0.2.0...v0.2.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* **ci:** lint workflows and fix release publish shell parsing ([78e6ac9](https://github.com/talolard/SICKR/commit/78e6ac9c7b9d80f3e2993087d4f08e863dfdc01b))
+
 ## [0.2.0](https://github.com/talolard/SICKR/compare/v0.1.0...v0.2.0) (2026-03-27)
 
 
