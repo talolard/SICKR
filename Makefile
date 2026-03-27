@@ -5,7 +5,7 @@ ifneq ("$(wildcard $(WORKTREE_ENV_FILE))","")
 include $(WORKTREE_ENV_FILE)
 endif
 
-.PHONY: deps deps-up deps-down deps-reset deps-reseed deps-status chat lint format format-check format-all typecheck test tidy preflight \
+.PHONY: deps deps-up deps-down deps-reset deps-reseed deps-status chat lint format format-check format-all typecheck test workflow-lint tidy preflight \
 	backend-coverage frontend-coverage coverage coverage-clean \
 	ui-install ui-ensure-install ui-lint ui-typecheck ui-validate ui-dev ui-dev-mock \
 	ui-dev-real ui-test ui-test-e2e ui-test-e2e-real ui-test-e2e-real-ui-smoke \
@@ -86,6 +86,9 @@ typecheck:
 
 test:
 	$(UV_RUN) pytest
+
+workflow-lint:
+	bash scripts/ci/run_workflow_lint.sh
 
 backend-coverage:
 	mkdir -p $(COVERAGE_DIR)
@@ -320,6 +323,7 @@ merge-normalize:
 tidy: format
 	$(UV_RUN) ruff check --fix .
 	$(UV_RUN) pyrefly check
+	$(MAKE) workflow-lint
 	$(MAKE) ui-lint
 	$(MAKE) ui-typecheck
 	$(MAKE) coverage

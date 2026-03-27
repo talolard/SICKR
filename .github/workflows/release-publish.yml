@@ -77,13 +77,7 @@ jobs:
           fi
 
           postgres_seed_version="$(
-            python - <<'PY'
-            from pathlib import Path
-
-            from scripts.deploy.seed_fingerprint import calculate_postgres_seed_version
-
-            print(calculate_postgres_seed_version(repo_root=Path.cwd()))
-            PY
+            python -c 'from pathlib import Path; from scripts.deploy.seed_fingerprint import calculate_postgres_seed_version; print(calculate_postgres_seed_version(repo_root=Path.cwd()))'
           )"
           echo "postgres_seed_version=${postgres_seed_version}" >> "${GITHUB_OUTPUT}"
           echo "image_catalog_run_id=${IKEA_IMAGE_CATALOG_RUN_ID}" >> "${GITHUB_OUTPUT}"

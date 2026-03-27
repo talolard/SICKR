@@ -147,7 +147,7 @@ slow rebuild-from-source path remains an explicit maintenance flow via
 - UI mock E2E: `make ui-test-e2e`
 - UI real-backend smoke E2E: `make ui-test-e2e-real`
 - Lint/format/typecheck pipeline: `make format-all`
-- Pre-commit quality gate: `make tidy` (backend Ruff/Pyrefly/Pytest plus frontend ESLint/TypeScript/Vitest; real-backend smoke stays separate)
+- Pre-commit quality gate: `make tidy` (workflow lint via `actionlint` + `shellcheck`, backend Ruff/Pyrefly/Pytest, and frontend ESLint/TypeScript/Vitest; real-backend smoke stays separate)
 
 ## Multi-Agent Shortcuts
 

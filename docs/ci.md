@@ -10,6 +10,7 @@ Trigger behavior:
 - Supports manual runs through `workflow_dispatch`
 
 Active jobs:
+- `workflow-lint`: `actionlint` + `shellcheck` over `.github/workflows/**`
 - `backend`: Ruff + Pyrefly + Pytest (JUnit + coverage + annotations)
 - `migration-stairway`: fixture-seeded pgvector Postgres + Alembic migration validation
 - `frontend-unit`: ESLint + TypeScript + Vitest (JUnit + coverage + annotations)
@@ -46,11 +47,13 @@ Current gating behavior:
 ## Local Equivalent
 
 `make tidy` is the closest local approximation of the blocking unit-level CI lanes. It runs:
+- workflow lint via `actionlint` + `shellcheck`
 - backend Ruff autofix + Pyrefly + coverage-enabled Pytest
 - frontend ESLint + TypeScript + coverage-enabled Vitest
 - staged local coverage enforcement via `make coverage`
 
 Useful local commands:
+- `make workflow-lint`
 - `make backend-coverage`
 - `make frontend-coverage`
 - `make coverage`

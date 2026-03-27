@@ -35,6 +35,18 @@ Two repository settings matter:
   releases can trigger downstream workflows
 - GitHub Actions must be allowed to create pull requests
 
+## Validation Guardrails
+
+Release workflow changes should fail before merge when they introduce invalid
+inline shell. The repository now treats GitHub workflow linting as part of the
+normal quality gate:
+
+- `make tidy` runs `make workflow-lint`
+- `PR CI` runs `actionlint` with `shellcheck` support before the other lanes
+
+That guard exists specifically to catch workflow-shell parsing bugs such as
+indented heredocs inside `run:` blocks before they break a published release.
+
 ## AWS OIDC Subjects
 
 The Terraform-owned release and deploy roles should allow GitHub OIDC subjects

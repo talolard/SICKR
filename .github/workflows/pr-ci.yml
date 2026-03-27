@@ -17,6 +17,16 @@ permissions:
   checks: write
 
 jobs:
+  workflow-lint:
+    name: Workflow Lint (actionlint, shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Lint GitHub Actions workflows
+        run: bash scripts/ci/run_workflow_lint.sh
+
   backend:
     name: Backend (ruff, pyrefly, pytest)
     runs-on: ubuntu-latest
@@ -161,6 +171,7 @@ jobs:
           set +e
           pnpm exec eslint . --max-warnings=0 --format json --output-file ../artifacts/eslint.json
           eslint_exit=$?
+          # shellcheck disable=SC2016
           node -e '
           const fs = require("fs");
           const path = "../artifacts/eslint.json";
@@ -197,6 +208,7 @@ jobs:
           set +e
           pnpm typecheck --pretty false > ../artifacts/tsc.txt 2>&1
           typecheck_exit=$?
+          # shellcheck disable=SC2016
           node -e '
           const fs = require("fs");
           const lines = fs.existsSync("../artifacts/tsc.txt")
@@ -489,11 +501,12 @@ jobs:
   ci-summary:
     name: CI Summary
     if: ${{ always() }}
-    needs: [backend, migration-stairway, frontend-unit, coverage, e2e-mock]
+    needs: [workflow-lint, backend, migration-stairway, frontend-unit, coverage, e2e-mock]
     runs-on: ubuntu-latest
     steps:
       - name: Publish CI summary
         env:
+          WORKFLOW_LINT_RESULT: ${{ needs['workflow-lint'].result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
           MIGRATION_RESULT: ${{ needs['migration-stairway'].result }}
           FRONTEND_RESULT: ${{ needs['frontend-unit'].result }}
@@ -525,6 +538,7 @@ jobs:
 
           | Lane | Result | Detail |
           | --- | --- | --- |
+          | Workflow Lint (actionlint, shellcheck) | ${WORKFLOW_LINT_RESULT} | validates GitHub Actions YAML plus embedded shell scripts |
           | Backend (ruff, pyrefly, pytest) | ${BACKEND_RESULT} | ${backend_detail} |
           | Migration Stairway (Postgres) | ${MIGRATION_RESULT} | fixture-seeded pgvector Postgres + Alembic stairway validation |
           | Frontend Unit (eslint, tsc, vitest) | ${FRONTEND_RESULT} | ${frontend_detail} |
