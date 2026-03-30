@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: Check PR CI and dependency review status for this SHA
         id: evaluate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -105,12 +105,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.gate.outputs.head_sha }}
 
       - name: Set up Python + uv cache
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
           enable-cache: true
@@ -125,7 +125,7 @@ jobs:
         run: ./scripts/worktree/deps.sh up --slot 0
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.6.3
           run_install: false
@@ -141,7 +141,7 @@ jobs:
         run: cd ui && pnpm install --frozen-lockfile
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('ui/pnpm-lock.yaml') }}
@@ -156,7 +156,7 @@ jobs:
 
       - name: Upload Playwright report artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: real-ui-smoke-playwright-report
           path: ui/playwright-report
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload smoke logs and test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: real-ui-smoke-artifacts
           path: |
