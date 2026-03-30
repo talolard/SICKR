@@ -16,4 +16,13 @@ def test_build_search_eval_dataset_collects_all_case_modules() -> None:
         "hallway_thread_complementary_products",
         "hallway_complementary_omission_guard",
         "unsupported_constraints_do_not_bundle",
+        "steuerberater_workstation_coverage",
+        "steuerberater_large_storage_quantity_sanity",
+        "steuerberater_storage_role_differentiation",
+        "steuerberater_budget_utilization",
+    ]
+    assert [type(evaluator).__name__ for evaluator in dataset.evaluators] == [
+        "FinalOutputContractEvaluator",
+        "SearchToolCallContractEvaluator",
+        "BundleToolCallContractEvaluator",
     ]
