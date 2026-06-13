@@ -36,6 +36,12 @@ Repository-wide invariants for work in `tal_maria_ikea`.
 - For deploy work, prefer the current workflows under `.github/workflows/`,
   Terraform under `infra/terraform/`, `docs/deployment_runtime_contract.md`, and
   the refreshed docs under `specs/deploy/` over older design notes.
+- For AWS deploy diagnostics or live AWS fixes, use the `local agent` AWS CLI
+  profile unless a human explicitly says otherwise.
+- Do not put the composed Aurora `DATABASE_URL` or generated RDS password into
+  Terraform state. Terraform owns the cluster, AWS-managed master secret, and
+  runtime secret container; deploy automation must refresh the runtime database
+  secret from the RDS-managed master secret and include `sslmode=require`.
 - Older deploy plans and epics under `plans/` are historical background unless
   they are explicitly refreshed. In particular, any plan that still assumes EC2,
   SSM, host deploy bundles, or manual ECS backstops is stale and must not be

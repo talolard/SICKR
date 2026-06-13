@@ -58,10 +58,14 @@ Expected key usage inside those secrets:
 | `observability` | `LOGFIRE_TOKEN` | optional for remote Logfire export |
 | `database` | `DATABASE_URL` | one DSN for the Aurora writer endpoint |
 
-Deploy automation should not read individual secret values in CI. Instead:
+Deploy automation should not read individual secret values in CI, except for
+the database credential sync described here. Otherwise:
 
 - Terraform wires the secret ARNs into the ECS task definitions
 - ECS resolves the secret keys into environment variables at task start
+- The deploy entry point refreshes the `database` secret's `DATABASE_URL` from
+  the AWS-managed Aurora master secret before backend migration and rollout,
+  adding `sslmode=require` because the cluster enforces SSL.
 
 ## Backend Task Contract
 

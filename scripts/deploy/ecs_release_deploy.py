@@ -10,10 +10,12 @@ import argparse
 import json
 import shutil
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
+from urllib.parse import quote, urlsplit
 
 from scripts.deploy.check_public_deploy_endpoints import check_public_deploy_endpoints
 from scripts.deploy.render_ecs_task_definition import render_task_definition
@@ -52,6 +54,8 @@ class ReleaseDeployRequest:
     ui_image_ref: str
     postgres_seed_version: str
     public_app_base_url: str
+    database_cluster_identifier: str | None = None
+    database_runtime_secret_id: str | None = None
     backend_desired_count: int = 1
     ui_desired_count: int = 1
     backend_rollout_timeout_seconds: float = 900.0
@@ -262,6 +266,97 @@ def update_service(
     )
 
 
+def _json_secret_string(*, secret_id: str, aws_cli: AwsCli) -> dict[str, Any]:
+    secret_text = aws_cli.text(
+        "secretsmanager",
+        "get-secret-value",
+        "--secret-id",
+        secret_id,
+        "--query",
+        "SecretString",
+        "--output",
+        "text",
+    )
+    payload = json.loads(secret_text)
+    return _require_dict(payload, f"Secrets Manager payload for {secret_id!r}")
+
+
+def sync_runtime_database_secret(
+    *,
+    cluster_identifier: str | None,
+    runtime_secret_id: str | None,
+    aws_cli: AwsCli,
+) -> None:
+    """Refresh ECS DATABASE_URL from the AWS-managed Aurora master secret.
+
+    RDS owns the generated master password. The app receives a separate runtime
+    secret because it expects one SQLAlchemy URL. Syncing at deploy time keeps
+    the composed password URL out of Terraform state and prevents stale
+    credentials from sending the backend into a restart loop.
+    """
+
+    if cluster_identifier is None and runtime_secret_id is None:
+        return
+    if cluster_identifier is None or runtime_secret_id is None:
+        msg = (
+            "database_cluster_identifier and database_runtime_secret_id must be provided together."
+        )
+        raise ValueError(msg)
+
+    cluster = _require_dict(
+        aws_cli.json(
+            "rds",
+            "describe-db-clusters",
+            "--db-cluster-identifier",
+            cluster_identifier,
+            "--query",
+            "DBClusters[0]",
+        ),
+        f"RDS cluster payload for {cluster_identifier!r}",
+    )
+    master_secret = _require_dict(
+        cluster.get("MasterUserSecret"),
+        f"RDS master secret metadata for {cluster_identifier!r}",
+    )
+    master_secret_arn = _require_str(
+        master_secret.get("SecretArn"),
+        f"RDS master secret ARN for {cluster_identifier!r}",
+    )
+
+    runtime_payload = _json_secret_string(secret_id=runtime_secret_id, aws_cli=aws_cli)
+    master_payload = _json_secret_string(secret_id=master_secret_arn, aws_cli=aws_cli)
+
+    existing_database_url = _require_str(
+        runtime_payload.get("DATABASE_URL"),
+        f"DATABASE_URL in runtime secret {runtime_secret_id!r}",
+    )
+    existing_database_name = urlsplit(existing_database_url).path.lstrip("/")
+    database_name = str(cluster.get("DatabaseName") or existing_database_name or "ikea_agent")
+    username = _require_str(cluster.get("MasterUsername"), "RDS master username")
+    password = _require_str(master_payload.get("password"), "RDS master password")
+    endpoint = _require_str(cluster.get("Endpoint"), "RDS cluster endpoint")
+    port = int(cluster.get("Port") or 5432)
+
+    runtime_payload["DATABASE_URL"] = (
+        f"postgresql+psycopg://{quote(username, safe='')}:{quote(password, safe='')}"
+        f"@{endpoint}:{port}/{database_name}?sslmode=require"
+    )
+
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as secret_file:
+        secret_file.write(json.dumps(runtime_payload, sort_keys=True))
+        secret_file.flush()
+        aws_cli.json(
+            "secretsmanager",
+            "put-secret-value",
+            "--secret-id",
+            runtime_secret_id,
+            "--secret-string",
+            f"file://{secret_file.name}",
+            "--query",
+            "{ARN:ARN,Name:Name,VersionId:VersionId,VersionStages:VersionStages}",
+        )
+
+
 def wait_for_backend_service_rollout(
     *,
     cluster: str,
@@ -317,6 +412,11 @@ def deploy_release(
     """Roll one immutable release manifest through the shared ECS deploy path."""
 
     aws = aws_cli or AwsCli()
+    sync_runtime_database_secret(
+        cluster_identifier=request.database_cluster_identifier,
+        runtime_secret_id=request.database_runtime_secret_id,
+        aws_cli=aws,
+    )
     smoke_check = check_public_deploy_endpoints if smoke_checker is None else smoke_checker
     backend_network_configuration = build_backend_network_configuration(
         subnet_ids=request.backend_run_task_subnet_ids,
@@ -465,6 +565,8 @@ def _parse_args() -> ReleaseDeployRequest:
     parser.add_argument("--ui-image", required=True)
     parser.add_argument("--postgres-seed-version", required=True)
     parser.add_argument("--public-app-base-url", required=True)
+    parser.add_argument("--database-cluster-identifier", default=None)
+    parser.add_argument("--database-runtime-secret-id", default=None)
     parser.add_argument("--backend-desired-count", type=int, default=1)
     parser.add_argument("--ui-desired-count", type=int, default=1)
     parser.add_argument("--backend-rollout-timeout-seconds", type=float, default=900.0)
@@ -490,6 +592,8 @@ def _parse_args() -> ReleaseDeployRequest:
         ui_image_ref=args.ui_image,
         postgres_seed_version=args.postgres_seed_version,
         public_app_base_url=args.public_app_base_url,
+        database_cluster_identifier=args.database_cluster_identifier or None,
+        database_runtime_secret_id=args.database_runtime_secret_id or None,
         backend_desired_count=args.backend_desired_count,
         ui_desired_count=args.ui_desired_count,
         backend_rollout_timeout_seconds=args.backend_rollout_timeout_seconds,

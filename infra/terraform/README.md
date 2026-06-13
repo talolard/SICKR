@@ -197,6 +197,7 @@ The environment bootstrap path should use:
 
 - `product_image_bucket_name`
 - `database_secret_name`
+- `database_cluster_identifier`
 
 Repository variables should mirror these Terraform outputs in JSON or string
 form so the workflows and operator scripts do not rediscover stable runtime

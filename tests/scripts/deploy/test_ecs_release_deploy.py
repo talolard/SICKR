@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -11,9 +13,11 @@ from scripts.deploy.ecs_release_deploy import (
     build_backend_network_configuration,
     deploy_release,
     run_one_off_backend_task_to_completion,
+    sync_runtime_database_secret,
 )
 
 JsonHandler = Callable[[tuple[str, ...]], object]
+TextHandler = Callable[[tuple[str, ...]], str]
 
 
 @dataclass
@@ -22,6 +26,7 @@ class StubAwsCli:
     text_calls: list[tuple[str, ...]] = field(default_factory=list)
     call_calls: list[tuple[str, ...]] = field(default_factory=list)
     json_handler: JsonHandler | None = None
+    text_handler: TextHandler | None = None
 
     def json(self, *args: str) -> object:
         self.json_calls.append(args)
@@ -32,6 +37,8 @@ class StubAwsCli:
 
     def text(self, *args: str) -> str:
         self.text_calls.append(args)
+        if self.text_handler is not None:
+            return self.text_handler(args)
         msg = f"Unexpected text call: {args!r}"
         raise AssertionError(msg)
 
@@ -287,3 +294,57 @@ def test_deploy_release_preserves_backend_then_ui_contract(
         "name": "BACKEND_PROXY_BASE_URL",
         "value": "http://alb.example.internal/",
     } in ui_environment
+
+
+def test_sync_runtime_database_secret_refreshes_url_from_rds_master_secret() -> None:
+    put_payloads: list[dict[str, str]] = []
+
+    def _json_handler(args: tuple[str, ...]) -> object:
+        if args[:3] == ("rds", "describe-db-clusters", "--db-cluster-identifier"):
+            return {
+                "MasterUserSecret": {"SecretArn": "rds-master-secret"},
+                "MasterUsername": "ikea_agent_admin",
+                "Endpoint": "ikea-agent-dev-db.cluster.example.eu-central-1.rds.amazonaws.com",
+                "Port": 5432,
+                "DatabaseName": "ikea_agent",
+            }
+        if args[:3] == ("secretsmanager", "put-secret-value", "--secret-id"):
+            secret_string_index = args.index("--secret-string")
+            secret_file = args[secret_string_index + 1].removeprefix("file://")
+            payload = json.loads(Path(secret_file).read_text(encoding="utf-8"))
+            put_payloads.append(payload)
+            return {"Name": "tal-maria-ikea/dev/database"}
+        msg = f"Unexpected json call: {args!r}"
+        raise AssertionError(msg)
+
+    def _text_handler(args: tuple[str, ...]) -> str:
+        if "tal-maria-ikea/dev/database" in args:
+            return json.dumps(
+                {
+                    "DATABASE_URL": (
+                        "postgresql+psycopg://ikea_agent_admin:old-password"
+                        "@old-host:5432/ikea_agent"
+                    ),
+                    "OTHER_VALUE": "preserved",
+                }
+            )
+        if "rds-master-secret" in args:
+            return json.dumps({"password": "new password/with symbols"})
+        msg = f"Unexpected text call: {args!r}"
+        raise AssertionError(msg)
+
+    aws_cli = StubAwsCli(json_handler=_json_handler, text_handler=_text_handler)
+    runtime_database_id = "tal-maria-ikea/dev/database"
+
+    sync_runtime_database_secret(
+        cluster_identifier="ikea-agent-dev-db",
+        runtime_secret_id=runtime_database_id,
+        aws_cli=aws_cli,
+    )
+
+    assert len(put_payloads) == 1
+    assert put_payloads[0]["OTHER_VALUE"] == "preserved"
+    assert put_payloads[0]["DATABASE_URL"].startswith(
+        "postgresql+psycopg://ikea_agent_admin:new%20password%2Fwith%20symbols@"
+    )
+    assert put_payloads[0]["DATABASE_URL"].endswith("/ikea_agent?sslmode=require")

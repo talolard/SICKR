@@ -47,6 +47,8 @@ jobs:
           ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
           ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
           APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
+          DATABASE_CLUSTER_IDENTIFIER: ${{ vars.DATABASE_CLUSTER_IDENTIFIER }}
+          DATABASE_RUNTIME_SECRET_ID: ${{ vars.DATABASE_SECRET_NAME }}
         run: |
           set -euo pipefail
           for required_name in \
@@ -129,6 +131,8 @@ jobs:
           ECS_RUN_TASK_SUBNET_IDS_JSON: ${{ vars.ECS_RUN_TASK_SUBNET_IDS_JSON }}
           ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON: ${{ vars.ECS_BACKEND_RUN_TASK_SECURITY_GROUP_IDS_JSON }}
           APP_ALB_DNS_NAME: ${{ vars.APP_ALB_DNS_NAME }}
+          DATABASE_CLUSTER_IDENTIFIER: ${{ vars.DATABASE_CLUSTER_IDENTIFIER }}
+          DATABASE_RUNTIME_SECRET_ID: ${{ vars.DATABASE_SECRET_NAME }}
         run: |
           set -euo pipefail
           python -m scripts.deploy.ecs_release_deploy \
@@ -144,4 +148,6 @@ jobs:
             --backend-image "${{ steps.release.outputs.backend_image_ref }}" \
             --ui-image "${{ steps.release.outputs.ui_image_ref }}" \
             --postgres-seed-version "${{ steps.release.outputs.postgres_seed_version }}" \
-            --public-app-base-url "${PUBLIC_APP_BASE_URL}"
+            --public-app-base-url "${PUBLIC_APP_BASE_URL}" \
+            --database-cluster-identifier "${DATABASE_CLUSTER_IDENTIFIER}" \
+            --database-runtime-secret-id "${DATABASE_RUNTIME_SECRET_ID}"
