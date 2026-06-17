@@ -14,19 +14,14 @@ authoritative dataset for the live harness.
 from __future__ import annotations
 
 from pydantic_evals import Dataset
-from pydantic_evals.evaluators import HasMatchingSpan, LLMJudge
 
-from evals.base import LogfireToolCallLLMJudge
 from evals.search.datasets.bundle_follow_through import build_bundle_follow_through_cases
-from evals.search.datasets.common import (
-    JUDGE_MODEL,
-    RUN_SEARCH_GRAPH_SPAN_QUERY,
-    SEARCH_RUBRIC,
-)
+from evals.search.datasets.bundle_realism import build_bundle_realism_cases
 from evals.search.datasets.query_planning import build_query_planning_cases
 from evals.search.evaluators import (
     BundleToolCallContractEvaluator,
     FinalOutputContractEvaluator,
+    SearchToolCallContractEvaluator,
 )
 from evals.search.types import SearchEvalInput
 
@@ -39,26 +34,11 @@ def build_search_eval_dataset() -> Dataset[SearchEvalInput, str, None]:
         cases=[
             *build_query_planning_cases(),
             *build_bundle_follow_through_cases(),
+            *build_bundle_realism_cases(),
         ],
         evaluators=[
-            HasMatchingSpan(
-                query=RUN_SEARCH_GRAPH_SPAN_QUERY,
-                evaluation_name="called_run_search_graph",
-            ),
-            LogfireToolCallLLMJudge(
-                tool_name="run_search_graph",
-                judge=LLMJudge(
-                    rubric=SEARCH_RUBRIC,
-                    model=JUDGE_MODEL,
-                    include_input=True,
-                    score=False,
-                    assertion={
-                        "evaluation_name": "search_tool_call_quality",
-                        "include_reason": True,
-                    },
-                ),
-            ),
             FinalOutputContractEvaluator(),
+            SearchToolCallContractEvaluator(),
             BundleToolCallContractEvaluator(),
         ],
     )

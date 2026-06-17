@@ -13,12 +13,16 @@ class SearchEvalInput:
     """One search-eval case with explicit search, bundle, and response contracts."""
 
     user_message: str
+    scenario_context: str | None = None
+    continue_from_history: bool = False
     expected_search_attributes: list[str] = field(default_factory=list)
     expected_bundle_attributes: list[str] = field(default_factory=list)
     forbidden_bundle_attributes: list[str] = field(default_factory=list)
     forbidden_response_terms: list[str] = field(default_factory=list)
     fixture_name: str | None = None
     source_thread_id: str | None = None
+    require_search_call: bool = False
+    forbid_search_call: bool = False
     require_bundle_call: bool = False
     forbid_bundle_call: bool = False
 
